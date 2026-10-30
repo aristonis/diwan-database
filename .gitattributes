@@ -1,0 +1,5 @@
+# Windows scripts need CRLF; everything else stays LF on every OS.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.jar binary
