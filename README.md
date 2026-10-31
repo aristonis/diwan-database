@@ -190,7 +190,11 @@ String text = Money.toText(new BigDecimal("1000"), 6);   // "1000.000000"
 ```
 
 Nothing rounds: a value with more decimal places than the scale is refused. Keep the currency in its
-own column.
+own column. `MoneyAmount.read(row.get("amount"), 2)` reads either kind of column, on either
+database, as the same amount.
+
+For moments, `table.instant("created_at")` stores whole microseconds on SQLite and `timestamptz` on
+PostgreSQL; convert with `Instants.toMicros` and `Instants.read`.
 
 ### Migrations
 

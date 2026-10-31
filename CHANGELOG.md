@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `ForeignKeyViolationException`, and the failure kinds `FOREIGN_KEY_VIOLATION`, `CANCELLED` and
+  `CONNECTION_LOST`, and `COMMIT_OUTCOME_UNKNOWN` for a connection lost during a commit, which may or
+  may not have landed; a lock that is not available (PostgreSQL 55P03) counts as a concurrency
+  failure and is retried.
+- Package `values` with `Money`, `MoneyAmount` (reads a money column the same way on SQLite and
+  PostgreSQL) and `Instants`; `Blueprint.instant` stores moments as whole microseconds on SQLite,
+  checked to be integers, and `timestamptz` on PostgreSQL. `Instants.now()` is truncated to
+  microseconds.
+
 - Money: `Blueprint.money(column, scale)` for whole minor units, `asDecimal(precision)` for an exact
   decimal (PostgreSQL `numeric`, checked text on SQLite), and the `Money` converters.
 
@@ -97,6 +106,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Years outside 0000 to 9999 are refused on SQLite.
 
 ### Fixed
+
+- PostgreSQL identifier limits are counted in UTF-8 bytes; catalog reads work in a mixed-case
+  current schema; an empty comment removes a column comment.
+- SQLite: `unprepared` runs every statement of a script, on JDBC and Android; renaming a decimal
+  money column on SQLite before 3.25 no longer fails on its own check.
+- PostgreSQL statements that cannot run in a transaction name `withinTransaction()` in the error.
+- The PostgreSQL migration lock times its wait with a monotonic clock.
 
 - Dates read through `java.time` by column type: dates before 1582, times in a daylight-saving gap
   and `timestamptz` offsets read back unchanged; PostgreSQL `infinity` reads as `MAX` / `MIN`.

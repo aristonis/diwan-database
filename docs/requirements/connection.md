@@ -195,8 +195,18 @@ connection as a concurrency failure.
   `jsonb` and `inet` values read back as `String`. A bare parameter whose type PostgreSQL cannot
   infer, as in `? is null`, needs a cast (`?::text`), as in Laravel.
 - NaN and infinite numbers are refused before any SQL, naming the binding's position.
-- A session whose rollback failed, or whose connection was lost (SQL state class 08), is discarded,
-  never handed back.
+- A session whose rollback failed, or whose connection was lost (SQL state class 08, or PostgreSQL
+  shutting down), is discarded, never handed back.
+- Failure kinds: unique and foreign key violations get their own exceptions
+  (`UniqueConstraintViolationException`, `ForeignKeyViolationException`); deadlocks, serialization
+  failures, busy databases and unavailable locks are concurrency failures, retried at the outermost
+  transaction; cancelled statements and lost connections are marked and never retried. A connection
+  lost during a commit is also marked `COMMIT_OUTCOME_UNKNOWN`: the work may have been committed.
+- An `unprepared` script on SQLite is not atomic outside a transaction: statements before a failing
+  one stay applied.
+- `unprepared` on SQLite runs a whole script, trigger bodies included.
+- A PostgreSQL statement that cannot run in a transaction says to make the migration's
+  `withinTransaction()` return false.
 
 ## Android
 

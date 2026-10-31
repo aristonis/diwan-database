@@ -159,3 +159,10 @@ schema-qualified names, listings of tables and columns.
   writes and returns text, read with `Money.fromText`; on PostgreSQL it takes and returns
   `BigDecimal`.
 - A plain `decimal()` column keeps Laravel's SQLite type, `numeric`, which stores floating point.
+- `Money`, `MoneyAmount` and `Instants` live in the `values` package.
+- `MoneyAmount.read(stored, scale)` reads minor units, checked text or a decimal as the same amount;
+  write with `toMinor()`, `toText()` or `amount()` for the column at hand.
+- `instant(column)` stores a moment as whole microseconds on SQLite and `timestamptz` on PostgreSQL;
+  `Instants.toMicros` and `Instants.read` convert, and `Instants.now()` gives the current moment at
+  microsecond precision. On SQLite the column refuses anything but an integer.
+- PostgreSQL index and key names are limited to 63 UTF-8 bytes, checked before any SQL.
