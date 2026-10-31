@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Migrator`: `run`, `run(step)`, `rollback`, `rollbackSteps`, `rollbackBatch`, `reset`, `status`
+  and pretend forms; one transaction per migration with its record inside it where the database
+  allows; named connections; `MigrationLock` hook; `MigrationResult`, `MigrationStatus` and
+  `MigrationFailedException`.
 - Schema builder (`Schema`, `Blueprint`, `ColumnDefinition`): `create`, `table`, `drop`,
   `dropIfExists`, `rename`, `hasTable` and `hasColumn`, with the columns `id`, `string`, `text`,
   `integer`, `bigInteger`, `booleanColumn`, `decimal`, `date`, `timestamp`, `json` and
@@ -16,9 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `autoIncrement`, `unsigned` and `comment`.
 - `SchemaGrammar` for database modules to extend, with `Command`, `Expression` and `SchemaQuery`.
 - Module `photisma-database-sqlite` with `SQLiteSchemaGrammar` and `SQLiteSchema`.
-- `Migration` contract: `name`, `up`, `down`, `withinTransaction`, `shouldRun` and `connection`.
+- `Migration` contract: `name`, `up(Schema)`, `down(Schema)`, `withinTransaction`, `shouldRun` and `connection`.
 - `MigrationRepository` and `DatabaseMigrationRepository`: the migrations table with Laravel's
-  operations and ordering, on SQLite, PostgreSQL and MySQL; `MigrationEntry` for its rows.
+  layout, operations and ordering, kept through the schema builder; `MigrationEntry` for its rows.
 - `DatabaseFamily` to tell databases apart from the driver's product name.
 - `Connection.getDriverInfo()`.
 - `Connection` with Laravel's method names: `statement`, `affectingStatement`, `insert`, `update`,

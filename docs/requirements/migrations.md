@@ -13,15 +13,14 @@ name. Java has no files to load by name, and Photisma has no query builder or sc
 ## 2. Goal
 
 A `Migration` type the application extends, and a `MigrationRepository` that keeps the migrations
-table through the `Connection`, with Laravel's operations and ordering, on SQLite, PostgreSQL and
-MySQL.
+table through the schema builder and its connection, with Laravel's operations and ordering.
 
 ## 3. Functional requirements
 
 Migration contract
 
-- A migration gives a name, `up(Connection)` and optionally `down(Connection)`, which does nothing
-  by default.
+- A migration gives a name, `up(Schema)` and optionally `down(Schema)`, which does nothing by
+  default. The schema builder it receives is bound to the migration's transaction.
 - A migration says whether it runs inside a transaction (default yes), whether it should run
   (default yes), and optionally the connection it targets (default none).
 - A migration name is non-blank, at most 191 characters, without control characters; an invalid
@@ -29,11 +28,12 @@ Migration contract
 
 Repository
 
-- Created from a `Connection` and a table name (default `migrations`), with the connection's table
+- Created from a `Schema` and a table name (default `migrations`), with the connection's table
   prefix in front. The full name must be lowercase letters, digits and underscores, not starting
   with a digit, at most 63 characters.
-- `createRepository()` creates the table; `repositoryExists()` reports whether it exists;
-  `deleteRepository()` drops it.
+- `createRepository()` creates the table with Laravel's layout (`id`, unique `migration` of up to
+  191 characters, `batch`); `repositoryExists()` reports whether it exists; `deleteRepository()`
+  drops it.
 - `getRan()` returns every name, ordered by batch then name, ascending.
 - `getMigrations(steps)` returns up to `steps` entries, ordered by batch then name, descending;
   `steps` below 1 is refused.

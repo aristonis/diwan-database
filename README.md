@@ -9,17 +9,15 @@ choices.
 
 The connection layer is in place: running SQL, nested transactions with savepoints, retry on
 deadlocks, joining a transaction someone else owns, pretend mode, and errors that keep personal
-data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. The
-`Migration` contract and the migrations table (`DatabaseMigrationRepository`) are in place for the
-migrator to build on. The schema builder creates and changes tables through a grammar per database;
+data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. Migrations run through the `Migrator`: run, rollback, reset, status and pretend, one transaction per
+migration where the database allows. The schema builder creates and changes tables through a grammar per database;
 the SQLite grammar ships in `photisma-database-sqlite`.
 
 | Layer | State |
 |---|---|
 | Connection, driver interface, JDBC adapter | available |
 | Schema builder: common columns, SQLite grammar | available |
-| Migrations: contract and migrations table | available |
-| Migrator | planned |
+| Migrations: contract, migrations table and migrator | available |
 | Query builder | planned |
 | Models | planned |
 
@@ -107,8 +105,9 @@ schema.create("users", table -> {
 ### Migrations
 
 ```java
-import org.aristonis.photisma.database.migrations.DatabaseMigrationRepository;
 import org.aristonis.photisma.database.migrations.Migration;
+import org.aristonis.photisma.database.migrations.Migrator;
+import org.aristonis.photisma.database.schema.Schema;
 
 final class CreateUsersTable extends Migration {
     @Override
@@ -117,25 +116,24 @@ final class CreateUsersTable extends Migration {
     }
 
     @Override
-    public void up(Connection db) {
-        SQLiteSchema.of(db).create("users", table -> {
+    public void up(Schema schema) {
+        schema.create("users", table -> {
             table.id();
             table.string("email").unique();
         });
     }
 
     @Override
-    public void down(Connection db) {
-        SQLiteSchema.of(db).drop("users");
+    public void down(Schema schema) {
+        schema.drop("users");
     }
 }
 
-DatabaseMigrationRepository migrations = new DatabaseMigrationRepository(db);
-if (!migrations.repositoryExists()) {
-    migrations.createRepository();
-}
-int batch = migrations.getNextBatchNumber();
-migrations.log("2026_10_31_000000_create_users_table", batch);
+Migrator migrator = Migrator.builder(SQLiteSchema.of(db))
+        .add(new CreateUsersTable())
+        .build();
+migrator.run();       // creates the migrations table, runs what is pending
+migrator.rollback();  // undoes the last batch
 ```
 
 ## Documentation
@@ -148,6 +146,8 @@ migrations.log("2026_10_31_000000_create_users_table", batch);
 - [Schema builder behavior](docs/behavior/schema/README.md)
 - [Migrations requirements](docs/requirements/migrations.md)
 - [Migrations behavior](docs/behavior/migrations/README.md)
+- [Migrator requirements](docs/requirements/migrator.md)
+- [Migrator behavior](docs/behavior/migrator/README.md)
 - [Decision records](docs/adr/)
 - [Documentation standard](docs/documentation-standard.md)
 - [Changelog](CHANGELOG.md)

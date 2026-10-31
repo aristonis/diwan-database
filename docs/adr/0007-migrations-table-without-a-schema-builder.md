@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted. Points 2 and 4 are superseded by
+[ADR 0009](0009-migrator-transactions-and-records.md): the table is now created and checked through
+the schema builder, with Laravel's layout.
 
 ## Context
 
