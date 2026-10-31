@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- PostgreSQL module `diwan-database-pgsql`: `PostgresSchemaGrammar` with Laravel's PostgreSQL types
+  and modifiers, every blueprint command including `change()`, schema reads, and
+  `PostgresMigrationLock` on an advisory lock. `DatabaseVersion` compares database versions for
+  grammars.
 - Check constraints: `ColumnDefinition.check`, `Blueprint.check(name, sql)` and `dropCheck`.
   Generated columns: `virtualAs` and `storedAs`. `Blueprint.rawColumn`, `Schema.statement` and
   `Schema.driverName` for SQL the builder cannot write. The SQLite table rebuild now carries checks

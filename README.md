@@ -11,12 +11,13 @@ The connection layer is in place: running SQL, nested transactions with savepoin
 deadlocks, joining a transaction someone else owns, pretend mode, and errors that keep personal
 data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. Migrations run through the `Migrator`: run, rollback, reset, status and pretend, one transaction per
 migration where the database allows. The schema builder creates and changes tables through a grammar per database;
-the SQLite grammar ships in `diwan-database-sqlite`.
+the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar in
+`diwan-database-pgsql`.
 
 | Layer | State |
 |---|---|
 | Connection, driver interface, JDBC adapter | available |
-| Schema builder: common columns, SQLite grammar | available |
+| Schema builder: SQLite and PostgreSQL grammars | available |
 | Migrations: contract, migrations table and migrator | available |
 | Query builder | planned |
 | Models | planned |
@@ -40,6 +41,21 @@ For SQLite schema building, add the SQLite module:
 
 ```kotlin
 implementation("org.aristonis:diwan-database-sqlite:0.1.0")
+```
+
+For PostgreSQL, add the PostgreSQL module and the PostgreSQL JDBC driver:
+
+```kotlin
+implementation("org.aristonis:diwan-database-pgsql:0.1.0")
+runtimeOnly("org.postgresql:postgresql:42.7.5")
+```
+
+```java
+Schema schema = PostgresSchema.of(db);
+Migrator migrator = Migrator.builder(schema)
+        .migrations(migrations)
+        .lock(new PostgresMigrationLock(dataSource))
+        .build();
 ```
 
 Not yet published. Build it locally with `./gradlew check`.

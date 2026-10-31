@@ -127,5 +127,21 @@ Safety and errors
 
 Fulltext, spatial, partial and expression indexes, `change()` on other databases, `foreignIdFor`,
 spatial, vector and computed columns, the modifiers `after`, `first`, `charset`, `collation`,
-`virtualAsJson`, `storedAsJson` and `useCurrentOnUpdate`, renaming a check, the PostgreSQL and MySQL grammars, temporary tables,
+`virtualAsJson`, `storedAsJson` and `useCurrentOnUpdate`, renaming a check, the MySQL and SQL Server grammars, schemas other than PostgreSQL's current one, temporary tables,
 schema-qualified names, listings of tables and columns.
+
+## PostgreSQL
+
+- `PostgresSchema.of(connection)` builds a schema with `PostgresSchemaGrammar`; `driverName()` is
+  `pgsql`, identifiers are limited to 63 characters.
+- Types follow Laravel's PostgreSQL grammar: `varchar(n)`, `char(n)`, `text`, `smallint`, `integer`,
+  `bigint`, `serial` types for auto-increment, `decimal(t, p)`, `float(p)`, `double precision`,
+  `boolean`, `date`, `time` and `timestamp` with or without time zone, `bytea`, `uuid`, `inet`,
+  `macaddr`, `json`, `jsonb`; an enum is `varchar(255)` with a check; `set` is refused.
+- Keys, unique constraints and foreign keys are added with `alter table` after the create; a
+  blueprint runs in one transaction.
+- `change()` sets type (with `using`), nullability and default in one statement; enum, raw and
+  generated columns and new checks are refused.
+- `virtualAs` needs PostgreSQL 18; `storedAs` works on every supported version.
+- `hasTable`, `hasColumn`, `indexes` and `foreignKeys` read the current schema only.
+- `PostgresMigrationLock` keeps two processes from migrating at once.

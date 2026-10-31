@@ -81,3 +81,12 @@
 | E67 | A migration branches on `driverName()` | The SQLite branch runs | `SQLiteChecksTest#driverNameLetsAMigrationBranch` |
 | E68 | `Schema.statement` under pretend | Listed, not run | `SQLiteChecksTest#statementRunsAndPretendOnlyListsIt` |
 | E69 | `rawColumn` | Created as written | `SQLiteChecksTest#aRawColumnIsCreatedAsWritten` |
+| E70 | PostgreSQL: every type | Laravel's PostgreSQL types | `PostgresTypesTest#everyTypeIsCreatedWithLaravelsPostgresType` |
+| E71 | PostgreSQL: `set` | Refused naming the grammar | `PostgresTypesTest#setIsRefused` |
+| E72 | PostgreSQL: `virtualAs` before version 18 | Refused with the version | `PostgresTypesTest#virtualColumnsFollowTheServerVersion` |
+| E73 | PostgreSQL: `change()` with data that cannot convert | Fails; table as before | `PostgresSchemaTest#aChangeThatCannotConvertLeavesTheTableAsItWas` |
+| E74 | PostgreSQL: a statement in a blueprint fails | Nothing left behind | `PostgresSchemaTest#aFailingStatementLeavesNothingBehind` |
+| E75 | PostgreSQL: a table with the same name in another schema | Not seen | `PostgresSchemaTest#aTableInAnotherSchemaIsNotSeen` |
+| E76 | PostgreSQL: renaming a column a check names | The check follows | `PostgresSchemaTest#aRenamedColumnStaysInItsCheck` |
+| E77 | PostgreSQL: two migrators at once | The second waits, then finds nothing to run | `PostgresMigratorTest#aSecondMigratorWaitsForTheLockThenFindsNothingToRun` |
+| E78 | PostgreSQL: blog migrations up, down, up | All succeed | `PostgresMigratorTest#blogMigrationsRunRollBackAndRunAgain` |
