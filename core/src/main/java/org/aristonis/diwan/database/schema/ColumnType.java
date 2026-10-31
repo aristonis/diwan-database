@@ -70,7 +70,9 @@ public enum ColumnType {
     /** Any number of values out of a fixed list. */
     SET,
     /** A column whose whole type is SQL the caller writes. */
-    RAW;
+    RAW,
+    /** Money: whole minor units, or a fixed-scale exact decimal after {@code asDecimal}. */
+    MONEY;
 
     /**
      * Tells whether the type is an integer that can count up as a key.

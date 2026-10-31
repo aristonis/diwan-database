@@ -25,11 +25,12 @@ import java.util.OptionalInt;
 public class ColumnDefinition {
 
     static final int NO_PRECISION = -1;
+    private static final int MAX_DECIMAL_PRECISION = 38;
 
     private final String name;
     private final ColumnType type;
     private final int length;
-    private final int total;
+    private int total;
     private final int places;
     private final int precision;
     private final List<String> allowed;
@@ -349,6 +350,33 @@ public class ColumnDefinition {
     public ColumnDefinition change() {
         ensureOpen();
         this.isChange = true;
+        return this;
+    }
+
+    /**
+     * Stores this money column as an exact decimal instead of whole minor units.
+     *
+     * <p>On PostgreSQL the column is {@code numeric(precision, scale)}. SQLite has no exact
+     * decimal, so the column holds text in one fixed-scale spelling ({@code "1000.000000"} at scale
+     * 6), enforced by a check; write it with {@link Money#toText} and read it with
+     * {@link Money#fromText}. Text does not sort or sum as numbers in SQL, so on SQLite do those in
+     * Java, or keep minor units, which sum and sort exactly everywhere.
+     *
+     * @param precision the total number of digits, more than the scale and at most 38
+     * @return this definition
+     * @throws IllegalStateException if this is not a money column, or the definition is frozen
+     * @throws IllegalArgumentException if the precision is out of range
+     */
+    public ColumnDefinition asDecimal(int precision) {
+        ensureOpen();
+        if (type != ColumnType.MONEY) {
+            throw new IllegalStateException("asDecimal applies only to money columns");
+        }
+        if (precision <= places || precision > MAX_DECIMAL_PRECISION) {
+            throw new IllegalArgumentException("The precision must be more than the scale and at most "
+                    + MAX_DECIMAL_PRECISION);
+        }
+        this.total = precision;
         return this;
     }
 
