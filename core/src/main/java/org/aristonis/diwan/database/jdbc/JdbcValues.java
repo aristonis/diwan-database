@@ -51,6 +51,9 @@ final class JdbcValues {
         if (value instanceof Array) {
             return readArray((Array) value);
         }
+        if (isPgObject(value)) {
+            return pgObjectValue(value);
+        }
         try {
             return readTemporal(value);
         } catch (DateTimeParseException e) {
@@ -70,6 +73,25 @@ final class JdbcValues {
             return LocalDate.parse(value.toString());
         }
         return value;
+    }
+
+    // PostgreSQL's driver hands json, jsonb, inet and similar types back as a PGobject; read
+    // reflectively so the core needs no PostgreSQL dependency.
+    private static boolean isPgObject(Object value) {
+        for (Class<?> type = value == null ? null : value.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getName().equals("org.postgresql.util.PGobject")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Object pgObjectValue(Object value) throws SQLException {
+        try {
+            return value.getClass().getMethod("getValue").invoke(value);
+        } catch (ReflectiveOperationException e) {
+            throw new SQLException("PostgreSQL value cannot be read", e);
+        }
     }
 
     private static int checkedLength(long length) throws SQLException {

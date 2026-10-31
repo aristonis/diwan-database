@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.SqliteText;
 
 /**
  * One session over the shared {@link SQLiteDatabase}.
@@ -251,12 +252,13 @@ final class AndroidSqliteSession implements DriverSession {
         }
     }
 
-    // SQLite has four value types; everything else is stored as the JDBC driver stores it on SQLite.
+    // SQLite has four value types; dates and decimals arrive here as SqliteText already wrote them.
     static List<Object> convert(List<Object> bindings) {
         Objects.requireNonNull(bindings, "bindings");
         List<Object> values = new ArrayList<>(bindings.size());
         for (Object value : bindings) {
-            values.add(convert(value));
+            SqliteText.refuseNonFinite(value, values.size() + 1);
+            values.add(convert(SqliteText.toStorage(value)));
         }
         return values;
     }

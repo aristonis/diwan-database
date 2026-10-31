@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Types;
@@ -26,7 +27,9 @@ import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.driver.SqliteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
@@ -408,7 +411,7 @@ final class JdbcSession implements DriverSession {
         try {
             int index = 1;
             for (Object value : bindings) {
-                bind(statement, index++, value);
+                bind(statement, index++, value, DatabaseFamily.of(productName));
             }
             return statement;
         } catch (SQLException | RuntimeException e) {
@@ -421,7 +424,25 @@ final class JdbcSession implements DriverSession {
         }
     }
 
-    private static void bind(PreparedStatement statement, int index, Object value) throws SQLException {
+    private static void bind(PreparedStatement statement, int index, Object value, DatabaseFamily family)
+            throws SQLException {
+        SqliteText.refuseNonFinite(value, index);
+        if (family == DatabaseFamily.SQLITE) {
+            // One text for dates and decimals on every SQLite driver, so values sort and compare.
+            value = SqliteText.toStorage(value);
+        }
+        if (family == DatabaseFamily.POSTGRESQL) {
+            if (value == null) {
+                // Untyped, so a null fits any column type, uuid and jsonb included.
+                statement.setNull(index, Types.OTHER);
+                return;
+            }
+            if (value instanceof String) {
+                // Sent untyped, as pgjdbc's stringtype=unspecified does, so text binds into uuid, jsonb and inet.
+                statement.setObject(index, value, Types.OTHER);
+                return;
+            }
+        }
         if (value == null) {
             statement.setNull(index, Types.NULL);
         } else if (value instanceof byte[]) {
@@ -474,15 +495,76 @@ final class JdbcSession implements DriverSession {
             }
             labels[i] = label;
         }
+        // Worked out once per result, not once per cell.
+        Class<?>[] wanted = new Class<?>[columnCount];
+        if (DatabaseFamily.of(productName) != DatabaseFamily.SQLITE) {
+            for (int i = 0; i < columnCount; i++) {
+                wanted[i] = temporalType(metaData.getColumnType(i + 1), metaData.getColumnTypeName(i + 1));
+            }
+        }
         List<Map<String, Object>> rows = new ArrayList<>();
         while (resultSet.next()) {
             Map<String, Object> row = new LinkedHashMap<>();
             for (int i = 0; i < columnCount; i++) {
-                row.put(labels[i], JdbcValues.read(resultSet.getObject(i + 1)));
+                row.put(labels[i], JdbcValues.read(readValue(resultSet, i + 1, wanted[i])));
             }
             rows.add(Collections.unmodifiableMap(row));
         }
         return Collections.unmodifiableList(rows);
+    }
+
+    // java.time getters avoid Timestamp.toString(), which shifts dates before 1582 and times in a
+    // daylight-saving gap and drops a timestamptz's offset. SQLite keeps dates as text, read as is.
+    private static Object readValue(ResultSet resultSet, int column, Class<?> wanted) throws SQLException {
+        if (wanted == null) {
+            return resultSet.getObject(column);
+        }
+        if (TYPED_GET_OBJECT == null) {
+            return resultSet.getObject(column);
+        }
+        try {
+            return TYPED_GET_OBJECT.invoke(resultSet, column, wanted);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SQLFeatureNotSupportedException || cause instanceof AbstractMethodError) {
+                return resultSet.getObject(column);
+            }
+            if (cause instanceof SQLException) {
+                throw (SQLException) cause;
+            }
+            throw new SQLException("Reading a date or time failed", cause);
+        } catch (IllegalAccessException e) {
+            return resultSet.getObject(column);
+        }
+    }
+
+    // ResultSet.getObject(int, Class) is JDBC 4.1, missing from Android 28's java.sql; looked up once.
+    private static final Method TYPED_GET_OBJECT = typedGetObject();
+
+    private static Method typedGetObject() {
+        try {
+            return ResultSet.class.getMethod("getObject", int.class, Class.class);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+    }
+
+    private static Class<?> temporalType(int type, String typeName) {
+        String name = typeName == null ? "" : typeName.toLowerCase(java.util.Locale.ROOT);
+        switch (type) {
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                return OffsetDateTime.class;
+            case Types.TIMESTAMP:
+                return name.equals("timestamptz") ? OffsetDateTime.class : java.time.LocalDateTime.class;
+            case Types.DATE:
+                return java.time.LocalDate.class;
+            case Types.TIME_WITH_TIMEZONE:
+                return java.time.OffsetTime.class;
+            case Types.TIME:
+                return name.equals("timetz") ? java.time.OffsetTime.class : java.time.LocalTime.class;
+            default:
+                return null;
+        }
     }
 
     private static DriverException duplicateLabel(String label) {

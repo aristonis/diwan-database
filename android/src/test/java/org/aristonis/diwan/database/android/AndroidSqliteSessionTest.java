@@ -65,8 +65,8 @@ public class AndroidSqliteSessionTest {
         assertEquals(1L, rows.get(1).get("i"));
         assertEquals("12.30", rows.get(1).get("t"));
         assertEquals("2026-01-02", rows.get(2).get("t"));
-        assertEquals("2026-01-02T03:04:05", rows.get(3).get("t"));
-        assertEquals("2026-01-02T03:04:05Z", rows.get(4).get("t"));
+        assertEquals("2026-01-02 03:04:05", rows.get(3).get("t"));
+        assertEquals("2026-01-02 03:04:05+00:00", rows.get(4).get("t"));
         assertNull(rows.get(5).get("t"));
         assertEquals(Arrays.asList("i", "r", "t", "b"), Arrays.asList(rows.get(0).keySet().toArray()));
         assertEquals(1L, db.select("select count(*) as c from v where i = ?", 42).get(0).get("c"));
