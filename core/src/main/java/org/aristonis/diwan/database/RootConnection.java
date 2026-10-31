@@ -152,12 +152,14 @@ final class RootConnection extends AbstractConnection {
     // the rollback threw.
     private static void rollBackAfterFailure(TransactionalConnection connection, DriverSession session,
             Throwable failure) {
+        boolean hasRolledBack = false;
         try {
             connection.rollbackOutermost();
+            hasRolledBack = true;
         } catch (Throwable rollbackFailure) {
             Sessions.suppress(failure, rollbackFailure);
         } finally {
-            Sessions.closeAfterFailure(session, failure);
+            Sessions.endAfterFailure(session, failure, !hasRolledBack);
         }
     }
 
@@ -175,7 +177,7 @@ final class RootConnection extends AbstractConnection {
             return new TransactionState(session, isExternal, canRelease);
         } catch (DriverException failure) {
             QueryException error = queryFailure(BEGIN, Collections.<Object>emptyList(), failure);
-            Sessions.closeAfterFailure(session, error);
+            Sessions.endAfterFailure(session, error, false);
             throw error;
         } catch (RuntimeException | Error failure) {
             Sessions.closeAfterFailure(session, failure);

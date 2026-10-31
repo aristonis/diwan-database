@@ -23,6 +23,45 @@ final class Sessions {
         }
     }
 
+    // A session whose connection is gone, or whose rollback failed, is in a state nobody can vouch
+    // for, so it is dropped instead of handed back.
+    static void endAfterFailure(DriverSession session, Throwable failure, boolean isUnknownState) {
+        if (!isUnknownState && !isConnectionLost(failure)) {
+            closeAfterFailure(session, failure);
+            return;
+        }
+        try {
+            session.discard();
+        } catch (Throwable discardFailure) {
+            suppress(failure, discardFailure);
+        }
+    }
+
+    // SQL state class 08 is a connection exception in every database's numbering; 57P01 to 57P03
+    // are PostgreSQL shutting down or restarting, which end the connection the same way.
+    static boolean isConnectionLost(Throwable failure) {
+        return isConnectionLost(failure, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+    }
+
+    // One set across the whole walk, so exceptions that suppress each other cannot loop forever.
+    private static boolean isConnectionLost(Throwable failure, java.util.Set<Throwable> seen) {
+        for (Throwable t = failure; t != null && seen.add(t); t = t.getCause()) {
+            if (t instanceof org.aristonis.diwan.database.driver.DriverException) {
+                String state = ((org.aristonis.diwan.database.driver.DriverException) t).sqlState().orElse("");
+                if (state.startsWith("08") || state.equals("57P01") || state.equals("57P02")
+                        || state.equals("57P03")) {
+                    return true;
+                }
+            }
+            for (Throwable suppressed : t.getSuppressed()) {
+                if (!seen.contains(suppressed) && isConnectionLost(suppressed, seen)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // The work already took effect, so a failure to give the session back must not turn a completed
     // write into an error the caller would retry.
     static void closeAfterSuccess(DriverSession session, Consumer<Throwable> cleanupFailureHandler) {

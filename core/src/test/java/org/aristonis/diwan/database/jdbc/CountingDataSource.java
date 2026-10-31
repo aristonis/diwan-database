@@ -26,6 +26,16 @@ final class CountingDataSource implements DataSource {
         return this;
     }
 
+    CountingDataSource withForeignKeys() {
+        target.setEnforceForeignKeys(true);
+        return this;
+    }
+
+    CountingDataSource withoutBusyWait() {
+        target.setBusyTimeout(0);
+        return this;
+    }
+
     CountingDataSource(String file) {
         target.setUrl("jdbc:sqlite:" + file);
         target.setBusyTimeout(10_000);

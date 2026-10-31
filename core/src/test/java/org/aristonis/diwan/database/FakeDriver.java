@@ -29,6 +29,7 @@ final class FakeDriver implements Driver {
     private boolean losesSavepoints;
     private DriverException openFailure;
     private DriverException commitFailure;
+    private DriverException beginFailure;
     private RuntimeException closeFailure;
     private DriverException rollbackFailure;
     private Error rollbackError;
@@ -72,6 +73,11 @@ final class FakeDriver implements Driver {
 
     FakeDriver failsToOpen(DriverException failure) {
         openFailure = failure;
+        return this;
+    }
+
+    FakeDriver failsToBegin(DriverException failure) {
+        beginFailure = failure;
         return this;
     }
 
@@ -201,6 +207,9 @@ final class FakeDriver implements Driver {
         @Override
         public void begin() {
             calls.add("begin");
+            if (beginFailure != null) {
+                throw beginFailure;
+            }
         }
 
         @Override
