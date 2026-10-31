@@ -86,8 +86,10 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private void addComment(List<String> statements, Blueprint blueprint, ColumnDefinition column) {
         if (column.comment().isPresent()) {
+            // An empty comment removes it, as PostgreSQL treats '' and null alike here.
+            String text = column.comment().get();
             statements.add("comment on column " + wrapTable(blueprint.table()) + "." + wrap(column.name()) + " is "
-                    + literal(column.comment().get()));
+                    + (text.isEmpty() ? "null" : literal(text)));
         }
     }
 
@@ -264,7 +266,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     protected List<String> compileDropPrimary(Blueprint blueprint, Command command, Connection connection) {
         Object name = connection.scalar("select c.conname from pg_constraint c join pg_class t on t.oid = c.conrelid"
-                + " where c.contype = 'p' and t.relname = ? and t.relnamespace = current_schema()::regnamespace",
+                + " where c.contype = 'p' and t.relname = ? and t.relnamespace = (select oid from pg_namespace where nspname = current_schema())",
                 blueprint.table()).orElse(blueprint.table() + "_pkey");
         return Collections.singletonList(dropConstraint(blueprint, name.toString()));
     }
@@ -366,7 +368,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     public SchemaQuery compileTableExists(Connection connection, String table) {
         return new SchemaQuery("select count(*) from pg_class where relname = ? and relkind in ('r', 'p')"
-                + " and relnamespace = current_schema()::regnamespace", Collections.singletonList(table));
+                + " and relnamespace = (select oid from pg_namespace where nspname = current_schema())", Collections.singletonList(table));
     }
 
     /**
@@ -377,7 +379,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
         return new SchemaQuery("select a.attname from pg_attribute a join pg_class c on c.oid = a.attrelid"
-                + " where c.relname = ? and c.relnamespace = current_schema()::regnamespace and a.attnum > 0"
+                + " where c.relname = ? and c.relnamespace = (select oid from pg_namespace where nspname = current_schema()) and a.attnum > 0"
                 + " and not a.attisdropped order by a.attnum", Collections.singletonList(table));
     }
 
@@ -398,7 +400,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 + " join pg_class ic on ic.oid = i.indexrelid"
                 + " join lateral unnest(i.indkey) with ordinality as k(num, ord) on true"
                 + " left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.num and k.num <> 0"
-                + " where tc.relname = ? and tc.relnamespace = current_schema()::regnamespace"
+                + " where tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
                 + " and k.ord <= i.indnkeyatts"
                 + " group by ic.relname, i.indisunique, i.indisprimary order by ic.relname", table)) {
             found.add(new IndexInfo(String.valueOf(row.get("name")), split(row.get("columns")),
@@ -424,7 +426,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 + " as foreign_columns, c.confupdtype as on_update, c.confdeltype as on_delete"
                 + " from pg_constraint c join pg_class tc on tc.oid = c.conrelid"
                 + " join pg_class ft on ft.oid = c.confrelid"
-                + " where c.contype = 'f' and tc.relname = ? and tc.relnamespace = current_schema()::regnamespace"
+                + " where c.contype = 'f' and tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
                 + " order by c.conname", table)) {
             found.add(new ForeignKeyInfo(split(row.get("columns")), String.valueOf(row.get("foreign_table")),
                     split(row.get("foreign_columns")), action(row.get("on_update")), action(row.get("on_delete"))));
@@ -497,6 +499,8 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 return "varchar(255) check (" + wrap(column.name()) + " in (" + values(column.allowed()) + "))";
             case RAW:
                 return column.rawDefinition().orElseThrow(IllegalStateException::new);
+            case INSTANT:
+                return "timestamp(6) with time zone";
             case MONEY:
                 return column.total() == 0 ? "bigint" : "numeric(" + column.total() + ", " + column.places() + ")";
             default:

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import org.aristonis.diwan.database.values.Money;
 
 /**
  * One column of a {@link Blueprint}, with Laravel's modifiers.

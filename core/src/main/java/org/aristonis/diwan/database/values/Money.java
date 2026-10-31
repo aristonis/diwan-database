@@ -1,8 +1,9 @@
-package org.aristonis.diwan.database.schema;
+package org.aristonis.diwan.database.values;
 
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.schema.Blueprint;
 
 /**
  * Converts money between {@link BigDecimal} and the two ways {@link Blueprint#money} stores it:

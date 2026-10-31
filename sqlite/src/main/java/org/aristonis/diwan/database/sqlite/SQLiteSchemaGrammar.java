@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
-import org.aristonis.diwan.database.schema.Money;
+import org.aristonis.diwan.database.values.Money;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
@@ -469,6 +469,8 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                 return column.rawDefinition().orElseThrow(IllegalStateException::new);
             case MONEY:
                 return column.total() == 0 ? "integer" : "text";
+            case INSTANT:
+                return "integer";
             default:
                 return super.type(column);
         }
@@ -506,6 +508,11 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
             sql.append(" as (").append(column.storedAs().get()).append(") stored");
         }
         appendMoneyCheck(sql, column);
+        if (column.type() == ColumnType.INSTANT) {
+            // A bound Instant would otherwise land as text, which sorts after every number.
+            String c = wrap(column.name());
+            sql.append(" check (").append(c).append(" is null or typeof(").append(c).append(") = 'integer')");
+        }
         appendChecks(sql, column);
         return sql.toString();
     }

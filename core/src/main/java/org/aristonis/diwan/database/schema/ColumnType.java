@@ -72,7 +72,9 @@ public enum ColumnType {
     /** A column whose whole type is SQL the caller writes. */
     RAW,
     /** Money: whole minor units, or a fixed-scale exact decimal after {@code asDecimal}. */
-    MONEY;
+    MONEY,
+    /** A moment in time: whole microseconds on SQLite, a zoned timestamp elsewhere. */
+    INSTANT;
 
     /**
      * Tells whether the type is an integer that can count up as a key.

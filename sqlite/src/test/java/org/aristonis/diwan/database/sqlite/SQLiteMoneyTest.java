@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.schema.Money;
+import org.aristonis.diwan.database.values.Money;
 import org.aristonis.diwan.database.schema.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

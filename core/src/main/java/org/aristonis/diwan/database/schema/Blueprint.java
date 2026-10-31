@@ -10,6 +10,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.aristonis.diwan.database.values.Instants;
+import org.aristonis.diwan.database.values.Money;
 
 /**
  * Describes the columns and commands for one table, inside a {@link Schema} callback.
@@ -216,6 +218,21 @@ public final class Blueprint {
             throw new IllegalArgumentException("A money scale must be 0 to " + MAX_MONEY_SCALE);
         }
         return add(new ColumnDefinition(column, ColumnType.MONEY, 0, 0, scale));
+    }
+
+    /**
+     * Adds a column for a moment in time: whole microseconds since the epoch on SQLite (exact,
+     * sortable, without a time zone), {@code timestamptz} on PostgreSQL. Convert with
+     * {@link Instants}.
+     *
+     * @param column the column name, never {@code null}
+     * @return the column definition, never {@code null}
+     * @throws NullPointerException if {@code column} is {@code null}
+     * @throws IllegalArgumentException if the name is invalid
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ColumnDefinition instant(String column) {
+        return simple(column, ColumnType.INSTANT);
     }
 
     /**
@@ -1866,15 +1883,17 @@ public final class Blueprint {
         return new Command(type, attributes);
     }
 
+    // Counted in UTF-8 bytes, as PostgreSQL counts: a 40-letter Arabic name is 80 bytes and would
+    // be cut silently, so a later drop by its full name would miss it.
     private static String checkLength(String name, boolean isGenerated, int maxIdentifierLength) {
-        if (name.length() <= maxIdentifierLength) {
+        if (name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= maxIdentifierLength) {
             return name;
         }
         if (isGenerated) {
             throw new IllegalArgumentException("The generated index name is longer than " + maxIdentifierLength
-                    + " characters; pass a name");
+                    + " bytes (UTF-8); pass a name");
         }
-        throw new IllegalArgumentException("An index name is longer than " + maxIdentifierLength + " characters");
+        throw new IllegalArgumentException("An index name is longer than " + maxIdentifierLength + " bytes (UTF-8)");
     }
 
     // Laravel's createIndexName.
