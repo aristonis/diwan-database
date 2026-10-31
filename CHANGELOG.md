@@ -34,7 +34,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `timestamps`, and the modifiers `nullable`, `defaultValue`, `useCurrent`, `unique`,
   `autoIncrement`, `unsigned` and `comment`.
 - `SchemaGrammar` for database modules to extend, with `Command`, `Expression` and `SchemaQuery`.
-- Module `photisma-database-sqlite` with `SQLiteSchemaGrammar` and `SQLiteSchema`.
+- Module `diwan-database-sqlite` with `SQLiteSchemaGrammar` and `SQLiteSchema`.
 - `Migration` contract: `name`, `up(Schema)`, `down(Schema)`, `withinTransaction`, `shouldRun` and `connection`.
 - `MigrationRepository` and `DatabaseMigrationRepository`: the migrations table with Laravel's
   layout, operations and ordering, kept through the schema builder; `MigrationEntry` for its rows.

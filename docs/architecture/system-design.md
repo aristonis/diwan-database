@@ -1,6 +1,6 @@
 # System design
 
-Photisma Database is a hand port of Laravel's database layer (`illuminate/database`) to Java. It
+Diwan Database is a hand port of Laravel's database layer (`illuminate/database`) to Java. It
 keeps Laravel's architecture layers and names where they read well in Java and uses Java's own
 idioms where PHP shaped Laravel's choices.
 
@@ -25,11 +25,11 @@ that does not need JDBC.
 
 | Module | Artifact | Holds |
 |---|---|---|
-| `core` | `org.aristonis:photisma-database` | The connection, the driver interface, the JDBC adapter, migrations and the schema builder; later layers join it when built |
-| `sqlite` | `org.aristonis:photisma-database-sqlite` | The SQLite schema grammar |
-| one per further database (planned) | `org.aristonis:photisma-database-<driver>` | That database's grammars and driver details |
+| `core` | `org.aristonis:diwan-database` | The connection, the driver interface, the JDBC adapter, migrations and the schema builder; later layers join it when built |
+| `sqlite` | `org.aristonis:diwan-database-sqlite` | The SQLite schema grammar |
+| one per further database (planned) | `org.aristonis:diwan-<driver>` | That database's grammars and driver details |
 
-## Diagram: Photisma Database layers
+## Diagram: Diwan Database layers
 
 ```mermaid
 flowchart TB

@@ -1,8 +1,8 @@
 plugins {
-    id("photisma.java-library")
+    id("diwan.java-library")
 }
 
-description = "Photisma Database SQLite: the schema grammar for SQLite."
+description = "Diwan Database SQLite: the schema grammar for SQLite."
 
 dependencies {
     api(project(":core"))

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Photisma must run on Java 17 desktop and server runtimes, inside Spring, and on Android 9 and
+Diwan Database must run on Java 17 desktop and server runtimes, inside Spring, and on Android 9 and
 later. Android has no standard SQLite JDBC driver. Its database API is
 `android.database.sqlite`, and the third-party JDBC driver for SQLite ships a second copy of
 SQLite inside the app. Building the connection directly on `java.sql` would tie the whole library
@@ -15,7 +15,7 @@ to JDBC.
 ## Decision
 
 The connection runs on a small driver interface of its own in
-`org.aristonis.photisma.database.driver`: `Driver` opens a `DriverSession` (one physical
+`org.aristonis.diwan.database.driver`: `Driver` opens a `DriverSession` (one physical
 connection) and reports `DriverInfo` (database name, version, capabilities). No signature in that
 package uses a JDBC type. Failures are a `DriverException` whose kinds (unique violation,
 concurrency failure) the driver sets, because only the driver knows its database's codes. The

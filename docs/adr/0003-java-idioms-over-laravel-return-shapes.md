@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Photisma ports Laravel's database layer. Laravel's API was shaped by PHP: `null` for a missing
+Diwan Database ports Laravel's database layer. Laravel's API was shaped by PHP: `null` for a missing
 row, `stdClass` rows, a transaction ended by separate begin and commit calls, and exceptions that
 PHP does not force callers to declare. Copying those shapes literally would give Java callers
 nullable returns, untyped rows and manual cleanup. Dropping Laravel's names would make the port

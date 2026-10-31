@@ -1,6 +1,6 @@
-# Photisma Database
+# Diwan Database
 
-Photisma Database is a hand port of Laravel's database layer (`illuminate/database`) to Java. It
+Diwan Database is a hand port of Laravel's database layer (`illuminate/database`) to Java. It
 keeps Laravel's layers and method names where they read well in Java, and uses Java's own idioms
 (`Optional`, `java.time`, try-with-resources, unchecked exceptions) where PHP shaped Laravel's
 choices.
@@ -11,7 +11,7 @@ The connection layer is in place: running SQL, nested transactions with savepoin
 deadlocks, joining a transaction someone else owns, pretend mode, and errors that keep personal
 data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. Migrations run through the `Migrator`: run, rollback, reset, status and pretend, one transaction per
 migration where the database allows. The schema builder creates and changes tables through a grammar per database;
-the SQLite grammar ships in `photisma-database-sqlite`.
+the SQLite grammar ships in `diwan-database-sqlite`.
 
 | Layer | State |
 |---|---|
@@ -27,19 +27,19 @@ the SQLite grammar ships in `photisma-database-sqlite`.
 - Android 9 (API 28) or later, through a driver that does not need JDBC (planned). The build
   checks the core against the Android 28 API.
 - Inside Spring, through a `JdbcConnectionProvider` that reports Spring's transaction, so
-  Photisma nests inside it with savepoints instead of committing it.
+  Diwan Database nests inside it with savepoints instead of committing it.
 - No runtime dependency.
 
 ## Coordinates
 
 ```kotlin
-implementation("org.aristonis:photisma-database:0.1.0")
+implementation("org.aristonis:diwan-database:0.1.0")
 ```
 
 For SQLite schema building, add the SQLite module:
 
 ```kotlin
-implementation("org.aristonis:photisma-database-sqlite:0.1.0")
+implementation("org.aristonis:diwan-database-sqlite:0.1.0")
 ```
 
 Not yet published. Build it locally with `./gradlew check`.
@@ -51,9 +51,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
-import org.aristonis.photisma.database.Connection;
-import org.aristonis.photisma.database.LoggedQuery;
-import org.aristonis.photisma.database.TransactionScope;
+import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.LoggedQuery;
+import org.aristonis.diwan.database.TransactionScope;
 
 Connection db = Connection.builder()
         .name("main")
@@ -90,8 +90,8 @@ outside it.
 ### Schema builder
 
 ```java
-import org.aristonis.photisma.database.schema.Schema;
-import org.aristonis.photisma.database.sqlite.SQLiteSchema;
+import org.aristonis.diwan.database.schema.Schema;
+import org.aristonis.diwan.database.sqlite.SQLiteSchema;
 
 Schema schema = SQLiteSchema.of(db);
 schema.create("users", table -> {
@@ -113,9 +113,9 @@ On SQLite, adding or dropping a key on a filled table rebuilds it and keeps ever
 ### Migrations
 
 ```java
-import org.aristonis.photisma.database.migrations.Migration;
-import org.aristonis.photisma.database.migrations.Migrator;
-import org.aristonis.photisma.database.schema.Schema;
+import org.aristonis.diwan.database.migrations.Migration;
+import org.aristonis.diwan.database.migrations.Migrator;
+import org.aristonis.diwan.database.schema.Schema;
 
 final class CreateUsersTable extends Migration {
     @Override

@@ -2,6 +2,6 @@ pluginManagement {
     includeBuild("build-logic")
 }
 
-rootProject.name = "photisma-database"
+rootProject.name = "diwan-database"
 
 include("core", "sqlite")

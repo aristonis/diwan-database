@@ -1,6 +1,6 @@
 # Connection
 
-The connection is how a Java application, and every later part of Photisma, sends SQL to a
+The connection is how a Java application, and every later part of Diwan Database, sends SQL to a
 database. It follows Laravel's `Connection`: the same method names, transactions that nest, and a
 dry-run mode. It is built for Java callers: it is safe to share between threads, borrows a pooled
 connection only while it works, and can join a transaction owned by Spring or your own code.
@@ -30,7 +30,7 @@ sent. Rows come back as read-only maps with the columns in select order.
   it.
 - When the database reports a deadlock or serialization failure, `transaction(callback, attempts)`
   runs the whole callback again. A failed commit is never retried, because it may have landed.
-- Inside a transaction someone else owns (for example Spring's), Photisma works through a
+- Inside a transaction someone else owns (for example Spring's), Diwan Database works through a
   savepoint and leaves commit and rollback to the owner.
 - Errors are unchecked `QueryException`s that carry the SQL, the values and the database's codes.
   A duplicate key has its own type. Values stay out of the message unless you switch them on,

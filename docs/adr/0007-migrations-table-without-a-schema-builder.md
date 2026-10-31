@@ -9,7 +9,7 @@ the schema builder, with Laravel's layout.
 ## Context
 
 The migrator needs a table that records which migrations ran and in which batch. Laravel creates it
-with its schema builder and reads it with its query builder; Photisma has neither yet. Laravel also
+with its schema builder and reads it with its query builder; Diwan Database has neither yet. Laravel also
 finds migrations by loading PHP files by name, which Java cannot do, and a classpath scan breaks on
 Android and with code shrinkers.
 

@@ -1,7 +1,7 @@
 # Connection: user scenarios
 
 Each edge case names the test that covers it, as `TestClass#method` under
-`core/src/test/java/org/aristonis/photisma/database`. "Javadoc" means the documented contract is
+`core/src/test/java/org/aristonis/diwan/database`. "Javadoc" means the documented contract is
 the agreed coverage.
 
 ## Actors
@@ -9,7 +9,7 @@ the agreed coverage.
 | Actor | What they can do |
 |---|---|
 | Application developer | Run SQL, read rows, group work in transactions, dry-run work |
-| Outer transaction owner | Start a transaction that Photisma then works inside |
+| Outer transaction owner | Start a transaction that Diwan Database then works inside |
 | Several threads of one app | Use the same connection at the same time |
 | Driver adapter author | Put a driver that is not JDBC under the connection |
 
@@ -44,8 +44,8 @@ the agreed coverage.
 
 ### S4: Inside someone else's transaction
 
-1. A Spring service starts a transaction and calls code that uses Photisma.
-2. Photisma works inside that transaction and leaves ending it to its owner.
+1. A Spring service starts a transaction and calls code that uses Diwan Database.
+2. Diwan Database works inside that transaction and leaves ending it to its owner.
 
 ### S5: Dry run
 
@@ -104,7 +104,7 @@ the agreed coverage.
 | E16 | The commit succeeded but giving the connection back fails | The result is returned; the failure goes to the cleanup-failure handler | `TransactionTest#keepsTheResultWhenGivingTheSessionBackFailsAfterCommit` |
 | E17 | The attempt count is zero or negative | Refused before anything runs | `TransactionTest#refusesFewerThanOneAttempt` |
 | E18 | The database cannot release savepoints | The savepoint is left in place; the transaction still works | `TransactionTest#keepsTheSavepointWhenTheDatabaseCannotReleaseIt` |
-| E19 | Several inner units run at the same depth, some rolled back | Each savepoint gets its own name (`photisma_2`, then `photisma_2_1`) | `TransactionTest#givesEverySavepointInOneSessionItsOwnName` |
+| E19 | Several inner units run at the same depth, some rolled back | Each savepoint gets its own name (`diwan_2`, then `diwan_2_1`) | `TransactionTest#givesEverySavepointInOneSessionItsOwnName` |
 | E20 | The callback's connection is kept and used after the transaction ended | Refused with `IllegalStateException` | `TransactionHardeningTest#refusesACallbackConnectionUsedAfterItsTransactionEnded` |
 | E21 | An inner scope is left open when a nested transaction returns | The scope is rolled back first; the level stays right | `TransactionHardeningTest#endsAScopeLeftOpenInsideANestedTransaction` |
 | E22 | A scope's commit fails, then the scope is closed | Close rolls back and gives the connection back | `TransactionScopeTest#rollsBackAndGivesTheSessionBackWhenCommitFailed` |
@@ -125,9 +125,9 @@ the agreed coverage.
 
 | # | Situation | What the actor sees or the system does | Test |
 |---|---|---|---|
-| E1 | Photisma's unit finishes inside the outer transaction | Nothing is committed; only a savepoint is used | `TransactionTest#worksInsideAnExternalTransactionThroughASavepointOnly` |
-| E2 | Photisma's unit fails inside the outer transaction | Only Photisma's part is undone; the failure goes to the outer owner | `TransactionTest#undoesOnlyItsOwnPartInsideAnExternalTransaction` |
-| E3 | The outer owner rolls back after Photisma finished | Photisma's work is gone too; auto-commit was never touched | `JdbcSqliteTest#joinsATransactionOwnedByTheProviderInsteadOfEndingIt` |
+| E1 | Diwan Database's unit finishes inside the outer transaction | Nothing is committed; only a savepoint is used | `TransactionTest#worksInsideAnExternalTransactionThroughASavepointOnly` |
+| E2 | Diwan Database's unit fails inside the outer transaction | Only Diwan Database's part is undone; the failure goes to the outer owner | `TransactionTest#undoesOnlyItsOwnPartInsideAnExternalTransaction` |
+| E3 | The outer owner rolls back after Diwan Database finished | Diwan Database's work is gone too; auto-commit was never touched | `JdbcSqliteTest#joinsATransactionOwnedByTheProviderInsteadOfEndingIt` |
 | E4 | A deadlock inside the outer transaction | Not retried; the failure goes to the outer owner | `TransactionTest#neverRetriesInsideAnExternalTransaction` |
 | E5 | Something asks the JDBC session to begin, commit or roll back the outer transaction | Refused | `JdbcPoolSettingsTest#refusesToStartOrEndATransactionItDoesNotOwn` |
 
@@ -168,7 +168,7 @@ the agreed coverage.
 | A pooled connection's auto-commit setting | Put back before the connection is returned | The next user expects the pool's setting |
 | Work done inside someone else's transaction | Kept for its owner to commit or undo | Its owner decides |
 
-Photisma never keeps a physical connection after a call or transaction returns, and never commits
+Diwan Database never keeps a physical connection after a call or transaction returns, and never commits
 or undoes work that belongs to a transaction it did not start.
 
 ## Lifecycle
@@ -189,7 +189,7 @@ stateDiagram-v2
 ```
 
 The final state is Idle with the connection returned; a joined outer transaction is never ended by
-Photisma.
+Diwan Database.
 
 ### Added later
 

@@ -8,7 +8,7 @@ detailed contract of each type is its Javadoc.
 
 The migrator must know which migrations already ran, and in which batch, so it runs only new ones
 and rolls back the right ones. Laravel keeps this in a `migrations` table and loads PHP files by
-name. Java has no files to load by name, and Photisma has no query builder or schema builder yet.
+name. Java has no files to load by name, and Diwan Database has no query builder or schema builder yet.
 
 ## 2. Goal
 
