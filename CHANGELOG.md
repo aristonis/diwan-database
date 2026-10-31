@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `MissingMigrationsException`: rollback and reset refuse when records have no migration in the
+  migrator; `Migrator.Builder.allowMissingOnRollback()` restores Laravel's behaviour.
+- `DriverException.databaseMessage()`; `QueryException` shows the database's reason with the values
+  (`showBindingsInErrors`) and always shows the vendor code.
 - `Migrator`: `run`, `run(step)`, `rollback`, `rollbackSteps`, `rollbackBatch`, `reset`, `status`
   and pretend forms; one transaction per migration with its record inside it where the database
   allows; named connections; `MigrationLock` hook; `MigrationResult`, `MigrationStatus` and

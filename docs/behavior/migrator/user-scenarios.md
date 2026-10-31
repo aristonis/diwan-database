@@ -21,7 +21,8 @@
 | E7 | Recording fails after another connection committed | Error says the record failed; the change stays | `MigratorSqliteTest#aRecordThatFailsAfterAnotherConnectionCommittedIsReportedAsSuch` |
 | E8 | Two migrations share a name, a name is invalid, a connection is unknown | Refused before anything runs | `MigratorBuildTest#refusesBadListsBeforeAnythingRuns` |
 | E9 | Called inside a transaction the app opened | Refused | `MigratorBuildTest#refusesToRunInsideAnOpenTransaction` |
-| E10 | The table lists a migration the app no longer has | Rollback reports it as not found and keeps it; status shows it as missing | `MigratorSqliteTest#entriesWithoutAMigrationAreReportedAndKept` |
+| E10 | Older code rolls back a batch holding migrations it does not have | Refused, nothing undone, the error lists the names; status shows them as missing | `MigratorSqliteTest#olderCodeCannotRollBackANewerBatch` |
+| E10b | Same, with `allowMissingOnRollback()` | Known ones undone; unknown records reported as not found and kept | `MigratorSqliteTest#entriesWithoutAMigrationAreReportedAndKept` |
 | E11 | Rolling back with nothing ran, or no table | Nothing happens | `MigratorSqliteTest#rollbackWithoutATableOrWithoutDownDoesNothingHarmful` |
 | E12 | A migration without a down step is rolled back | Its record is removed | same test as E11 |
 | E13 | Rollback by steps reaching into an older batch | Exactly that many, newest first | `MigratorSqliteTest#rollsBackTheLastBatchByStepsByBatchAndAll` |

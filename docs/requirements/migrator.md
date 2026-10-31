@@ -32,7 +32,8 @@ Rollback and reset
 
 - `rollback()` undoes the last batch, `rollbackSteps(n)` the last n migrations, `rollbackBatch(b)`
   one batch, `reset()` everything, newest first.
-- A recorded name the migrator was not given is reported as not found and kept.
+- A recorded name the migrator was not given refuses the whole call before anything is undone,
+  unless the builder allows it; then it is reported as not found and kept.
 - Without a table or records, nothing happens.
 
 Status and pretend

@@ -28,6 +28,9 @@ call the migrator inside a transaction of their own.
    builder.
 7. A `MigrationLock` is held around every run, rollback and reset. The default does nothing.
 8. Pretend respects `shouldRun()`, so a skipped migration lists no SQL.
+9. Rollback and reset refuse when a record to undo has no migration in the migrator, because older
+   code undoing part of a newer batch can drop tables the rest still needs. Laravel's
+   skip-and-continue is available through `allowMissingOnRollback()`.
 
 ## Consequences
 

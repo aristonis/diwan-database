@@ -325,7 +325,7 @@ use after the callback returns.
 
 Message hygiene:
 
-1. The message is `SQL: <sql> (Connection: <name>, SQL state <state>)`, with `unknown` for a
+1. The message is `SQL: <sql> (Connection: <name>, SQL state <state>, vendor code <code>)`, with `unknown` for a
    missing state. Binding values are appended only when `showBindingsInErrors` is on, because they
    can hold personal data. `getBindings()` carries them either way.
 2. The database's own error text stays in the cause, never in this message.

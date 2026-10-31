@@ -153,7 +153,7 @@ the agreed coverage.
 
 | # | Situation | What the actor sees or the system does | Test |
 |---|---|---|---|
-| E1 | A statement fails with default settings | The message has the SQL, the connection and the SQL state, no values | `RootConnectionTest#hidesBindingsInErrorsUnlessShowingIsSwitchedOn` |
+| E1 | A statement fails with default settings | The message has the SQL, the connection, the SQL state and the vendor code; no values, no database reason | `RootConnectionTest#hidesBindingsInErrorsUnlessShowingIsSwitchedOn` |
 | E2 | The database's own error text echoes a value | It stays in the cause, never in the message | `JdbcFailuresTest#buildsItsMessageFromCodesOnlyAndKeepsTheOriginalAsCause` |
 | E3 | SQL or a value holds line breaks or control characters | Escaped; the message stays one line | `TransactionHardeningTest#escapesEveryLineBreakingAndControlCharacterInMessages` |
 | E4 | SQL or a value is very long | Shortened with `...` | `ErrorPrivacyTest#escapesLineBreaksAndShortensLongValuesInMessages` |
@@ -190,3 +190,11 @@ stateDiagram-v2
 
 The final state is Idle with the connection returned; a joined outer transaction is never ended by
 Photisma.
+
+### Added later
+
+| # | Situation | What happens | Test |
+|---|---|---|---|
+| L1 | A statement fails with values shown (development) | The message also has the database's reason, such as `no such table: tagz` | `JdbcSqliteTest#showsTheDatabaseReasonWhenValuesAreShown` |
+| L2 | The reason is long or has line breaks | Escaped and shortened like the SQL | `QueryExceptionTest#escapesAndShortensTheDatabaseReason` |
+| L3 | A failure is serialized | The database's reason is left out | `QueryExceptionTest#theDatabaseReasonIsNotSerialized` |

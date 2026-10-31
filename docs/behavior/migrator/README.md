@@ -33,8 +33,10 @@ migrator.status();       // ran, pending, missing
   half-applied migration and no stray record.
 - A failure stops the call with `MigrationFailedException`; `completed()` lists what finished,
   `phase()` tells whether the migration or only its record failed.
-- A record that names a migration the app no longer has is reported as not found during rollback
-  and kept.
+- Rollback and reset refuse to start when a record to undo names a migration the app does not have
+  (usually older code against a newer database): `MissingMigrationsException` lists the names and
+  nothing is undone. `builder(...).allowMissingOnRollback()` restores Laravel's behaviour: the
+  known migrations are undone, the unknown records are reported as not found and kept.
 - The migrator refuses to run inside a transaction you opened.
 - In pretend mode a migration that checks `hasTable` sees nothing, so its SQL may differ from a real
   run.

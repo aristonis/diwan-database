@@ -13,7 +13,7 @@ offending value in their own error text, for example on a duplicate key.
 
 ## Decision
 
-1. A `QueryException` message is `SQL: <sql> (Connection: <name>, SQL state <state>)`. Binding
+1. A `QueryException` message is `SQL: <sql> (Connection: <name>, SQL state <state>, vendor code <code>)`. Binding
    values are appended only when the connection was built with `showBindingsInErrors(true)`.
 2. The exception always carries the values in `getBindings()`, for code that handles the error.
 3. The database's own error text stays in the cause, never in the message. A driver builds its
@@ -34,3 +34,12 @@ offending value in their own error text, for example on a duplicate key.
 
 - Values shown by default, as in Laravel: personal data in every log by default.
 - Values never kept on the exception: code that handles the error loses what it needs.
+
+## Amendment: database reasons
+
+The database's own error text is kept on `DriverException.databaseMessage()` (never serialized) and
+added to the `QueryException` message as `Reason: ...` under the same switch as the values,
+`showBindingsInErrors(true)`, escaped and shortened like the SQL. The vendor code is always in the
+message: it is a number and helps when the SQL state is missing, as with SQLite. Without the reason,
+a developer saw only the SQL and an unknown SQL state, which made simple mistakes such as a
+misspelled table slow to find.

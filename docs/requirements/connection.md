@@ -161,7 +161,8 @@ code, whether it is a concurrency failure, and the original cause.
 FR34. A unique-key violation is raised as `UniqueConstraintViolationException`, a subtype of
 `QueryException`.
 
-FR35. The `QueryException` message shows the SQL, the connection name and the SQL state. Binding
+FR35. The `QueryException` message shows the SQL, the connection name, the SQL state and the vendor
+code. The database's own reason is added with the values. Binding
 values appear in it only when showing them is switched on; by default they are hidden. The
 database's own error text never appears in the message.
 
