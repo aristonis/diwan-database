@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Migration` contract: `name`, `up`, `down`, `withinTransaction`, `shouldRun` and `connection`.
+- `MigrationRepository` and `DatabaseMigrationRepository`: the migrations table with Laravel's
+  operations and ordering, on SQLite, PostgreSQL and MySQL; `MigrationEntry` for its rows.
+- `DatabaseFamily` to tell databases apart from the driver's product name.
+- `Connection.getDriverInfo()`.
 - `Connection` with Laravel's method names: `statement`, `affectingStatement`, `insert`, `update`,
   `delete`, `select`, `selectOne`, `scalar`, `unprepared`, `transaction`, `beginTransaction`,
   `pretend`, `transactionLevel`, `getName` and `getTablePrefix`, with bindings as varargs or a list.

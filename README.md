@@ -9,13 +9,16 @@ choices.
 
 The connection layer is in place: running SQL, nested transactions with savepoints, retry on
 deadlocks, joining a transaction someone else owns, pretend mode, and errors that keep personal
-data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core.
+data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. The
+`Migration` contract and the migrations table (`DatabaseMigrationRepository`) are in place for the
+migrator to build on.
 
 | Layer | State |
 |---|---|
 | Connection, driver interface, JDBC adapter | available |
 | Schema builder | planned |
-| Migrations | planned |
+| Migrations: contract and migrations table | available |
+| Migrator | planned |
 | Query builder | planned |
 | Models | planned |
 
@@ -79,12 +82,45 @@ Inside a transaction, pass the connection you were handed (`tx`) to everything t
 default the outer connection refuses calls from inside its own transaction, because they would run
 outside it.
 
+### Migrations
+
+```java
+import org.aristonis.photisma.database.migrations.DatabaseMigrationRepository;
+import org.aristonis.photisma.database.migrations.Migration;
+
+final class CreateUsersTable extends Migration {
+    @Override
+    public String name() {
+        return "2026_10_31_000000_create_users_table";
+    }
+
+    @Override
+    public void up(Connection db) {
+        db.statement("create table users (id integer primary key, email text not null unique)");
+    }
+
+    @Override
+    public void down(Connection db) {
+        db.statement("drop table users");
+    }
+}
+
+DatabaseMigrationRepository migrations = new DatabaseMigrationRepository(db);
+if (!migrations.repositoryExists()) {
+    migrations.createRepository();
+}
+int batch = migrations.getNextBatchNumber();
+migrations.log("2026_10_31_000000_create_users_table", batch);
+```
+
 ## Documentation
 
 - [System design](docs/architecture/system-design.md)
 - [Connection design](docs/architecture/connection-design.md)
 - [Connection requirements](docs/requirements/connection.md)
 - [Connection behavior](docs/behavior/connection/README.md)
+- [Migrations requirements](docs/requirements/migrations.md)
+- [Migrations behavior](docs/behavior/migrations/README.md)
 - [Decision records](docs/adr/)
 - [Documentation standard](docs/documentation-standard.md)
 - [Changelog](CHANGELOG.md)

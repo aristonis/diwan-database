@@ -11,7 +11,7 @@ idioms where PHP shaped Laravel's choices.
 | Connection | Running SQL, transactions, pretend mode, errors | [connection-design.md](connection-design.md) |
 | Driver interface and adapters | One physical connection per session; JDBC adapter; Android adapter later | [connection-design.md](connection-design.md) |
 | Schema | Blueprint, column and index definitions, schema builder, schema grammars per database | not built yet |
-| Migrations | Migration contract, repository, migrator, commands | not built yet |
+| Migrations | Migration contract and migrations table (built); migrator and commands later | [ADR 0007](../adr/0007-migrations-table-without-a-schema-builder.md), [requirements](../requirements/migrations.md) |
 | Query builder | Fluent queries, query grammars and processors | not built yet |
 | Models | Active-record models, relations, casts | not built yet |
 
@@ -25,7 +25,7 @@ that does not need JDBC.
 
 | Module | Artifact | Holds |
 |---|---|---|
-| `core` | `org.aristonis:photisma-database` | The connection, the driver interface and the JDBC adapter; later layers join it when built |
+| `core` | `org.aristonis:photisma-database` | The connection, the driver interface, the JDBC adapter and the migrations package; later layers join it when built |
 | one per driver (planned) | `org.aristonis:photisma-database-<driver>` | That database's grammars and driver details |
 
 ## Diagram: Photisma Database layers
