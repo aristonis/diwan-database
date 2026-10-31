@@ -4,4 +4,4 @@ pluginManagement {
 
 rootProject.name = "photisma-database"
 
-include("core")
+include("core", "sqlite")
