@@ -44,9 +44,9 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     private static final int[] RENAME_COLUMN_SINCE = {3, 25, 0};
     private static final int[] DROP_COLUMN_SINCE = {3, 35, 0};
 
-    private static final String[] KEY_CHANGES = {Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
+    private static final String[] KEY_CHANGES = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
         Command.DROP_FOREIGN};
-    private static final String[] STATEFUL = {Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
+    private static final String[] STATEFUL = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
         Command.DROP_FOREIGN, Command.RENAME_INDEX, Command.DROP_COLUMN, Command.RENAME_COLUMN};
 
     // Laravel's SQLite default for year()->useCurrent().
@@ -303,7 +303,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code true} when the blueprint changes keys of an existing table, or drops or renames
+     * @return {@code true} when the blueprint changes columns or keys of an existing table, or drops or renames
      *     columns, which may need a rebuild on older SQLite versions
      */
     @Override

@@ -1641,8 +1641,9 @@ public final class Blueprint {
     /**
      * Checks the blueprint, adds the commands its columns imply and freezes it.
      *
-     * <p>The final order is: create, the added columns, the explicit commands in the order they
-     * were called, then the indexes and keys set on columns.
+     * <p>The final order is: create, the added and changed columns, the explicit commands in the
+     * order they were called, the indexes dropped on changed columns, then the indexes and keys set
+     * on columns.
      *
      * @param maxIdentifierLength the grammar's longest identifier
      * @throws IllegalArgumentException if the blueprint is invalid
@@ -1657,8 +1658,9 @@ public final class Blueprint {
         Set<String> seen = new HashSet<>();
         for (ColumnDefinition column : columns) {
             if (!seen.add(column.name().toLowerCase(Locale.ROOT))) {
-                throw new IllegalArgumentException("The same column is added twice");
+                throw new IllegalArgumentException("The same column is added or changed twice");
             }
+            checkChange(column);
         }
         List<Command> ordered = new ArrayList<>();
         int explicitStart = 0;
@@ -1669,12 +1671,17 @@ public final class Blueprint {
         for (ColumnDefinition column : columns) {
             column.freeze();
             if (!isCreating) {
-                ordered.add(new Command(Command.ADD, single(Command.COLUMN, column)));
+                ordered.add(new Command(column.isChange() ? Command.CHANGE : Command.ADD,
+                        single(Command.COLUMN, column)));
             }
         }
         Set<String> indexes = new HashSet<>();
         for (Command command : commands.subList(explicitStart, commands.size())) {
             ordered.add(settle(command, indexes, maxIdentifierLength));
+        }
+        // Drops first, so a primary key can move from one changed column to another in either order.
+        for (ColumnDefinition column : columns) {
+            addFluentDrops(ordered, column, Collections.singletonList(column.name()));
         }
         for (ColumnDefinition column : columns) {
             List<String> own = Collections.singletonList(column.name());
@@ -1692,6 +1699,53 @@ public final class Blueprint {
         commands.clear();
         commands.addAll(ordered);
         isPrepared = true;
+    }
+
+    private void checkChange(ColumnDefinition column) {
+        boolean dropsFluent = column.dropsUnique() || column.dropsIndex() || column.dropsPrimary();
+        if (!column.isChange()) {
+            if (dropsFluent) {
+                throw new IllegalArgumentException("unique(false), index(false) and primary(false) need change() on"
+                        + " column " + column.name());
+            }
+            return;
+        }
+        if (isCreating) {
+            throw new IllegalArgumentException("change() applies only to an existing table; column " + column.name()
+                    + " is in a new one");
+        }
+        if (column.isAutoIncrement()) {
+            throw new IllegalArgumentException("A column cannot be changed to auto-increment: " + column.name());
+        }
+        for (Command command : commands) {
+            if (Command.RENAME_COLUMN.equals(command.name())
+                    && (command.string(Command.FROM).equalsIgnoreCase(column.name())
+                    || command.string(Command.TO).equalsIgnoreCase(column.name()))) {
+                // Whether the change means the old or the new name depends on order the blueprint does not keep.
+                throw new IllegalArgumentException("Column " + column.name() + " is changed and renamed in one"
+                        + " call; split them into two calls");
+            }
+        }
+    }
+
+    private void addFluentDrops(List<Command> ordered, ColumnDefinition column, List<String> own) {
+        if (column.dropsPrimary()) {
+            ordered.add(new Command(Command.DROP_PRIMARY,
+                    single(Command.INDEX, defaultName("primary", Collections.<String>emptyList()))));
+        }
+        if (column.dropsUnique()) {
+            ordered.add(droppedByColumns(Command.DROP_UNIQUE, "unique", own));
+        }
+        if (column.dropsIndex()) {
+            ordered.add(droppedByColumns(Command.DROP_INDEX, "index", own));
+        }
+    }
+
+    private Command droppedByColumns(String type, String suffix, List<String> columns) {
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.INDEX, defaultName(suffix, columns));
+        attributes.put(Command.COLUMNS, columns);
+        return new Command(type, attributes);
     }
 
     private Command settle(Command command, Set<String> indexes, int maxIdentifierLength) {
@@ -1770,10 +1824,7 @@ public final class Blueprint {
     private void dropByColumns(String type, String suffix, List<String> columns) {
         ensureOpen();
         List<String> checked = ForeignKeyDefinition.checkColumns(Objects.requireNonNull(columns, "columns"));
-        Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put(Command.INDEX, defaultName(suffix, checked));
-        attributes.put(Command.COLUMNS, checked);
-        commands.add(new Command(type, attributes));
+        commands.add(droppedByColumns(type, suffix, checked));
     }
 
     private void rename(String type, String kind, String from, String to) {

@@ -28,8 +28,8 @@ final class SQLiteTableState {
     static final class Column {
         String name;
         String source;
-        final String type;
-        final String rest;
+        String type;
+        String rest;
         // The values of an enum's check, written again under the column's current name on rebuild.
         List<String> allowed = Collections.emptyList();
 
@@ -348,6 +348,16 @@ final class SQLiteTableState {
         Column column = new Column(name, hasRun ? name : null, type, rest);
         column.allowed = allowed;
         columns.add(column);
+    }
+
+    void changeColumn(String name, String type, List<String> allowed, String rest) {
+        Column column = require(name);
+        if (autoIncrementColumn != null && autoIncrementColumn.equalsIgnoreCase(name)) {
+            throw new IllegalArgumentException("Column " + name + " is auto-increment and cannot be changed");
+        }
+        column.type = type;
+        column.rest = rest;
+        column.allowed = allowed;
     }
 
     void dropColumn(String name) {

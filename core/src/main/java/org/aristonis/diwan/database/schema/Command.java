@@ -21,6 +21,8 @@ public final class Command {
     public static final String CREATE = "create";
     /** Adds one column to an existing table; attribute {@link #COLUMN}. */
     public static final String ADD = "add";
+    /** Redefines an existing column; attribute {@link #COLUMN}. */
+    public static final String CHANGE = "change";
     /** Drops the table. */
     public static final String DROP = "drop";
     /** Drops the table if it exists. */

@@ -44,6 +44,10 @@ public class ColumnDefinition {
     private boolean isPrimary;
     private boolean isUnsigned;
     private String comment;
+    private boolean isChange;
+    private boolean dropsUnique;
+    private boolean dropsIndex;
+    private boolean dropsPrimary;
     private boolean isFrozen;
 
     ColumnDefinition(String name, ColumnType type, int length, int total, int places) {
@@ -139,6 +143,7 @@ public class ColumnDefinition {
         ensureOpen();
         this.isUnique = true;
         this.uniqueIndex = null;
+        this.dropsUnique = false;
         return this;
     }
 
@@ -155,6 +160,7 @@ public class ColumnDefinition {
         ensureOpen();
         this.uniqueIndex = SchemaNames.check("index", indexName);
         this.isUnique = true;
+        this.dropsUnique = false;
         return this;
     }
 
@@ -168,6 +174,7 @@ public class ColumnDefinition {
         ensureOpen();
         this.isIndexed = true;
         this.plainIndex = null;
+        this.dropsIndex = false;
         return this;
     }
 
@@ -184,6 +191,7 @@ public class ColumnDefinition {
         ensureOpen();
         this.plainIndex = SchemaNames.check("index", indexName);
         this.isIndexed = true;
+        this.dropsIndex = false;
         return this;
     }
 
@@ -196,6 +204,89 @@ public class ColumnDefinition {
     public ColumnDefinition primary() {
         ensureOpen();
         this.isPrimary = true;
+        this.dropsPrimary = false;
+        return this;
+    }
+
+    /**
+     * Drops or keeps this column's conventionally named unique index when the column is changed.
+     *
+     * <p>{@code unique(true)} is the same as {@link #unique()}; {@code unique(false)} drops the
+     * index named {@code <table>_<column>_unique} and is allowed only together with
+     * {@link #change()}. On SQLite a unique constraint written inside the table definition is not an
+     * index and cannot be dropped this way.
+     *
+     * @param isWanted {@code false} to drop the index
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition unique(boolean isWanted) {
+        if (isWanted) {
+            return unique();
+        }
+        ensureOpen();
+        this.isUnique = false;
+        this.uniqueIndex = null;
+        this.dropsUnique = true;
+        return this;
+    }
+
+    /**
+     * Drops or keeps this column's conventionally named index when the column is changed.
+     *
+     * <p>{@code index(true)} is the same as {@link #index()}; {@code index(false)} drops the index
+     * named {@code <table>_<column>_index} and is allowed only together with {@link #change()}.
+     *
+     * @param isWanted {@code false} to drop the index
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition index(boolean isWanted) {
+        if (isWanted) {
+            return index();
+        }
+        ensureOpen();
+        this.isIndexed = false;
+        this.plainIndex = null;
+        this.dropsIndex = true;
+        return this;
+    }
+
+    /**
+     * Makes this column the primary key, or drops the table's primary key when the column is
+     * changed.
+     *
+     * <p>{@code primary(true)} is the same as {@link #primary()}; {@code primary(false)} is allowed
+     * only together with {@link #change()}.
+     *
+     * @param isWanted {@code false} to drop the primary key
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition primary(boolean isWanted) {
+        if (isWanted) {
+            return primary();
+        }
+        ensureOpen();
+        this.isPrimary = false;
+        this.dropsPrimary = true;
+        return this;
+    }
+
+    /**
+     * Redefines the existing column with this name instead of adding a new one.
+     *
+     * <p>The new definition replaces the old one in full: a modifier that is not stated again,
+     * such as {@code nullable()} or a default, is gone after the change. On SQLite every change
+     * rebuilds the table and copies all its rows, so put the changes for one table in one
+     * {@code Schema.table} call. An auto-increment column cannot be changed.
+     *
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition change() {
+        ensureOpen();
+        this.isChange = true;
         return this;
     }
 
@@ -386,6 +477,27 @@ public class ColumnDefinition {
      */
     public boolean isPrimary() {
         return isPrimary;
+    }
+
+    /**
+     * Tells whether the column redefines an existing one.
+     *
+     * @return {@code true} after {@link #change()}
+     */
+    public boolean isChange() {
+        return isChange;
+    }
+
+    boolean dropsUnique() {
+        return dropsUnique;
+    }
+
+    boolean dropsIndex() {
+        return dropsIndex;
+    }
+
+    boolean dropsPrimary() {
+        return dropsPrimary;
     }
 
     Optional<String> plainIndex() {

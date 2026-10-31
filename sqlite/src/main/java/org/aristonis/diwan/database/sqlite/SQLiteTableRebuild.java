@@ -61,6 +61,12 @@ final class SQLiteTableRebuild {
                         grammar.modifiersOf(blueprint, column), !isRebuildPending);
                 inPlace(grammar.compileOne(blueprint, command, connection));
                 break;
+            case Command.CHANGE:
+                ColumnDefinition changed = command.column();
+                state.changeColumn(changed.name(), changed.type() == ColumnType.ENUM ? "varchar"
+                        : grammar.typeOf(changed), changed.allowed(), grammar.modifiersOf(blueprint, changed));
+                isRebuildPending = true;
+                break;
             case Command.PLAIN_INDEX:
             case Command.UNIQUE:
                 state.addIndex(command.string(Command.INDEX), command.strings(Command.COLUMNS),
