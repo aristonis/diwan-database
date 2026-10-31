@@ -2,8 +2,12 @@ package org.aristonis.diwan.database.schema;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * One column of a {@link Blueprint}, with Laravel's modifiers.
@@ -20,11 +24,16 @@ import java.util.Optional;
  */
 public class ColumnDefinition {
 
+    static final int NO_PRECISION = -1;
+
     private final String name;
     private final ColumnType type;
     private final int length;
     private final int total;
     private final int places;
+    private final int precision;
+    private final List<String> allowed;
+    private boolean usesCurrent;
     private boolean isAutoIncrement;
     private boolean isNullable;
     private Object defaultValue;
@@ -38,11 +47,18 @@ public class ColumnDefinition {
     private boolean isFrozen;
 
     ColumnDefinition(String name, ColumnType type, int length, int total, int places) {
+        this(name, type, length, total, places, NO_PRECISION, Collections.<String>emptyList());
+    }
+
+    ColumnDefinition(String name, ColumnType type, int length, int total, int places, int precision,
+            List<String> allowed) {
         this.name = SchemaNames.check("column", name);
         this.type = type;
         this.length = length;
         this.total = total;
         this.places = places;
+        this.precision = precision;
+        this.allowed = Collections.unmodifiableList(new ArrayList<>(allowed));
     }
 
     /**
@@ -84,6 +100,7 @@ public class ColumnDefinition {
     public ColumnDefinition defaultValue(Object value) {
         ensureOpen();
         this.defaultValue = checkDefault(value);
+        this.usesCurrent = false;
         return this;
     }
 
@@ -91,17 +108,23 @@ public class ColumnDefinition {
      * Makes the database's current date or time the default.
      *
      * @return this definition
-     * @throws IllegalStateException if the column is not a date or timestamp, or the definition is
-     *     frozen
+     * @apiNote On a {@code year} column the grammar writes the database's way of reading the current
+     *     year, so {@link #defaultValue()} stays empty there; {@link #usesCurrent()} tells it apart.
+     * @throws IllegalStateException if the column is not a date, time or year column, or the
+     *     definition is frozen
      */
     public ColumnDefinition useCurrent() {
         ensureOpen();
+        if (!type.isTemporal()) {
+            throw new IllegalStateException("useCurrent applies only to date, time and year columns");
+        }
+        usesCurrent = true;
         if (type == ColumnType.DATE) {
             defaultValue = Expression.CURRENT_DATE;
-        } else if (type == ColumnType.TIMESTAMP) {
+        } else if (type == ColumnType.TIME || type == ColumnType.TIME_TZ) {
+            defaultValue = Expression.CURRENT_TIME;
+        } else if (type != ColumnType.YEAR) {
             defaultValue = Expression.CURRENT_TIMESTAMP;
-        } else {
-            throw new IllegalStateException("useCurrent applies only to date and timestamp columns");
         }
         return this;
     }
@@ -211,7 +234,7 @@ public class ColumnDefinition {
      */
     public ColumnDefinition autoIncrement() {
         ensureOpen();
-        if (type != ColumnType.INTEGER && type != ColumnType.BIG_INTEGER) {
+        if (!type.isInteger()) {
             throw new IllegalStateException("autoIncrement applies only to integer columns");
         }
         this.isAutoIncrement = true;
@@ -315,6 +338,36 @@ public class ColumnDefinition {
      */
     public Optional<String> comment() {
         return Optional.ofNullable(comment);
+    }
+
+    /**
+     * Returns the column's precision.
+     *
+     * <p>For {@link ColumnType#FLOAT} it is the binary digits of the mantissa, 1 to 53; for the time
+     * and timestamp types it is the fractional-second digits, 0 to 6. Other types have none.
+     *
+     * @return the precision, or empty when none was set or the type has none
+     */
+    public OptionalInt precision() {
+        return precision == NO_PRECISION ? OptionalInt.empty() : OptionalInt.of(precision);
+    }
+
+    /**
+     * Returns the values an {@code enum} or {@code set} column allows.
+     *
+     * @return the values in declaration order, unmodifiable; empty for other types
+     */
+    public List<String> allowed() {
+        return allowed;
+    }
+
+    /**
+     * Tells whether {@link #useCurrent()} was called.
+     *
+     * @return {@code true} if the database fills in the current date, time or year
+     */
+    public boolean usesCurrent() {
+        return usesCurrent;
     }
 
     /**

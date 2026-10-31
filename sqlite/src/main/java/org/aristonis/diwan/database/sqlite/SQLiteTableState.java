@@ -1,6 +1,8 @@
 package org.aristonis.diwan.database.sqlite;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,19 +20,18 @@ import org.aristonis.diwan.database.Connection;
  */
 final class SQLiteTableState {
 
-    // Features a rebuild would silently lose; the rebuild refuses the table instead.
-    private static final Pattern CHECK = Pattern.compile("\\bcheck\\s*\\(", Pattern.CASE_INSENSITIVE);
-    private static final Pattern COLLATE = Pattern.compile("\\bcollate\\s", Pattern.CASE_INSENSITIVE);
-    private static final Pattern WITHOUT_ROWID = Pattern.compile("\\bwithout\\s+rowid\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern GENERATED = Pattern.compile("\\bgenerated\\s+always\\b|\\bas\\s*\\(",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern AUTOINCREMENT = Pattern.compile("\\bautoincrement\\b", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern LITERAL_DEFAULT = Pattern.compile(
+            "'(?:[^']|'')*'|[+-]?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|null|true|false|current_time|current_date"
+                    + "|current_timestamp|[xX]'[0-9A-Fa-f]*'", Pattern.CASE_INSENSITIVE);
 
     static final class Column {
         String name;
         String source;
         final String type;
         final String rest;
+        // The values of an enum's check, written again under the column's current name on rebuild.
+        List<String> allowed = Collections.emptyList();
 
         Column(String name, String source, String type, String rest) {
             this.name = name;
@@ -81,15 +82,23 @@ final class SQLiteTableState {
         this.table = table;
     }
 
-    static SQLiteTableState load(Connection connection, String table) {
+    static SQLiteTableState load(Connection connection, String table, SQLiteSchemaGrammar grammar) {
         Object sql = connection.scalar("select sql from sqlite_master where type = 'table' and name = ?", table)
                 .orElseThrow(() -> new IllegalArgumentException("Table " + table + " does not exist; in pretend"
                         + " mode a table made earlier in the same run does not exist yet"));
         String tableSql = sql.toString();
-        refuseUnsupported(connection, table, tableSql);
+        refuseUnsupported(connection, table);
+        List<SQLiteSqlTokens.Token> tokens = SQLiteSqlTokens.tokenize(tableSql);
+        Map<String, List<String>> enums = readDefinition(table, tableSql, tokens, grammar);
         SQLiteTableState state = new SQLiteTableState(table);
         state.readColumns(connection);
-        if (state.primaryKey.size() == 1 && AUTOINCREMENT.matcher(tableSql).find()) {
+        for (Column column : state.columns) {
+            List<String> allowed = enums.get(column.name.toLowerCase(Locale.ROOT));
+            if (allowed != null) {
+                column.allowed = allowed;
+            }
+        }
+        if (state.primaryKey.size() == 1 && SQLiteSqlTokens.hasWord(tokens, "autoincrement")) {
             state.autoIncrementColumn = state.primaryKey.get(0);
             state.primaryKey.clear();
             state.sequence = readSequence(connection, table);
@@ -99,26 +108,120 @@ final class SQLiteTableState {
         return state;
     }
 
-    private static void refuseUnsupported(Connection connection, String table, String tableSql) {
+    private static void refuseUnsupported(Connection connection, String table) {
         String reason = null;
-        if (CHECK.matcher(tableSql).find()) {
-            reason = "a CHECK constraint";
-        } else if (COLLATE.matcher(tableSql).find()) {
-            reason = "a COLLATE clause";
-        } else if (WITHOUT_ROWID.matcher(tableSql).find()) {
-            reason = "WITHOUT ROWID";
-        } else if (count(connection, "select count(*) from sqlite_master where type = 'trigger' and tbl_name = ?",
+        if (count(connection, "select count(*) from sqlite_master where type = 'trigger' and tbl_name = ?",
                 table) > 0 || isNamedIn(connection, "trigger", table)) {
             reason = "a trigger that uses it";
-        } else if (GENERATED.matcher(tableSql).find()) {
-            reason = "a generated column";
         } else if (isNamedIn(connection, "view", table)) {
             reason = "a view that reads it";
         }
         if (reason != null) {
-            throw new UnsupportedOperationException("Table " + table + " has " + reason
-                    + ", which a SQLite table rebuild cannot carry over");
+            throw cannotCarry(table, reason);
         }
+    }
+
+    private static UnsupportedOperationException cannotCarry(String table, String reason) {
+        return new UnsupportedOperationException("Table " + table + " has " + reason
+                + ", which a SQLite table rebuild cannot carry over");
+    }
+
+    // Reads the table's own SQL, outside string literals: an enum check that belongs to its column and
+    // reads back exactly as it would be written is kept; any other check, collation or generated
+    // column is refused.
+    private static Map<String, List<String>> readDefinition(String table, String sql,
+            List<SQLiteSqlTokens.Token> tokens, SQLiteSchemaGrammar grammar) {
+        List<List<SQLiteSqlTokens.Token>> parts = SQLiteSqlTokens.parts(tokens);
+        List<SQLiteSqlTokens.Token> trailing = parts.remove(parts.size() - 1);
+        if (SQLiteSqlTokens.hasWord(trailing, "rowid")) {
+            throw cannotCarry(table, "WITHOUT ROWID");
+        }
+        if (SQLiteSqlTokens.hasWord(trailing, "strict")) {
+            throw cannotCarry(table, "STRICT typing");
+        }
+        Map<String, List<String>> enums = new HashMap<>();
+        for (List<SQLiteSqlTokens.Token> part : parts) {
+            boolean isConstraint = SQLiteSqlTokens.isTableConstraint(part);
+            int depth = 0;
+            for (int i = 0; i < part.size(); i++) {
+                SQLiteSqlTokens.Token token = part.get(i);
+                if (token.isPunct('(')) {
+                    depth++;
+                } else if (token.isPunct(')')) {
+                    depth--;
+                }
+                if (token.isWord("collate")) {
+                    throw cannotCarry(table, "a COLLATE clause");
+                }
+                // "as (" at the top of a column is a generated column; "as" inside a default, such as
+                // cast(x as integer), is not.
+                if (token.isWord("generated") || depth == 0 && token.isWord("as") && at(part, i + 1, '(')) {
+                    throw cannotCarry(table, "a generated column");
+                }
+                if (token.isWord("check")) {
+                    // A named or table-level check would lose its name or scope when rewritten.
+                    if (isConstraint || SQLiteSqlTokens.hasWord(part.subList(0, i), "constraint")) {
+                        throw cannotCarry(table, "a CHECK constraint");
+                    }
+                    String column = part.get(0).text;
+                    int end = enumCheckEnd(part, i, column);
+                    if (end < 0) {
+                        throw cannotCarry(table, "a CHECK constraint");
+                    }
+                    List<String> values = enumValues(part, i, end);
+                    // The round trip uses the name as the check spells it, which may differ in case.
+                    if (values == null || enums.containsKey(column.toLowerCase(Locale.ROOT))
+                            || !sql.substring(token.start, part.get(end).end)
+                                    .equals(grammar.enumCheck(part.get(i + 2).text, values))) {
+                        throw cannotCarry(table, "a CHECK constraint");
+                    }
+                    enums.put(column.toLowerCase(Locale.ROOT), values);
+                    i = end;
+                }
+            }
+        }
+        return enums;
+    }
+
+    // The index of the closing parenthesis of check (<column> in (...)), or -1 when the shape differs.
+    private static int enumCheckEnd(List<SQLiteSqlTokens.Token> part, int check, String column) {
+        int i = check + 1;
+        if (!at(part, i, '(') || i + 2 >= part.size()) {
+            return -1;
+        }
+        SQLiteSqlTokens.Token owner = part.get(i + 1);
+        boolean isOwner = (owner.kind == SQLiteSqlTokens.Kind.NAME || owner.kind == SQLiteSqlTokens.Kind.WORD)
+                && owner.text.equalsIgnoreCase(column);
+        if (!isOwner || !part.get(i + 2).isWord("in") || !at(part, i + 3, '(')) {
+            return -1;
+        }
+        i += 4;
+        while (i < part.size() && part.get(i).kind == SQLiteSqlTokens.Kind.STRING) {
+            i++;
+            if (at(part, i, ',')) {
+                i++;
+            } else {
+                break;
+            }
+        }
+        return at(part, i, ')') && at(part, i + 1, ')') ? i + 1 : -1;
+    }
+
+    private static List<String> enumValues(List<SQLiteSqlTokens.Token> part, int check, int end) {
+        if (end < 0) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        for (int i = check + 5; i < end - 1; i++) {
+            if (part.get(i).kind == SQLiteSqlTokens.Kind.STRING) {
+                values.add(part.get(i).text);
+            }
+        }
+        return values.isEmpty() ? null : Collections.unmodifiableList(values);
+    }
+
+    private static boolean at(List<SQLiteSqlTokens.Token> part, int i, char mark) {
+        return i < part.size() && part.get(i).isPunct(mark);
     }
 
     // A whole-name match, so a view or trigger over "users" does not block a rebuild of "user".
@@ -146,7 +249,7 @@ final class SQLiteTableState {
             }
             Object defaultSql = row.get("dflt_value");
             if (defaultSql != null) {
-                rest.append(" default ").append(defaultSql);
+                rest.append(" default ").append(defaultSql(defaultSql.toString()));
             }
             columns.add(new Column(name, name, text(row.get("type")), rest.toString()));
             long position = number(row.get("pk"));
@@ -158,6 +261,12 @@ final class SQLiteTableState {
         for (String[] entry : keyed) {
             primaryKey.add(entry[1]);
         }
+    }
+
+    // SQLite reports an expression default without the parentheses it needs, such as
+    // CAST(strftime('%Y', 'now') AS INTEGER); a plain literal is written back as it came.
+    private static String defaultSql(String sql) {
+        return LITERAL_DEFAULT.matcher(sql).matches() ? sql : "(" + sql + ")";
     }
 
     private void readKeys(Connection connection) {
@@ -231,12 +340,14 @@ final class SQLiteTableState {
         return seq.isPresent() ? number(seq.get()) : -1;
     }
 
-    void addColumn(String name, String type, String rest, boolean hasRun) {
+    void addColumn(String name, String type, List<String> allowed, String rest, boolean hasRun) {
         if (find(name) != null) {
             throw new IllegalArgumentException("Column " + name + " already exists in table " + table);
         }
         // A column not yet in the live table has nothing to copy; it takes its default.
-        columns.add(new Column(name, hasRun ? name : null, type, rest));
+        Column column = new Column(name, hasRun ? name : null, type, rest);
+        column.allowed = allowed;
+        columns.add(column);
     }
 
     void dropColumn(String name) {

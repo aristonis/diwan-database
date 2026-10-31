@@ -19,6 +19,9 @@ public final class Expression {
     /** The database's current date and time. */
     public static final Expression CURRENT_TIMESTAMP = new Expression("CURRENT_TIMESTAMP");
 
+    /** The database's current time of day. */
+    public static final Expression CURRENT_TIME = new Expression("CURRENT_TIME");
+
     /** SQL {@code NULL}, the default that {@code defaultValue(null)} sets. */
     public static final Expression NULL = new Expression("null");
 

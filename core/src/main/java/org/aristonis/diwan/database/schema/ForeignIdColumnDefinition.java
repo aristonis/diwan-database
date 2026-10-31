@@ -1,8 +1,9 @@
 package org.aristonis.diwan.database.schema;
 
 /**
- * The column {@link Blueprint#foreignId(String)} adds: an unsigned big integer that can point at
- * another table's key in one call, {@code table.foreignId("user_id").constrained()}.
+ * The column {@link Blueprint#foreignId(String)}, {@link Blueprint#foreignUuid(String)} or
+ * {@link Blueprint#foreignUlid(String)} adds: a key column that can point at another table's key in
+ * one call, {@code table.foreignId("user_id").constrained()}.
  *
  * <p>Every modifier returns this type, so {@link #constrained()} can come after them:
  * {@code table.foreignId("user_id").nullable().constrained().nullOnDelete()}.
@@ -17,6 +18,11 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
         super(name, ColumnType.BIG_INTEGER, 0, 0, 0);
         this.blueprint = blueprint;
         unsigned();
+    }
+
+    ForeignIdColumnDefinition(Blueprint blueprint, String name, ColumnType type, int length) {
+        super(name, type, length, 0, 0);
+        this.blueprint = blueprint;
     }
 
     /**

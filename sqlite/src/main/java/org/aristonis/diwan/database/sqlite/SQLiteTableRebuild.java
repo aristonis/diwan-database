@@ -8,6 +8,7 @@ import java.util.Locale;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
+import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.Command;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
@@ -37,7 +38,7 @@ final class SQLiteTableRebuild {
         this.grammar = grammar;
         this.blueprint = blueprint;
         this.connection = connection;
-        this.state = SQLiteTableState.load(connection, blueprint.table());
+        this.state = SQLiteTableState.load(connection, blueprint.table(), grammar);
     }
 
     List<String> compile() {
@@ -55,8 +56,9 @@ final class SQLiteTableRebuild {
         switch (command.name()) {
             case Command.ADD:
                 ColumnDefinition column = command.column();
-                state.addColumn(column.name(), grammar.typeOf(column), grammar.modifiersOf(blueprint, column),
-                        !isRebuildPending);
+                boolean isEnum = column.type() == ColumnType.ENUM;
+                state.addColumn(column.name(), isEnum ? "varchar" : grammar.typeOf(column), column.allowed(),
+                        grammar.modifiersOf(blueprint, column), !isRebuildPending);
                 inPlace(grammar.compileOne(blueprint, command, connection));
                 break;
             case Command.PLAIN_INDEX:
@@ -213,6 +215,9 @@ final class SQLiteTableRebuild {
             separate(sql).append(grammar.quote(column.name));
             if (!column.type.isEmpty()) {
                 sql.append(' ').append(column.type);
+            }
+            if (!column.allowed.isEmpty()) {
+                sql.append(' ').append(grammar.enumCheck(column.name, column.allowed));
             }
             if (column.name.equalsIgnoreCase(state.autoIncrementColumn == null ? "" : state.autoIncrementColumn)) {
                 sql.append(" primary key autoincrement");

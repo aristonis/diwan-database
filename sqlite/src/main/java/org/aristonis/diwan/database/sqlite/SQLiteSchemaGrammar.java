@@ -12,6 +12,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
+import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.Command;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
@@ -47,6 +48,9 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         Command.DROP_FOREIGN};
     private static final String[] STATEFUL = {Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
         Command.DROP_FOREIGN, Command.RENAME_INDEX, Command.DROP_COLUMN, Command.RENAME_COLUMN};
+
+    // Laravel's SQLite default for year()->useCurrent().
+    private static final String CURRENT_YEAR = "(CAST(strftime('%Y', 'now') AS INTEGER))";
 
     private final String versionOverride;
 
@@ -368,27 +372,54 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return Laravel's SQLite type for the column
+     * @return Laravel's SQLite type for the column; an enum is {@code varchar} with a check on its
+     *     values, and {@code set} is refused, since SQLite has nothing like it
      */
     @Override
     protected String type(ColumnDefinition column) {
         switch (column.type()) {
             case STRING:
+            case CHAR:
+            case UUID:
+            case IP_ADDRESS:
+            case MAC_ADDRESS:
                 return "varchar";
             case TEXT:
+            case TINY_TEXT:
+            case MEDIUM_TEXT:
+            case LONG_TEXT:
             case JSON:
+            case JSONB:
                 return "text";
             case INTEGER:
             case BIG_INTEGER:
+            case TINY_INTEGER:
+            case SMALL_INTEGER:
+            case MEDIUM_INTEGER:
+            case YEAR:
                 return "integer";
             case BOOLEAN:
                 return "tinyint(1)";
             case DECIMAL:
                 return "numeric";
+            case FLOAT:
+                return "float";
+            case DOUBLE:
+                return "double";
             case DATE:
                 return "date";
             case TIMESTAMP:
+            case TIMESTAMP_TZ:
+            case DATE_TIME:
+            case DATE_TIME_TZ:
                 return "datetime";
+            case TIME:
+            case TIME_TZ:
+                return "time";
+            case BINARY:
+                return "blob";
+            case ENUM:
+                return "varchar " + enumCheck(column.name(), column.allowed());
             default:
                 return super.type(column);
         }
@@ -411,8 +442,22 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         }
         if (column.defaultValue().isPresent()) {
             sql.append(" default ").append(literal(column.defaultValue().get()));
+        } else if (column.type() == ColumnType.YEAR && column.usesCurrent()) {
+            sql.append(" default ").append(CURRENT_YEAR);
         }
         return sql.toString();
+    }
+
+    /** Writes an enum's check exactly as Laravel does; the table rebuild reads it back in this form. */
+    String enumCheck(String column, List<String> allowed) {
+        StringBuilder values = new StringBuilder();
+        for (String value : allowed) {
+            if (values.length() > 0) {
+                values.append(", ");
+            }
+            values.append(literal(value));
+        }
+        return "check (" + wrap(column) + " in (" + values + "))";
     }
 
     String typeOf(ColumnDefinition column) {
