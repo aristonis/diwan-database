@@ -12,6 +12,7 @@ import java.util.List;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.QueryException;
 import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.Schema;
@@ -205,10 +206,10 @@ class SQLiteKeysTest {
 
     @Test
     void versionsCompareByNumber() {
-        assertTrue(SQLiteSchemaGrammar.atLeast("3.35.0", new int[] {3, 35, 0}));
-        assertTrue(SQLiteSchemaGrammar.atLeast("3.45.1", new int[] {3, 35, 0}));
-        assertTrue(SQLiteSchemaGrammar.atLeast("4", new int[] {3, 35, 0}));
-        assertFalse(SQLiteSchemaGrammar.atLeast("3.22.0", new int[] {3, 25, 0}));
-        assertFalse(SQLiteSchemaGrammar.atLeast("3.x", new int[] {3, 25, 0}));
+        assertTrue(DatabaseVersion.atLeast("3.35.0", 3, 35, 0));
+        assertTrue(DatabaseVersion.atLeast("3.45.1", 3, 35, 0));
+        assertTrue(DatabaseVersion.atLeast("4", 3, 35, 0));
+        assertFalse(DatabaseVersion.atLeast("3.22.0", 3, 25, 0));
+        assertFalse(DatabaseVersion.atLeast("3.x", 3, 25, 0));
     }
 }

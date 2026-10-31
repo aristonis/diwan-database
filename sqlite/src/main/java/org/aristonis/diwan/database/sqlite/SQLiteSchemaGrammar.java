@@ -14,6 +14,7 @@ import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.Command;
+import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
@@ -536,7 +537,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
 
     private void refuseOldGenerated(Blueprint blueprint, Connection connection) {
         for (ColumnDefinition column : blueprint.columns()) {
-            if (column.isGenerated() && !atLeast(version(connection), GENERATED_COLUMNS_SINCE)) {
+            if (column.isGenerated() && !DatabaseVersion.atLeast(version(connection), GENERATED_COLUMNS_SINCE)) {
                 throw new UnsupportedOperationException("Generated columns need SQLite 3.31 or later; this database"
                         + " runs " + version(connection));
             }
@@ -627,15 +628,15 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     }
 
     boolean supportsRenameColumn(Connection connection) {
-        return atLeast(version(connection), RENAME_COLUMN_SINCE);
+        return DatabaseVersion.atLeast(version(connection), RENAME_COLUMN_SINCE);
     }
 
     boolean supportsTableXinfo(Connection connection) {
-        return atLeast(version(connection), TABLE_XINFO_SINCE);
+        return DatabaseVersion.atLeast(version(connection), TABLE_XINFO_SINCE);
     }
 
     boolean supportsDropColumn(Connection connection) {
-        return atLeast(version(connection), DROP_COLUMN_SINCE);
+        return DatabaseVersion.atLeast(version(connection), DROP_COLUMN_SINCE);
     }
 
     private String version(Connection connection) {
@@ -643,25 +644,6 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
             return versionOverride;
         }
         return connection.scalar("select sqlite_version()").map(Object::toString).orElse("0");
-    }
-
-    static boolean atLeast(String version, int[] wanted) {
-        String[] parts = version.trim().split("\\.");
-        for (int i = 0; i < wanted.length; i++) {
-            int part = i < parts.length ? parseOrZero(parts[i]) : 0;
-            if (part != wanted[i]) {
-                return part > wanted[i];
-            }
-        }
-        return true;
-    }
-
-    private static int parseOrZero(String text) {
-        try {
-            return Integer.parseInt(text);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
     }
 
     private static boolean hasAny(Blueprint blueprint, String[] names) {
