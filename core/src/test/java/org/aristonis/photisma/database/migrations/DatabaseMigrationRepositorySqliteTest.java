@@ -13,6 +13,7 @@ import java.util.Map;
 import org.aristonis.photisma.database.Connection;
 import org.aristonis.photisma.database.QueryException;
 import org.aristonis.photisma.database.UniqueConstraintViolationException;
+import org.aristonis.photisma.database.sqlite.SQLiteSchema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,7 +30,7 @@ class DatabaseMigrationRepositorySqliteTest {
     @BeforeEach
     void createDatabase() {
         db = connection("");
-        repository = new DatabaseMigrationRepository(db);
+        repository = new DatabaseMigrationRepository(SQLiteSchema.of(db));
     }
 
     private Connection connection(String prefix) {
@@ -120,14 +121,14 @@ class DatabaseMigrationRepositorySqliteTest {
         assertThrows(IllegalArgumentException.class, () -> repository.log(" ", 1));
         assertThrows(IllegalArgumentException.class, () -> repository.log("a", 0));
         assertThrows(NullPointerException.class, () -> repository.delete(null));
-        assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository(null));
-        assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository(db, null));
-        assertThrows(IllegalArgumentException.class, () -> new DatabaseMigrationRepository(db, "x; drop table y"));
+        assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository((org.aristonis.photisma.database.schema.Schema) null));
+        assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository(SQLiteSchema.of(db), null));
+        assertThrows(IllegalArgumentException.class, () -> new DatabaseMigrationRepository(SQLiteSchema.of(db), "x; drop table y"));
     }
 
     @Test
     void addsTheConnectionsTablePrefix() {
-        DatabaseMigrationRepository prefixed = new DatabaseMigrationRepository(connection("app_"), "runs");
+        DatabaseMigrationRepository prefixed = new DatabaseMigrationRepository(SQLiteSchema.of(connection("app_")), "runs");
 
         prefixed.createRepository();
 
@@ -135,7 +136,7 @@ class DatabaseMigrationRepositorySqliteTest {
         assertTrue(prefixed.repositoryExists());
         assertFalse(repository.repositoryExists());
         assertThrows(IllegalArgumentException.class,
-                () -> new DatabaseMigrationRepository(connection("App_"), "runs"));
+                () -> new DatabaseMigrationRepository(SQLiteSchema.of(connection("App_")), "runs"));
     }
 
     @Test
@@ -144,7 +145,7 @@ class DatabaseMigrationRepositorySqliteTest {
         repository.log("a", 1);
 
         List<?> recorded = db.pretend(pretend -> {
-            DatabaseMigrationRepository inPretend = new DatabaseMigrationRepository(pretend);
+            DatabaseMigrationRepository inPretend = new DatabaseMigrationRepository(SQLiteSchema.of(pretend));
             assertEquals(0, inPretend.getLastBatchNumber());
             assertFalse(inPretend.repositoryExists());
             inPretend.log("b", 2);

@@ -1,7 +1,5 @@
 package org.aristonis.photisma.database.migrations;
 
-import org.aristonis.photisma.database.driver.DatabaseFamily;
-
 /** Builds the SQL for one migrations table, whose name is already checked. */
 final class MigrationTableSql {
 
@@ -14,16 +12,6 @@ final class MigrationTableSql {
      */
     MigrationTableSql(String table) {
         this.table = table;
-    }
-
-    String create() {
-        return "create table " + table
-                + " (migration varchar(" + MigrationNames.MAX_NAME_LENGTH + ") not null primary key,"
-                + " batch integer not null)";
-    }
-
-    String drop() {
-        return "drop table " + table;
     }
 
     String ran() {
@@ -62,28 +50,5 @@ final class MigrationTableSql {
 
     String table() {
         return table;
-    }
-
-    /**
-     * Returns a query that counts tables with the bound name in the current schema.
-     *
-     * @param family the database family
-     * @return the query, with the table name as its only binding
-     * @throws UnsupportedOperationException if the family has no known catalog query
-     */
-    static String exists(DatabaseFamily family) {
-        switch (family) {
-            case SQLITE:
-                return "select count(*) from sqlite_master where type = 'table' and name = ?";
-            case POSTGRESQL:
-                return "select count(*) from information_schema.tables"
-                        + " where table_schema = current_schema() and table_name = ?";
-            case MYSQL:
-                return "select count(*) from information_schema.tables"
-                        + " where table_schema = database() and table_name = ?";
-            default:
-                throw new UnsupportedOperationException(
-                        "Checking for the migrations table is not supported on " + family);
-        }
     }
 }

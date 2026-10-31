@@ -14,6 +14,8 @@ import org.aristonis.photisma.database.driver.Driver;
 import org.aristonis.photisma.database.driver.DriverCapability;
 import org.aristonis.photisma.database.driver.DriverInfo;
 import org.aristonis.photisma.database.driver.DriverSession;
+import org.aristonis.photisma.database.schema.Schema;
+import org.aristonis.photisma.database.schema.SchemaGrammar;
 import org.junit.jupiter.api.Test;
 
 /** A driver that reports labels in upper case and numbers as text, as some databases and cursors do. */
@@ -97,8 +99,8 @@ class UpperCaseDriverTest {
     }
 
     private static MigrationRepository repository(List<Map<String, Object>> rows) {
-        return new DatabaseMigrationRepository(
-                Connection.builder().name("scripted").driver(new ScriptedDriver(rows)).build());
+        Connection db = Connection.builder().name("scripted").driver(new ScriptedDriver(rows)).build();
+        return new DatabaseMigrationRepository(Schema.of(db, new SchemaGrammar() { }));
     }
 
     @Test
@@ -122,7 +124,7 @@ class UpperCaseDriverTest {
     }
 
     @Test
-    void tableCheckIsRefusedOnDatabasesWithoutAKnownQuery() {
+    void tableCheckIsRefusedByAGrammarWithoutIt() {
         assertThrows(UnsupportedOperationException.class,
                 () -> repository(Collections.<Map<String, Object>>emptyList()).repositoryExists());
     }

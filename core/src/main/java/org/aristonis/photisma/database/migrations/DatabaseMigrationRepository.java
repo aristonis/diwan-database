@@ -7,21 +7,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.aristonis.photisma.database.Connection;
-import org.aristonis.photisma.database.driver.DatabaseFamily;
+import org.aristonis.photisma.database.schema.Schema;
 
 /**
- * Keeps the migrations table through a {@link Connection}, with plain SQL that runs on SQLite,
- * PostgreSQL and MySQL.
+ * Keeps the migrations table through a {@link Schema} and its connection.
  *
- * <p>The table has two columns: {@code migration}, the name, which is the primary key, and
- * {@code batch}. Every value is sent as a binding; only the checked table name is part of the SQL
- * text.
+ * <p>The table has Laravel's layout: an auto-increment {@code id}, a unique {@code migration}
+ * name of up to 191 characters and a {@code batch} number. The schema builder creates, checks and
+ * drops it; reads and writes are plain SQL with every value sent as a binding, and only the checked
+ * table name is part of the SQL text.
  *
  * <p>Instances are immutable and as safe to share between threads as the connection they use.
  *
- * <p>Tested against SQLite. The SQL is written for PostgreSQL and MySQL as well; SQL Server and
- * Oracle are not supported yet, because they lack {@code limit} and the table check knows only the
- * three databases above.
+ * <p>Tested against SQLite. The reads use {@code limit}, so SQL Server and Oracle are not supported
+ * yet.
  *
  * @implNote Inside {@link Connection#pretend} nothing reaches the database, so reads return empty
  *     results and {@link #repositoryExists()} returns {@code false}. Read the repository outside
@@ -32,34 +31,57 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
     /** The table name used when none is given, as in Laravel. */
     public static final String DEFAULT_TABLE = "migrations";
 
+    private final Schema schema;
     private final Connection connection;
+    private final String baseTable;
     private final MigrationTableSql sql;
 
     /**
      * Creates a repository on the {@value #DEFAULT_TABLE} table.
      *
-     * @param connection the connection, never {@code null}; its table prefix is added to the name
-     * @throws NullPointerException if {@code connection} is {@code null}
+     * @param schema the schema builder of the connection that holds the table, never {@code null};
+     *     the connection's table prefix is added to the name
+     * @throws NullPointerException if {@code schema} is {@code null}
      * @throws IllegalArgumentException if the prefixed name breaks the rule of
-     *     {@link #DatabaseMigrationRepository(Connection, String)}
+     *     {@link #DatabaseMigrationRepository(Schema, String)}
      */
-    public DatabaseMigrationRepository(Connection connection) {
-        this(connection, DEFAULT_TABLE);
+    public DatabaseMigrationRepository(Schema schema) {
+        this(schema, DEFAULT_TABLE);
     }
 
     /**
      * Creates a repository on a named table.
      *
-     * @param connection the connection, never {@code null}; its table prefix is added to the name
+     * @param schema the schema builder of the connection that holds the table, never {@code null};
+     *     the connection's table prefix is added to the name
      * @param table the table name without prefix, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the prefixed name is not lowercase letters, digits and
      *     underscores starting with a letter or underscore, or is longer than 63 characters
      */
-    public DatabaseMigrationRepository(Connection connection, String table) {
-        this.connection = Objects.requireNonNull(connection, "connection");
-        Objects.requireNonNull(table, "table");
+    public DatabaseMigrationRepository(Schema schema, String table) {
+        this.schema = Objects.requireNonNull(schema, "schema");
+        this.connection = schema.connection();
+        this.baseTable = Objects.requireNonNull(table, "table");
         this.sql = new MigrationTableSql(MigrationNames.checkTable(connection.getTablePrefix() + table));
+    }
+
+    /**
+     * Returns the schema builder the repository works through.
+     *
+     * @return the schema builder, never {@code null}
+     */
+    public Schema schema() {
+        return schema;
+    }
+
+    /**
+     * Returns the table name without the connection's prefix.
+     *
+     * @return the name, never {@code null}
+     */
+    public String baseTable() {
+        return baseTable;
     }
 
     /**
@@ -130,7 +152,11 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
 
     @Override
     public void createRepository() {
-        connection.statement(sql.create());
+        schema.create(baseTable, table -> {
+            table.id();
+            table.string("migration", MigrationNames.MAX_NAME_LENGTH).unique();
+            table.integer("batch");
+        });
     }
 
     /**
@@ -142,13 +168,12 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
      */
     @Override
     public boolean repositoryExists() {
-        String query = MigrationTableSql.exists(DatabaseFamily.of(connection.getDriverInfo()));
-        return connection.scalar(query, sql.table()).map(DatabaseMigrationRepository::intValue).orElse(0) > 0;
+        return schema.hasTable(baseTable);
     }
 
     @Override
     public void deleteRepository() {
-        connection.statement(sql.drop());
+        schema.drop(baseTable);
     }
 
     private static List<MigrationEntry> entries(List<Map<String, Object>> rows) {

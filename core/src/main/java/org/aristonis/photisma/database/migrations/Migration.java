@@ -1,10 +1,10 @@
 package org.aristonis.photisma.database.migrations;
 
 import java.util.Optional;
-import org.aristonis.photisma.database.Connection;
+import org.aristonis.photisma.database.schema.Schema;
 
 /**
- * One schema change, applied by {@link #up(Connection)} and undone by {@link #down(Connection)}.
+ * One schema change, applied by {@link #up(Schema)} and undone by {@link #down(Schema)}.
  *
  * <p>The name identifies the migration in the migrations table, so it must never change once the
  * migration has run anywhere. Start it with the date, as Laravel's file names do, for example
@@ -29,19 +29,22 @@ public abstract class Migration {
     /**
      * Applies the change.
      *
-     * @param connection the connection to run the change on, never {@code null}; inside a
-     *     transaction when {@link #withinTransaction()} is {@code true}
+     * @param schema the schema builder of the migration's connection, never {@code null}; bound to
+     *     the migration's transaction when there is one. Run raw SQL through
+     *     {@code schema.connection()}, never through a connection held elsewhere, or it runs outside
+     *     that transaction.
      */
-    public abstract void up(Connection connection);
+    public abstract void up(Schema schema);
 
     /**
      * Undoes the change.
      *
      * @implSpec The default does nothing, like a Laravel migration without a {@code down} method.
      *
-     * @param connection the connection to run the change on, never {@code null}
+     * @param schema the schema builder of the migration's connection, never {@code null}; bound to
+     *     the migration's transaction when there is one
      */
-    public void down(Connection connection) {
+    public void down(Schema schema) {
     }
 
     /**
@@ -50,7 +53,7 @@ public abstract class Migration {
      * @implSpec The default returns {@code true}. Return {@code false} for statements the database
      *     refuses inside a transaction.
      *
-     * @return {@code true} to wrap {@link #up(Connection)} and {@link #down(Connection)} in a
+     * @return {@code true} to wrap {@link #up(Schema)} and {@link #down(Schema)} in a
      *     transaction
      */
     public boolean withinTransaction() {

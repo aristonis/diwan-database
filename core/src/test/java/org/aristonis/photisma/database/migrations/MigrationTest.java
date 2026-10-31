@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
-import org.aristonis.photisma.database.Connection;
+import org.aristonis.photisma.database.schema.Schema;
 import org.junit.jupiter.api.Test;
 
 class MigrationTest {
@@ -19,7 +19,7 @@ class MigrationTest {
         }
 
         @Override
-        public void up(Connection connection) {
+        public void up(Schema schema) {
             ups++;
         }
     }
