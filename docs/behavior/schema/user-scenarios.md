@@ -66,3 +66,18 @@
 | E52 | A column changed and renamed, or changed twice, in one call | Refused before anything runs | `ChangeColumnBlueprintTest#changeAndRenameOfOneColumnAreRefusedEitherWay`, `ChangeColumnBlueprintTest#theSameColumnChangedTwiceIsRefused` |
 | E53 | `change()` on a table the rebuild cannot carry | Still refused | `SQLiteChangeColumnTest#aTableTheRebuildCannotCarryStaysRefused` |
 | E54 | `change()` under pretend | SQL listed, table unchanged | `SQLiteChangeColumnTest#pretendListsTheRebuildAndChangesNothing` |
+| E55 | Insert breaks a column check | Refused by the database | `SQLiteChecksTest#aColumnCheckRefusesABadRow` |
+| E56 | A check added to a table whose rows already break it | Fails; table unchanged | `SQLiteChecksRebuildTest#addingACheckTestsTheRowsAlreadyThere` |
+| E57 | `dropCheck` of a name that does not exist | Refused naming it | `SQLiteChecksTest#droppingAMissingCheckIsRefusedByName` |
+| E58 | A stored column added to a filled table | Rebuilt; old rows get computed values | `SQLiteChecksRebuildTest#addingAStoredColumnComputesItForOldRows` |
+| E59 | A virtual column added to a filled table | In place; values computed | `SQLiteChecksTest#aVirtualColumnIsAddedInPlace` |
+| E60 | A generated column with a default, useCurrent, auto-increment, a primary key, or both kinds | Refused before anything runs | `ChecksBlueprintTest#impossibleGeneratedColumnsAreRefused` |
+| E61 | Hand-written checks, named and unnamed, with `)` and quotes inside strings | Carried intact | `SQLiteChecksRebuildTest#handWrittenChecksWithTrickyTextAreCarried` |
+| E62 | Dropping or renaming a column a check names, on the rebuild path | Refused | `SQLiteChecksRebuildTest#renamingOrDroppingAMentionedColumnOnTheRebuildPathIsRefused` |
+| E63 | A column renamed in place, then a rebuild in the same call, while a check names it | Refused | `SQLiteChecksRebuildTest#aNativeRenameFollowedByARebuildIsRefusedWhenMentioned` |
+| E64 | `change()` of a generated column's expression | Rebuilt with the new expression | `SQLiteChecksRebuildTest#changingAGeneratedColumnWritesTheNewExpression` |
+| E65 | Enum check and a user check on the same column, then a key change | Both carried | `SQLiteChecksRebuildTest#aKeyChangeCarriesChecksGeneratedColumnsAndTheEnum` |
+| E66 | Generated column on SQLite older than 3.31 | Refused naming the version | `SQLiteChecksTest#generatedColumnsOnAnOldSqliteAreRefused` |
+| E67 | A migration branches on `driverName()` | The SQLite branch runs | `SQLiteChecksTest#driverNameLetsAMigrationBranch` |
+| E68 | `Schema.statement` under pretend | Listed, not run | `SQLiteChecksTest#statementRunsAndPretendOnlyListsIt` |
+| E69 | `rawColumn` | Created as written | `SQLiteChecksTest#aRawColumnIsCreatedAsWritten` |

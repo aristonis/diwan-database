@@ -79,8 +79,19 @@ SQLite
   enforcement off on one connection; inside a transaction with enforcement on, a table other tables
   point at is refused. The migrator then runs that migration again with enforcement off and checks
   every table before commit; other migrations keep enforcement on.
-- Tables with a CHECK constraint, COLLATE, WITHOUT ROWID, a generated column, a trigger, a view
-  over them, or a partial or expression index are refused by the rebuild.
+- Tables with COLLATE, STRICT, WITHOUT ROWID, a trigger, a view over them, or a partial or
+  expression index are refused by the rebuild. Checks and generated columns are carried; renaming
+  or dropping a column one of them names is refused when it needs a rebuild.
+- `check(sql)` on a column and `Blueprint.check(name, sql)` on the table add CHECK constraints;
+  `dropCheck(name)` drops a table check. `virtualAs(sql)` and `storedAs(sql)` make generated
+  columns (SQLite 3.31 and later). `rawColumn(name, sql)` writes a column's definition as given.
+  All of this SQL is trusted: it is written into the statement unchanged.
+- On SQLite, adding a column with a check or a stored generated column, and adding or dropping a
+  table check, rebuild the table, so existing rows are tested against the new definition.
+- A generated column with a default, `useCurrent`, auto-increment or a primary key, or both
+  virtual and stored, is refused before any SQL.
+- `Schema.statement(sql)` runs one trusted statement on the schema's connection (recorded under
+  pretend); `Schema.driverName()` returns `sqlite` or `pgsql` for branching.
 - `renameColumn` and `dropColumn` run in place on SQLite 3.25 and 3.35 and later, and rebuild the
   table on older versions such as Android 9's, where a column another table references is refused.
 - `dropForeign` by name is refused, since SQLite keys have no names.
@@ -116,5 +127,5 @@ Safety and errors
 
 Fulltext, spatial, partial and expression indexes, `change()` on other databases, `foreignIdFor`,
 spatial, vector and computed columns, the modifiers `after`, `first`, `charset`, `collation`,
-`storedAs`, `virtualAs` and `useCurrentOnUpdate`, the PostgreSQL and MySQL grammars, temporary tables,
+`virtualAsJson`, `storedAsJson` and `useCurrentOnUpdate`, renaming a check, the PostgreSQL and MySQL grammars, temporary tables,
 schema-qualified names, listings of tables and columns.

@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Check constraints: `ColumnDefinition.check`, `Blueprint.check(name, sql)` and `dropCheck`.
+  Generated columns: `virtualAs` and `storedAs`. `Blueprint.rawColumn`, `Schema.statement` and
+  `Schema.driverName` for SQL the builder cannot write. The SQLite table rebuild now carries checks
+  and generated columns instead of refusing the table.
 - `ColumnDefinition.change()` redefines an existing column, as in Laravel 11 and later: the new
   definition replaces the old one in full. `unique(false)`, `index(false)` and `primary(false)`
   drop the column's conventional index. On SQLite the change runs as a table rebuild.

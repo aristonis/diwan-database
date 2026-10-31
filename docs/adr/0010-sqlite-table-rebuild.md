@@ -28,8 +28,12 @@ a transaction, which is where migrations run.
    with enforcement on, so cascades fire as in Laravel.
 5. After a rebuild, `pragma_foreign_key_check` runs on the table and the tables that point at it;
    bad rows undo the change and raise `ForeignKeyCheckException` without row values.
-6. Tables with features the rebuild cannot carry over (CHECK, COLLATE, WITHOUT ROWID, generated
-   columns, triggers, views, partial or expression indexes) are refused.
+6. Tables with features the rebuild cannot carry over (COLLATE, STRICT, WITHOUT ROWID, triggers,
+   views, partial or expression indexes) are refused. CHECK constraints, named or not, on a column
+   or the table, and generated columns are carried as the text the table was written with;
+   generated columns are not copied, SQLite computes them again. Since that text is not rewritten,
+   renaming or dropping a column it names is refused on the rebuild path, and a column SQLite
+   renamed in place earlier in the same call is refused too.
 7. Column rename and drop run in place where SQLite supports them. On older versions a column
    another table's key references is refused, since the rebuild would leave that key on the old name.
 8. `change()` always rebuilds, since SQLite cannot alter a column. The new definition takes the

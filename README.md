@@ -120,6 +120,26 @@ in full, so restate every modifier you want to keep:
 schema.table("posts", table -> table.string("title", 500).nullable().change());
 ```
 
+Checks, generated columns and raw SQL:
+
+```java
+schema.create("lines", table -> {
+    table.id();
+    table.integer("qty").check("qty > 0");
+    table.integer("price");
+    table.integer("total").storedAs("qty * price");
+    table.check("lines_price_check", "price >= 0");
+});
+if ("pgsql".equals(schema.driverName())) {
+    schema.statement("create index lines_total on lines using brin (total)");
+} else {
+    schema.statement("create index lines_total on lines (total)");
+}
+```
+
+The SQL in `check`, `storedAs`, `virtualAs`, `rawColumn` and `statement` is written into the
+statement as given; build it from constants, never from user input.
+
 Changing an auto-increment column is not supported. On SQLite, rename or drop a column that another
 table references in a separate `Schema.table` call from a `change()`.
 
