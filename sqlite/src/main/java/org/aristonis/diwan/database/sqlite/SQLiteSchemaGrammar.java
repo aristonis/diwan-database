@@ -331,11 +331,11 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @implNote Runs {@code pragma_foreign_key_check} over the whole database.
+     * @implNote Runs {@code pragma foreign_key_check} over the whole database.
      */
     @Override
     public void checkForeignKeys(Connection connection) {
-        List<Map<String, Object>> rows = connection.select("select \"table\", parent from pragma_foreign_key_check");
+        List<Map<String, Object>> rows = connection.select("pragma foreign_key_check");
         if (!rows.isEmpty()) {
             throw new ForeignKeyCheckException(String.valueOf(rows.get(0).get("table")),
                     String.valueOf(rows.get(0).get("parent")), rows.size());
@@ -357,7 +357,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return a {@code pragma_foreign_key_check} of the changed table and of every table that points
+     * @return a {@code pragma foreign_key_check} of the changed table and of every table that points
      *     at it, when the blueprint may have rebuilt the table
      */
     @Override
@@ -374,8 +374,10 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         }
         List<SchemaQuery> checks = new ArrayList<>(tables.size());
         for (String table : tables) {
-            checks.add(new SchemaQuery("select \"table\", parent from pragma_foreign_key_check(?)",
-                    Collections.singletonList(table)));
+            // The table-valued form takes no argument before SQLite 3.26 (Android 9 runs 3.22); the
+            // statement form works on every version.
+            checks.add(new SchemaQuery("pragma foreign_key_check(" + wrap(table) + ")",
+                    Collections.emptyList()));
         }
         return checks;
     }
