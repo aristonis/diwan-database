@@ -100,7 +100,15 @@ schema.create("users", table -> {
     table.booleanColumn("active").defaultValue(true);
     table.timestamps();
 });
+schema.create("posts", table -> {
+    table.id();
+    table.foreignId("user_id").constrained().cascadeOnDelete();
+    table.string("title");
+    table.index("user_id", "title");
+});
 ```
+
+On SQLite, adding or dropping a key on a filled table rebuilds it and keeps every row.
 
 ### Migrations
 

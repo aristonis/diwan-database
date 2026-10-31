@@ -10,7 +10,7 @@ idioms where PHP shaped Laravel's choices.
 |---|---|---|
 | Connection | Running SQL, transactions, pretend mode, errors | [connection-design.md](connection-design.md) |
 | Driver interface and adapters | One physical connection per session; JDBC adapter; Android adapter later | [connection-design.md](connection-design.md) |
-| Schema | Blueprint, column definitions, schema builder (built); index and foreign key definitions later; a grammar per database module | [ADR 0008](../adr/0008-schema-grammar-per-database-module.md), [requirements](../requirements/schema.md) |
+| Schema | Blueprint, column definitions, indexes and foreign keys, schema builder (built); a grammar per database module | [ADR 0008](../adr/0008-schema-grammar-per-database-module.md), [ADR 0010](../adr/0010-sqlite-table-rebuild.md), [requirements](../requirements/schema.md) |
 | Migrations | Migration contract, migrations table and migrator (built); commands later | [ADR 0007](../adr/0007-migrations-table-without-a-schema-builder.md), [ADR 0009](../adr/0009-migrator-transactions-and-records.md), [requirements](../requirements/migrator.md) |
 | Query builder | Fluent queries, query grammars and processors | not built yet |
 | Models | Active-record models, relations, casts | not built yet |

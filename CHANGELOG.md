@@ -9,6 +9,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Indexes and keys: `Blueprint.index`, `unique`, `primary`, `foreign`, `foreignId` with
+  `ForeignIdColumnDefinition.constrained`, `ForeignKeyDefinition` and `ForeignKeyAction`; the drops
+  `dropIndex`, `dropUnique`, `dropPrimary`, `dropForeign`, `dropConstrainedForeignId`;
+  `renameIndex`; column modifiers `index` and `primary`.
+- `Blueprint.dropColumn` and `renameColumn`; a column still used by an index or key is refused.
+- `Schema.indexes`, `foreignKeys` (`IndexInfo`, `ForeignKeyInfo`), `withoutForeignKeyConstraints`
+  and `pretend`.
+- SQLite table rebuild for key changes, keeping rows, indexes and the auto-increment counter;
+  `ForeignKeyCheckException`.
+- `Connection.session` to hold one physical connection; `DriverSession.discard`.
+
 - `MissingMigrationsException`: rollback and reset refuse when records have no migration in the
   migrator; `Migrator.Builder.allowMissingOnRollback()` restores Laravel's behaviour.
 - `DriverException.databaseMessage()`; `QueryException` shows the database's reason with the values

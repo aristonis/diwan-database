@@ -21,7 +21,7 @@ tables.
 Schema builder
 
 - Made from a `Connection` and a `SchemaGrammar`.
-- `create(table, callback)` creates a table; `table(table, callback)` adds columns to one.
+- `create(table, callback)` creates a table; `table(table, callback)` changes one.
 - `drop`, `dropIfExists`, `rename(from, to)`.
 - `hasTable(table)` and `hasColumn(table, column)`; column names compare without letter case.
 - The connection's table prefix is added to every table name.
@@ -37,6 +37,39 @@ Columns, with Laravel's defaults
 - Modifiers: `nullable`, `defaultValue` (text, numbers, booleans, `Expression`, or `null` for SQL
   `NULL`), `useCurrent` on date and timestamp, `unique` and `unique(name)`, `autoIncrement` on
   integer columns, `unsigned` and `comment` (ignored on SQLite).
+
+Indexes and keys
+
+- `index`, `unique` and `primary` over one or more columns, on the blueprint or on a column, with
+  Laravel's default names (`<table>_<columns>_<type>`, lower case, `-` and `.` as `_`) or a chosen
+  name.
+- `foreign(columns).references(columns).on(table)` with `onDelete` and `onUpdate` and Laravel's
+  helpers (`cascadeOnDelete`, `restrictOnDelete`, `nullOnDelete`, `noActionOnDelete` and the
+  `OnUpdate` four).
+- `foreignId(column)` with `constrained()`, which names the table from the column (`user_id` to
+  `users`), or `constrained(table)` and `constrained(table, column)`.
+- `dropIndex`, `dropUnique`, `dropPrimary` and `dropForeign` by name or by columns;
+  `dropConstrainedForeignId`; `renameIndex`.
+- `dropColumn` and `renameColumn`. A column an index or key still uses is refused before any SQL.
+- `indexes(table)` and `foreignKeys(table)` list what the database has.
+- `withoutForeignKeyConstraints(work)` runs work in one transaction with enforcement off;
+  `pretend(work)` records the statements while reading the live schema.
+
+SQLite
+
+- Keys on a new table are written into its create statement.
+- Adding or dropping a primary or foreign key on an existing table rebuilds it: rows, indexes,
+  unique constraints and the auto-increment counter are kept; rows that break a key undo the change
+  with `ForeignKeyCheckException`.
+- A rebuild never applies other tables' delete actions: outside a transaction it runs with
+  enforcement off on one connection; inside a transaction with enforcement on, a table other tables
+  point at is refused. The migrator then runs that migration again with enforcement off and checks
+  every table before commit; other migrations keep enforcement on.
+- Tables with a CHECK constraint, COLLATE, WITHOUT ROWID, a generated column, a trigger, a view
+  over them, or a partial or expression index are refused by the rebuild.
+- `renameColumn` and `dropColumn` run in place on SQLite 3.25 and 3.35 and later, and rebuild the
+  table on older versions such as Android 9's, where a column another table references is refused.
+- `dropForeign` by name is refused, since SQLite keys have no names.
 
 Safety and errors
 
@@ -55,6 +88,6 @@ Safety and errors
 
 ## 5. Non-goals
 
-Indexes other than a column's `unique`, foreign keys, changing, renaming or dropping columns, other
-column types, the PostgreSQL and MySQL grammars, temporary tables, schema-qualified names, listings
-of tables and columns, the migrator.
+Fulltext, spatial, partial and expression indexes, changing a column's type, `foreignIdFor`,
+uuid and ulid keys, other column types, the PostgreSQL and MySQL grammars, temporary tables,
+schema-qualified names, listings of tables and columns.

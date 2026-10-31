@@ -28,9 +28,22 @@ MySQL can be added without changing the core.
 
 Done when: the SQLite grammar lives in its own module and the core does not depend on it.
 
+## Indexes and keys
+
+As an application developer, I want indexes over several columns and foreign keys with delete
+actions, so lookups stay fast and orphan rows never appear.
+
+As an application developer on SQLite, I want to add or drop a key on a filled table without
+losing rows, so a later release can tighten the schema.
+
+As an application developer, I want to drop and rename columns and undo every index and key in
+`down`, so rollbacks are complete.
+
+Done when: each is created, enforced, listed and dropped on SQLite, rows survive every rebuild.
+
 ## Turned down
 
 | Story | Reason |
 |---|---|
-| Indexes, foreign keys, changing columns | Come in later releases |
+| Fulltext, spatial and partial indexes; changing a column's type | Come in later releases |
 | Every Laravel column type | Comes in a later release |

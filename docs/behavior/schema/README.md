@@ -16,6 +16,13 @@ schema.create("users", table -> {
 
 schema.table("users", table -> table.text("bio").nullable());
 
+schema.create("posts", table -> {
+    table.id();
+    table.foreignId("user_id").constrained().cascadeOnDelete();
+    table.string("title");
+    table.index("user_id", "title");
+});
+
 if (schema.hasColumn("users", "bio")) {
     schema.rename("users", "people");
 }
@@ -28,9 +35,13 @@ schema.dropIfExists("people");
 |---|---|
 | Create or extend a table | `create`, `table` |
 | Remove or rename one | `drop`, `dropIfExists`, `rename` |
-| Check what exists | `hasTable`, `hasColumn` |
+| Check what exists | `hasTable`, `hasColumn`, `indexes`, `foreignKeys` |
+| Add or drop indexes | `index`, `unique`, `primary`, `dropIndex`, `dropUnique`, `dropPrimary`, `renameIndex` |
+| Link tables | `foreignId(...).constrained()`, `foreign(...).references(...).on(...)`, `cascadeOnDelete` and the other actions, `dropForeign`, `dropConstrainedForeignId` |
+| Change columns | `dropColumn`, `renameColumn` |
+| Work around keys | `withoutForeignKeyConstraints` |
 | Declare columns | `id`, `string`, `text`, `integer`, `bigInteger`, `booleanColumn`, `decimal`, `date`, `timestamp`, `json`, `timestamps` |
-| Shape a column | `nullable`, `defaultValue`, `useCurrent`, `unique`, `autoIncrement`, `unsigned`, `comment` |
+| Shape a column | `nullable`, `defaultValue`, `useCurrent`, `unique`, `index`, `primary`, `autoIncrement`, `unsigned`, `comment` |
 
 ## How it behaves
 
@@ -45,5 +56,14 @@ schema.dropIfExists("people");
   `false` there.
 - SQLite ignores `unsigned` and `comment`, and adds a not-null column without a default only while
   the table is empty.
+- On SQLite, adding or dropping a primary or foreign key on an existing table rebuilds the table
+  with its rows, indexes and auto-increment counter; if a row breaks the new key, nothing changes and
+  `ForeignKeyCheckException` names the tables and the number of rows. Inside your own transaction,
+  a table other tables point at is not rebuilt; run the change in a migration or in
+  `withoutForeignKeyConstraints`.
+- A column an index or key still uses cannot be dropped; drop the index or key first, in the same
+  call if you like.
+- `pretend` on the schema reads the live tables, so a rebuild lists its real statements; a table
+  made earlier in the same pretend run does not exist yet for it.
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md).
