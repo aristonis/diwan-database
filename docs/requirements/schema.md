@@ -145,3 +145,17 @@ schema-qualified names, listings of tables and columns.
 - `virtualAs` needs PostgreSQL 18; `storedAs` works on every supported version.
 - `hasTable`, `hasColumn`, `indexes` and `foreignKeys` read the current schema only.
 - `PostgresMigrationLock` keeps two processes from migrating at once.
+
+## Money
+
+- `money(column, scale)` stores whole minor units (cents at scale 2): `integer` on SQLite, `bigint`
+  on PostgreSQL. Exact everywhere, and sums and sorts in SQL.
+- `money(column, scale).asDecimal(precision)` stores an exact decimal: `numeric(precision, scale)` on
+  PostgreSQL; on SQLite, text in one spelling per number (`"1000.000000"` at scale 6), kept to that
+  shape by a check. Text does not sum or sort as numbers in SQL.
+- `unsigned()` on a money column refuses negative amounts.
+- `Money.toMinor`, `fromMinor`, `toText` and `fromText` convert values; nothing rounds, and errors
+  never show the amount. On SQLite a decimal money column takes exactly the text `Money.toText`
+  writes and returns text, read with `Money.fromText`; on PostgreSQL it takes and returns
+  `BigDecimal`.
+- A plain `decimal()` column keeps Laravel's SQLite type, `numeric`, which stores floating point.

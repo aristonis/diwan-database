@@ -180,6 +180,24 @@ FR39. A driver classifies its own failures as unique violations or concurrency f
 driver reads vendor codes only for the database that owns them and never classifies a lost
 connection as a concurrency failure.
 
+## Values
+
+- Dates and times are read as `java.time` values by column type: `timestamp` → `LocalDateTime`,
+  `timestamptz` → `OffsetDateTime`, `date` → `LocalDate`, `time` → `LocalTime`, never through
+  `java.sql.Timestamp` text, so dates before 1582 and times in a daylight-saving gap read back
+  unchanged. PostgreSQL `infinity` and `-infinity` read as `MAX` and `MIN`.
+- On SQLite every driver stores the same text: `yyyy-MM-dd HH:mm:ss` (a fraction only when there is
+  one); a moment (`Instant`, `OffsetDateTime`) as UTC with `+00:00`, so text order is time order and
+  the value is unambiguous when copied into a zoned column elsewhere; years 0000 to 9999 only;
+  `BigDecimal` in plain form, never `1E+3`. Keep the day an event counts for in its own `date`
+  column, since a moment in UTC can fall on another calendar day.
+- On PostgreSQL strings are sent untyped, so text binds into `uuid`, `jsonb` and `inet`, and `json`,
+  `jsonb` and `inet` values read back as `String`. A bare parameter whose type PostgreSQL cannot
+  infer, as in `? is null`, needs a cast (`?::text`), as in Laravel.
+- NaN and infinite numbers are refused before any SQL, naming the binding's position.
+- A session whose rollback failed, or whose connection was lost (SQL state class 08), is discarded,
+  never handed back.
+
 ## Android
 
 - `AndroidSqliteDriver.of(SQLiteDatabase)` or `of(SQLiteOpenHelper)` plugs Android's own SQLite

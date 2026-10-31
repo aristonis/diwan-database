@@ -173,6 +173,25 @@ statement as given; build it from constants, never from user input.
 Changing an auto-increment column is not supported. On SQLite, rename or drop a column that another
 table references in a separate `Schema.table` call from a `change()`.
 
+### Money
+
+Store money as whole minor units, exact on every database and summed in SQL:
+
+```java
+table.money("amount", 2);                       // 10.10 is stored as 1010
+long cents = Money.toMinor(new BigDecimal("10.10"), 2);
+```
+
+Or as an exact decimal, `numeric` on PostgreSQL and checked fixed-scale text on SQLite:
+
+```java
+table.money("debit", 6).asDecimal(20).unsigned();
+String text = Money.toText(new BigDecimal("1000"), 6);   // "1000.000000"
+```
+
+Nothing rounds: a value with more decimal places than the scale is refused. Keep the currency in its
+own column.
+
 ### Migrations
 
 ```java

@@ -9,6 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Money: `Blueprint.money(column, scale)` for whole minor units, `asDecimal(precision)` for an exact
+  decimal (PostgreSQL `numeric`, checked text on SQLite), and the `Money` converters.
+
 - Android module `diwan-database-android`: `AndroidSqliteDriver` over Android's `SQLiteDatabase`
   for Android 9 and later, with transactions, savepoints and the JDBC driver's failure kinds.
 - PostgreSQL module `diwan-database-pgsql`: `PostgresSchemaGrammar` with Laravel's PostgreSQL types
@@ -86,8 +89,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Build: one Java 17 JAR tested on JDK 17, 21 and 25, checked against the Android 28 API, with
   80% line coverage and Javadoc under `-Xdoclint:all` enforced.
 
+### Changed
+
+- SQLite: dates are stored as `yyyy-MM-dd HH:mm:ss` (a fraction only when there is one) by both
+  the JDBC and Android drivers; `Instant` and `OffsetDateTime` as UTC with `+00:00`. Text written by
+  earlier builds (`2026-01-02T03:04`, local offsets) does not sort or compare with the new text.
+  Years outside 0000 to 9999 are refused on SQLite.
+
 ### Fixed
 
+- Dates read through `java.time` by column type: dates before 1582, times in a daylight-saving gap
+  and `timestamptz` offsets read back unchanged; PostgreSQL `infinity` reads as `MAX` / `MIN`.
+- SQLite: `BigDecimal` is bound in plain form, never `1E+3`. A `decimal()` column still has numeric
+  affinity, which turns the text into a floating-point number; use `money(...)` for exact amounts.
+- PostgreSQL: text binds into `uuid`, `jsonb` and `inet`, nulls into any column; `json` and `inet`
+  read back as text.
+- NaN and infinite numbers are refused before any SQL.
+- A session whose rollback failed or whose connection was lost is discarded, not handed back.
 - SQLite: the foreign key check after a table rebuild used the table-valued
   `pragma_foreign_key_check(?)`, which SQLite before 3.26 (Android 9) rejects; it now uses the
   pragma statement.
