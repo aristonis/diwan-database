@@ -2,6 +2,7 @@ package org.aristonis.photisma.database;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.photisma.database.driver.DriverInfo;
 
@@ -331,6 +332,32 @@ public interface Connection {
      * @throws QueryException if the database refuses to start the transaction
      */
     TransactionScope beginTransaction();
+
+    /**
+     * Runs a callback on a connection held to one physical database connection.
+     *
+     * <p>Every statement and transaction the callback runs on the connection it is given uses the
+     * same physical connection, so a session setting such as SQLite's {@code PRAGMA foreign_keys}
+     * stays in force for all of it, even when this connection borrows from a pool. No transaction
+     * is started; start one inside with {@link #transaction(TransactionCallback)}.
+     *
+     * <p>When the callback throws, the session is discarded rather than closed
+     * ({@code DriverSession.discard}), so a pool that the driver can tell drops the connection, and a
+     * setting the callback could not restore does not reach the next user. A callback must not leave
+     * a transaction open through raw SQL; use {@link #transaction(TransactionCallback)}.
+     *
+     * @implSpec The default runs the callback on this connection, which suits a connection already
+     *     held to one physical connection, such as one inside a transaction or in pretend mode.
+     * @param <T> the type of the result
+     * @param callback the work to run, never {@code null}
+     * @return the result of the callback, may be {@code null}
+     * @throws NullPointerException if {@code callback} is {@code null}
+     * @throws QueryException if no physical connection can be opened
+     * @throws RuntimeException any failure of the callback
+     */
+    default <T> T session(TransactionCallback<T> callback) {
+        return Objects.requireNonNull(callback, "callback").run(this);
+    }
 
     /**
      * Runs a callback on a connection that records each statement instead of running it.

@@ -200,6 +200,32 @@ final class RootConnection extends AbstractConnection {
         });
     }
 
+    // A failed callback may have left a session setting it could not restore, so the session is
+    // discarded rather than closed and handed back as clean.
+    @Override
+    public <T> T session(TransactionCallback<T> callback) {
+        Objects.requireNonNull(callback, "callback");
+        refuseInsideOwnTransaction();
+        boolean canRelease = getDriverInfo().supports(DriverCapability.SAVEPOINT_RELEASE);
+        DriverSession session = open("session", Collections.<Object>emptyList());
+        SessionConnection held = new SessionConnection(settings(), session, canRelease);
+        T result;
+        try {
+            result = callback.run(held);
+        } catch (RuntimeException | Error failure) {
+            held.end();
+            try {
+                session.discard();
+            } catch (Throwable discardFailure) {
+                Sessions.suppress(failure, discardFailure);
+            }
+            throw failure;
+        }
+        held.end();
+        Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
+        return result;
+    }
+
     @Override
     public List<LoggedQuery> pretend(PretendCallback callback) {
         return PretendConnection.record(settings(), callback);

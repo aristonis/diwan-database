@@ -176,4 +176,18 @@ public interface DriverSession extends AutoCloseable {
      */
     @Override
     void close();
+
+    /**
+     * Gives the connection back so that it is never handed out again.
+     *
+     * <p>The core calls this instead of {@link #close()} when the session may be left in a state
+     * the next user must not inherit, such as a setting it changed and could not restore.
+     *
+     * @implSpec The default calls {@link #close()}. A driver over a pool should make the pool drop
+     *     the connection. It must be idempotent, and a call after {@link #close()} does nothing.
+     * @throws DriverException if giving back the connection fails
+     */
+    default void discard() {
+        close();
+    }
 }

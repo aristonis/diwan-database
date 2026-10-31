@@ -1,5 +1,7 @@
 package org.aristonis.photisma.database.jdbc;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Connection;
@@ -21,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.photisma.database.driver.DriverException;
@@ -283,6 +286,60 @@ final class JdbcSession implements DriverSession {
             first.addSuppressed(failures.get(i));
         }
         throw first;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Aborts the JDBC connection first, which pools treat as broken and drop, then
+     *     releases it to the provider; no rollback or auto-commit reset is tried on it.
+     */
+    @Override
+    public void discard() {
+        if (isClosed) {
+            return;
+        }
+        isClosed = true;
+        endTransaction();
+        List<Exception> failures = new ArrayList<>();
+        try {
+            abort(connection);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            failures.add(e);
+        }
+        try {
+            provider.release(connection);
+        } catch (SQLException | RuntimeException e) {
+            failures.add(e);
+        }
+        if (failures.isEmpty()) {
+            return;
+        }
+        DriverException first = toDriverException(failures.get(0));
+        for (int i = 1; i < failures.size(); i++) {
+            first.addSuppressed(failures.get(i));
+        }
+        throw first;
+    }
+
+    // Connection.abort is missing from Android's java.sql, so it is looked up at run time; where it
+    // is missing the connection is only released, and the session's setting goes with it.
+    private static void abort(Connection connection) throws ReflectiveOperationException {
+        Method abort;
+        try {
+            abort = Connection.class.getMethod("abort", Executor.class);
+        } catch (NoSuchMethodException missing) {
+            return;
+        }
+        try {
+            abort.invoke(connection, (Executor) Runnable::run);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof SQLException) {
+                throw new IllegalStateException("Failed to abort the database connection", cause);
+            }
+            throw e;
+        }
     }
 
     private DriverException toDriverException(Exception e) {

@@ -255,5 +255,15 @@ final class FakeDriver implements Driver {
                 throw closeFailure;
             }
         }
+
+        @Override
+        public void discard() {
+            if (closed) {
+                throw new AssertionError("session closed twice");
+            }
+            closed = true;
+            open.decrementAndGet();
+            calls.add("discard");
+        }
     }
 }
