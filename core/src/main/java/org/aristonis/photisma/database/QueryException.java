@@ -14,18 +14,21 @@ import org.aristonis.photisma.database.driver.DriverException;
 /**
  * Reports a statement the database refused, with the connection name, SQL and bindings.
  *
- * <p>The message is {@code SQL: <sql> (Connection: <name>, SQL state <state>)}, where the state is
- * {@code unknown} when the database gave none. The binding values are appended to the message only
- * when the connection was built with {@code showBindingsInErrors(true)}, because they can hold
- * personal data; {@link #getBindings()} carries them either way. In the message, the SQL, the
+ * <p>The message is {@code SQL: <sql> (Connection: <name>, SQL state <state>, vendor code <code>)},
+ * where the state is {@code unknown} when the database gave none. The binding values and the
+ * database's own error text ({@code Reason: ...}) are appended only when the connection was built
+ * with {@code showBindingsInErrors(true)}, because both can hold personal data;
+ * {@link #getBindings()} carries the values either way. In the message, the SQL, the reason, the
  * connection name, the SQL state and the values are escaped: a backslash is doubled, line breaks
  * appear as {@code \r} and {@code \n}, and other control characters and Unicode line separators
- * as <code>&#92;uXXXX</code>. The SQL is cut after 1000 code points and the name, the SQL state and
- * each value after 256 (all marked with {@code ...}), and a {@code byte[]} value appears as
- * {@code <n bytes>}.
+ * as <code>&#92;uXXXX</code>. The SQL and the reason are cut after 1000 code points and the name,
+ * the SQL state and each value after 256 (all marked with {@code ...}), and a {@code byte[]} value
+ * appears as {@code <n bytes>}.
  *
- * <p>The database's own error text is kept only in the {@linkplain #getCause() cause}, never in this
- * message, because databases often echo the offending values in it.
+ * <p>With the default settings the database's own error text is kept only in the
+ * {@linkplain #getCause() cause}, because databases often echo the offending values in it. A log
+ * line or report that prints the whole cause chain shows that text whatever the settings, so
+ * send only {@link #getMessage()} to places that must not see personal data.
  *
  * <p>The serialized form leaves out the binding values when they were hidden from the message, and
  * after deserialization {@link #getBindings()} is then empty. Only the bindings field is left out:
@@ -83,8 +86,14 @@ public class QueryException extends RuntimeException {
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(cause, "cause");
         String base = "SQL: " + MessageText.sql(sql) + " (Connection: " + MessageText.name(connectionName)
-                + ", SQL state " + MessageText.name(cause.sqlState().orElse("unknown")) + ")";
-        return showBindings ? base + " Bindings: " + MessageText.values(bindings) : base;
+                + ", SQL state " + MessageText.name(cause.sqlState().orElse("unknown"))
+                + ", vendor code " + cause.vendorCode() + ")";
+        if (!showBindings) {
+            return base;
+        }
+        String shown = base + " Bindings: " + MessageText.values(bindings);
+        return cause.databaseMessage().isPresent()
+                ? shown + " Reason: " + MessageText.sql(cause.databaseMessage().get()) : shown;
     }
 
     /**

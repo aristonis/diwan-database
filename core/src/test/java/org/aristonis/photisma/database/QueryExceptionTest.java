@@ -42,7 +42,7 @@ class QueryExceptionTest {
                 "main", "select * from users where email = ?", Arrays.<Object>asList("ana@example.com"),
                 failure("42P01"), false);
 
-        assertEquals("SQL: select * from users where email = ? (Connection: main, SQL state 42P01)",
+        assertEquals("SQL: select * from users where email = ? (Connection: main, SQL state 42P01, vendor code 7)",
                 error.getMessage());
         assertFalse(error.getMessage().contains("ana@example.com"));
     }
@@ -60,7 +60,7 @@ class QueryExceptionTest {
     void namesAMissingSqlStateAsUnknown() {
         QueryException error = new QueryException("main", "select 1", Arrays.asList(), failure(null), false);
 
-        assertEquals("SQL: select 1 (Connection: main, SQL state unknown)", error.getMessage());
+        assertEquals("SQL: select 1 (Connection: main, SQL state unknown, vendor code 7)", error.getMessage());
     }
 
     @Test
@@ -87,5 +87,54 @@ class QueryExceptionTest {
 
         assertTrue(error instanceof RuntimeException);
         assertTrue(error.getMessage().contains("select a, b from t"));
+    }
+
+    private static DriverException failureWithReason(String reason) {
+        return new DriverException("boom", "HY000", 1, reason, null, EnumSet.noneOf(DriverFailureKind.class));
+    }
+
+    @Test
+    void addsTheDatabaseReasonOnlyWhenValuesAreShown() {
+        DriverException cause = failureWithReason("no such table: tagz");
+
+        QueryException hidden = new QueryException("main", "select 1", Arrays.asList(), cause, false);
+        QueryException shown = new QueryException("main", "select 1", Arrays.asList(), cause, true);
+
+        assertFalse(hidden.getMessage().contains("tagz"));
+        assertTrue(shown.getMessage().endsWith("Bindings: [] Reason: no such table: tagz"));
+        assertEquals("no such table: tagz", cause.databaseMessage().orElseThrow());
+        assertFalse(failure("1").databaseMessage().isPresent());
+    }
+
+    @Test
+    void escapesAndShortensTheDatabaseReason() {
+        StringBuilder longReason = new StringBuilder("line1\nline2 ");
+        for (int i = 0; i < 1100; i++) {
+            longReason.append('x');
+        }
+
+        String message = new QueryException("main", "select 1", Arrays.asList(),
+                failureWithReason(longReason.toString()), true).getMessage();
+
+        assertTrue(message.contains("Reason: line1\\nline2 x"));
+        assertTrue(message.endsWith("..."));
+        assertFalse(message.contains("\n" + "line2"));
+    }
+
+    @Test
+    void theDatabaseReasonIsNotSerialized() throws Exception {
+        DriverException cause = failureWithReason("Duplicate entry 'ana@example.com'");
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream out = new java.io.ObjectOutputStream(bytes)) {
+            out.writeObject(cause);
+        }
+        DriverException copy;
+        try (java.io.ObjectInputStream in = new java.io.ObjectInputStream(
+                new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
+            copy = (DriverException) in.readObject();
+        }
+
+        assertFalse(copy.databaseMessage().isPresent());
+        assertFalse(new String(bytes.toByteArray(), java.nio.charset.StandardCharsets.ISO_8859_1).contains("ana@"));
     }
 }

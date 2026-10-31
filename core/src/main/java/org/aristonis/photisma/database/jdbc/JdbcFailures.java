@@ -60,6 +60,7 @@ final class JdbcFailures {
         DatabaseFamily family = DatabaseFamily.of(productName);
         String state = null;
         int vendorCode = 0;
+        String databaseMessage = null;
         boolean isConnectionFailure = false;
         Set<DriverFailureKind> kinds = EnumSet.noneOf(DriverFailureKind.class);
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -76,6 +77,9 @@ final class JdbcFailures {
             if (vendorCode == 0 && code != 0) {
                 vendorCode = code;
             }
+            if (databaseMessage == null && sql.getMessage() != null) {
+                databaseMessage = sql.getMessage();
+            }
             if (s != null && s.startsWith(CONNECTION_STATE_CLASS)) {
                 isConnectionFailure = true;
             }
@@ -89,7 +93,8 @@ final class JdbcFailures {
         if (isConnectionFailure) {
             kinds.remove(DriverFailureKind.CONCURRENCY);
         }
-        return new DriverException(message(state, vendorCode), state, vendorCode, failure, kinds);
+        return new DriverException(
+                message(state, vendorCode), state, vendorCode, databaseMessage, failure, kinds);
     }
 
     /**

@@ -119,6 +119,18 @@ class JdbcSqliteTest {
         QueryException error = assertThrows(QueryException.class, () -> db.select("select * from missing"));
 
         assertEquals("select * from missing", error.getSql());
+        assertFalse(error.getMessage().contains("no such table"), "hidden by default");
+        assertTrue(error.getMessage().contains("vendor code 1"));
+    }
+
+    @Test
+    void showsTheDatabaseReasonWhenValuesAreShown() {
+        Connection verbose = Connection.builder().name("sqlite").dataSource(dataSource).showBindingsInErrors(true).build();
+
+        QueryException error = assertThrows(QueryException.class, () -> verbose.select("select * from missing"));
+
+        assertTrue(error.getMessage().contains("Reason: ") && error.getMessage().contains("no such table: missing"),
+                error.getMessage());
     }
 
     @Test

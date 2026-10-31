@@ -15,7 +15,8 @@ import java.util.Set;
  *     state and vendor code, never from bound values and never from the database's raw error text,
  *     which often echoes the offending values. The core keeps binding values out of every message it
  *     builds and shows them only when the application opts in; a message that carries them would
- *     defeat that. The database's own exception may be passed as the cause.
+ *     defeat that. The raw text goes in {@link #databaseMessage()} instead, which the core shows
+ *     under the same opt-in. The database's own exception may be passed as the cause.
  */
 public final class DriverException extends RuntimeException {
 
@@ -33,6 +34,12 @@ public final class DriverException extends RuntimeException {
      * it only through the unmodifiable view {@link #kinds()} returns.
      */
     private final EnumSet<DriverFailureKind> kinds;
+    /**
+     * The database's own error text, or {@code null}. It may echo values, so it is shown only on
+     * opt-in and this field is left out of the serialized form; the cause, when a driver passes the
+     * database's own exception, still carries the same text.
+     */
+    private final transient String databaseMessage;
 
     /**
      * Creates a driver failure.
@@ -47,6 +54,23 @@ public final class DriverException extends RuntimeException {
      */
     public DriverException(
             String message, String sqlState, int vendorCode, Throwable cause, Set<DriverFailureKind> kinds) {
+        this(message, sqlState, vendorCode, null, cause, kinds);
+    }
+
+    /**
+     * Creates a driver failure that keeps the database's own error text.
+     *
+     * @param message the detail message, may be {@code null}; must not contain the database text
+     * @param sqlState the SQL state the database reported, or {@code null} when it gave none
+     * @param vendorCode the vendor-specific error code, {@code 0} when there is none
+     * @param databaseMessage the database's own error text, or {@code null} when there is none
+     * @param cause the underlying failure, or {@code null} when there is none
+     * @param kinds the kinds the driver assigns to this failure, never {@code null}, may be empty;
+     *     the set is copied and later changes to it have no effect
+     * @throws NullPointerException if {@code kinds} or any element of it is {@code null}
+     */
+    public DriverException(String message, String sqlState, int vendorCode, String databaseMessage,
+            Throwable cause, Set<DriverFailureKind> kinds) {
         super(message, cause);
         Objects.requireNonNull(kinds, "kinds");
         // EnumSet.copyOf(Collection) throws on an empty set that is not an EnumSet.
@@ -56,6 +80,7 @@ public final class DriverException extends RuntimeException {
         }
         this.sqlState = sqlState;
         this.vendorCode = vendorCode;
+        this.databaseMessage = databaseMessage;
         this.kinds = copy;
     }
 
@@ -73,6 +98,20 @@ public final class DriverException extends RuntimeException {
      */
     public DriverException(String message, Set<DriverFailureKind> kinds, Throwable cause) {
         this(message, null, 0, cause, kinds);
+    }
+
+    /**
+     * Returns the database's own error text, such as {@code no such table: users}.
+     *
+     * <p>The text can echo the values that caused the failure, so it is not part of
+     * {@link #getMessage()} and this field is not serialized. The {@linkplain #getCause() cause}
+     * may still hold the same text: logging or serializing the whole exception chain shows it,
+     * whatever the connection's settings.
+     *
+     * @return the text, or empty when the database gave none or the exception was deserialized
+     */
+    public Optional<String> databaseMessage() {
+        return Optional.ofNullable(databaseMessage);
     }
 
     /**
