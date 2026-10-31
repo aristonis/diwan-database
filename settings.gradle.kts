@@ -4,4 +4,4 @@ pluginManagement {
 
 rootProject.name = "diwan-database"
 
-include("core", "sqlite")
+include("core", "sqlite", "pgsql")

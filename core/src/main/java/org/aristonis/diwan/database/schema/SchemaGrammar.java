@@ -96,6 +96,8 @@ public abstract class SchemaGrammar {
                 return compileDropColumn(blueprint, command, connection);
             case Command.RENAME_COLUMN:
                 return compileRenameColumn(blueprint, command, connection);
+            case Command.CHANGE:
+                return compileChange(blueprint, command, connection);
             case Command.CHECK:
                 return compileCheck(blueprint, command, connection);
             case Command.DROP_CHECK:
@@ -310,6 +312,21 @@ public abstract class SchemaGrammar {
      * @throws UnsupportedOperationException if the grammar does not support the command
      */
     protected List<String> compileDropColumn(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#CHANGE}: redefining an existing column.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileChange(Blueprint blueprint, Command command, Connection connection) {
         throw unsupported("The command " + command.name());
     }
 
