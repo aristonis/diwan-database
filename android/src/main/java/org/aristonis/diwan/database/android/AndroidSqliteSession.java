@@ -1,0 +1,358 @@
+package org.aristonis.diwan.database.android;
+
+import android.database.Cursor;
+import android.database.sqlite.SQLiteCursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteProgram;
+import android.database.sqlite.SQLiteStatement;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAccessor;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Pattern;
+import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.driver.DriverSession;
+
+/**
+ * One session over the shared {@link SQLiteDatabase}.
+ *
+ * <p>Android ties a transaction to the thread that began it: statements from another thread run
+ * outside it, and only that thread can end it. So a transaction, and every statement inside it,
+ * stays on the thread that began it; ending it from another thread fails and leaves it for its own
+ * thread to end. Closing or discarding the session ends a transaction it began without committing
+ * it, and leaves the database open.
+ */
+final class AndroidSqliteSession implements DriverSession {
+
+    private static final Pattern SAVEPOINT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,29}");
+
+    private final SQLiteDatabase database;
+    private final List<String> savepoints = new ArrayList<>();
+    private boolean hasBegun;
+    private Thread owner;
+    private boolean isClosed;
+
+    AndroidSqliteSession(SQLiteDatabase database) {
+        this.database = database;
+    }
+
+    @Override
+    public List<Map<String, Object>> query(String sql, List<Object> bindings) {
+        ensureOpen();
+        Objects.requireNonNull(sql, "sql");
+        List<Object> values = convert(bindings);
+        try (Cursor cursor = database.rawQueryWithFactory((db, driver, editTable, query) -> {
+            bindAll(query, values);
+            return new SQLiteCursor(driver, editTable, query);
+        }, sql, null, null)) {
+            String[] labels = cursor.getColumnNames();
+            refuseRepeated(labels);
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (cursor.moveToNext()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 0; i < labels.length; i++) {
+                    row.put(labels[i], read(cursor, i));
+                }
+                rows.add(row);
+            }
+            return rows;
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    @Override
+    public int update(String sql, List<Object> bindings) {
+        ensureOpen();
+        try (SQLiteStatement statement = prepare(sql, bindings)) {
+            return statement.executeUpdateDelete();
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    @Override
+    public boolean execute(String sql, List<Object> bindings) {
+        ensureOpen();
+        try (SQLiteStatement statement = prepare(sql, bindings)) {
+            statement.execute();
+            return false;
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    @Override
+    public void executeUnprepared(String sql) {
+        ensureOpen();
+        try {
+            database.execSQL(Objects.requireNonNull(sql, "sql"));
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    @Override
+    public boolean inExternalTransaction() {
+        ensureOpen();
+        return !hasBegun && database.inTransaction();
+    }
+
+    @Override
+    public void begin() {
+        ensureOpen();
+        if (hasBegun) {
+            throw new IllegalStateException("A transaction is already open");
+        }
+        if (database.inTransaction()) {
+            throw new IllegalStateException("The thread is already inside a transaction this session did not begin");
+        }
+        try {
+            database.beginTransaction();
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+        hasBegun = true;
+        owner = Thread.currentThread();
+    }
+
+    @Override
+    public void commit() {
+        ensureOpen();
+        requireBegun();
+        requireOwner();
+        try {
+            database.setTransactionSuccessful();
+            database.endTransaction();
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+        ended();
+    }
+
+    @Override
+    public void rollback() {
+        ensureOpen();
+        requireBegun();
+        requireOwner();
+        end();
+    }
+
+    @Override
+    public void savepoint(String name) {
+        ensureOpen();
+        requireBegun();
+        checkName(name);
+        String key = name.toLowerCase(Locale.ROOT);
+        if (savepoints.contains(key)) {
+            throw new IllegalArgumentException("savepoint already exists: " + name);
+        }
+        executeUnprepared("savepoint " + name);
+        savepoints.add(key);
+    }
+
+    @Override
+    public void rollbackToSavepoint(String name) {
+        ensureOpen();
+        int at = requireSavepoint(name);
+        executeUnprepared("rollback to savepoint " + name);
+        // The rolled-back-to savepoint survives; every later one is gone.
+        savepoints.subList(at + 1, savepoints.size()).clear();
+    }
+
+    @Override
+    public void releaseSavepoint(String name) {
+        ensureOpen();
+        int at = requireSavepoint(name);
+        executeUnprepared("release savepoint " + name);
+        savepoints.subList(at, savepoints.size()).clear();
+    }
+
+    @Override
+    public void close() {
+        if (isClosed) {
+            return;
+        }
+        if (hasBegun) {
+            requireOwner();
+            end();
+        }
+        isClosed = true;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote The database is shared and stays open; discarding ends an open transaction this
+     *     session began without committing it, which is all a later user could inherit.
+     */
+    @Override
+    public void discard() {
+        close();
+    }
+
+    // State is cleared only once Android has ended the transaction, so a failure leaves it to retry.
+    private void end() {
+        try {
+            database.endTransaction();
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+        ended();
+    }
+
+    private void ended() {
+        hasBegun = false;
+        owner = null;
+        savepoints.clear();
+    }
+
+    private void requireOwner() {
+        if (owner != Thread.currentThread()) {
+            throw new IllegalStateException("The transaction belongs to thread " + owner.getName()
+                    + "; Android lets only that thread end it");
+        }
+    }
+
+    private SQLiteStatement prepare(String sql, List<Object> bindings) {
+        SQLiteStatement statement = database.compileStatement(Objects.requireNonNull(sql, "sql"));
+        try {
+            bindAll(statement, convert(bindings));
+            return statement;
+        } catch (RuntimeException e) {
+            statement.close();
+            throw e;
+        }
+    }
+
+    private static void bindAll(SQLiteProgram program, List<Object> values) {
+        for (int i = 0; i < values.size(); i++) {
+            Object value = values.get(i);
+            int index = i + 1;
+            if (value == null) {
+                program.bindNull(index);
+            } else if (value instanceof Long) {
+                program.bindLong(index, (Long) value);
+            } else if (value instanceof Double) {
+                program.bindDouble(index, (Double) value);
+            } else if (value instanceof byte[]) {
+                program.bindBlob(index, (byte[]) value);
+            } else {
+                program.bindString(index, (String) value);
+            }
+        }
+    }
+
+    // SQLite has four value types; everything else is stored as the JDBC driver stores it on SQLite.
+    static List<Object> convert(List<Object> bindings) {
+        Objects.requireNonNull(bindings, "bindings");
+        List<Object> values = new ArrayList<>(bindings.size());
+        for (Object value : bindings) {
+            values.add(convert(value));
+        }
+        return values;
+    }
+
+    private static Object convert(Object value) {
+        if (value == null || value instanceof String || value instanceof byte[]) {
+            return value;
+        }
+        if (value instanceof Boolean) {
+            return ((Boolean) value) ? 1L : 0L;
+        }
+        if (value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof BigInteger) {
+            BigInteger number = (BigInteger) value;
+            // Past a long, stored as text, as the JDBC driver stores it through BigDecimal.
+            return number.bitLength() < Long.SIZE ? (Object) number.longValue() : number.toString();
+        }
+        if (value instanceof Double || value instanceof Float) {
+            return ((Number) value).doubleValue();
+        }
+        if (value instanceof BigDecimal) {
+            return ((BigDecimal) value).toPlainString();
+        }
+        if (value instanceof Instant) {
+            return OffsetDateTime.ofInstant((Instant) value, ZoneOffset.UTC).toString();
+        }
+        if (value instanceof TemporalAccessor) {
+            return value.toString();
+        }
+        throw new IllegalArgumentException("Unsupported binding type " + value.getClass().getName());
+    }
+
+    private static Object read(Cursor cursor, int column) {
+        switch (cursor.getType(column)) {
+            case Cursor.FIELD_TYPE_NULL:
+                return null;
+            case Cursor.FIELD_TYPE_INTEGER:
+                return cursor.getLong(column);
+            case Cursor.FIELD_TYPE_FLOAT:
+                return cursor.getDouble(column);
+            case Cursor.FIELD_TYPE_BLOB:
+                return cursor.getBlob(column);
+            default:
+                return cursor.getString(column);
+        }
+    }
+
+    private static void refuseRepeated(String[] labels) {
+        List<String> seen = new ArrayList<>();
+        for (String label : labels) {
+            if (seen.contains(label)) {
+                throw new DriverException("The result has the column label " + label + " twice",
+                        java.util.Collections.emptySet(), null);
+            }
+            seen.add(label);
+        }
+    }
+
+    private static DriverException translate(RuntimeException failure) {
+        if (failure instanceof DriverException) {
+            return (DriverException) failure;
+        }
+        if (AndroidSqliteFailures.isSqliteFailure(failure)) {
+            return AndroidSqliteFailures.translate(failure);
+        }
+        throw failure;
+    }
+
+    private static void checkName(String name) {
+        if (name == null || !SAVEPOINT_NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException(
+                    "savepoint name must be 1 to 30 ASCII letters, digits or underscores, not starting with a digit");
+        }
+    }
+
+    private int requireSavepoint(String name) {
+        checkName(name);
+        // SQLite compares savepoint names without case.
+        int at = savepoints.indexOf(name.toLowerCase(Locale.ROOT));
+        if (at < 0) {
+            throw new IllegalArgumentException("no such savepoint: " + name);
+        }
+        return at;
+    }
+
+    private void requireBegun() {
+        if (!hasBegun) {
+            throw new IllegalStateException("No transaction is open");
+        }
+    }
+
+    private void ensureOpen() {
+        if (isClosed) {
+            throw new IllegalStateException("The session is closed");
+        }
+    }
+}
