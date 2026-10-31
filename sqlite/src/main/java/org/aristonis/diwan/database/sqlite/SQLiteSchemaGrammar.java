@@ -43,11 +43,14 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     // Native ALTER TABLE forms; older versions, such as Android 9's 3.22, rebuild the table instead.
     private static final int[] RENAME_COLUMN_SINCE = {3, 25, 0};
     private static final int[] DROP_COLUMN_SINCE = {3, 35, 0};
+    private static final int[] GENERATED_COLUMNS_SINCE = {3, 31, 0};
+    private static final int[] TABLE_XINFO_SINCE = {3, 26, 0};
 
     private static final String[] KEY_CHANGES = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
-        Command.DROP_FOREIGN};
+        Command.DROP_FOREIGN, Command.CHECK, Command.DROP_CHECK};
     private static final String[] STATEFUL = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
-        Command.DROP_FOREIGN, Command.RENAME_INDEX, Command.DROP_COLUMN, Command.RENAME_COLUMN};
+        Command.DROP_FOREIGN, Command.RENAME_INDEX, Command.DROP_COLUMN, Command.RENAME_COLUMN, Command.CHECK,
+        Command.DROP_CHECK};
 
     // Laravel's SQLite default for year()->useCurrent().
     private static final String CURRENT_YEAR = "(CAST(strftime('%Y', 'now') AS INTEGER))";
@@ -75,10 +78,43 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<String> compile(Blueprint blueprint, Connection connection) {
-        if (blueprint.isCreating() || !hasAny(blueprint, STATEFUL)) {
+        refuseOldGenerated(blueprint, connection);
+        refuseUncarriedRaw(blueprint);
+        if (blueprint.isCreating() || !hasAny(blueprint, STATEFUL) && !hasRebuildingAdd(blueprint)) {
             return super.compile(blueprint, connection);
         }
         return new SQLiteTableRebuild(this, blueprint, connection).compile();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code "sqlite"}
+     */
+    @Override
+    public String driverName() {
+        return "sqlite";
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return no statement on a new table, whose create statement holds the check; an existing
+     *     table is rebuilt by {@link #compile(Blueprint, Connection)} instead
+     */
+    @Override
+    protected List<String> compileCheck(Blueprint blueprint, Command command, Connection connection) {
+        return Collections.emptyList();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code true}
+     */
+    @Override
+    protected boolean supportsColumnClauses() {
+        return true;
     }
 
     /**
@@ -115,6 +151,11 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                         definition.referencedColumns(),
                         definition.deleteAction().map(ForeignKeyAction::sql).orElse(null),
                         definition.updateAction().map(ForeignKeyAction::sql).orElse(null)));
+            }
+        }
+        for (Command check : blueprint.commands()) {
+            if (Command.CHECK.equals(check.name())) {
+                columns.append(", ").append(tableCheck(check.string(Command.NAME), check.string(Command.SQL)));
             }
         }
         return "create table " + wrapTable(blueprint.table()) + " (" + columns + ")";
@@ -308,7 +349,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     protected boolean requiresForeignKeysOff(Blueprint blueprint) {
-        return !blueprint.isCreating() && (hasAny(blueprint, KEY_CHANGES)
+        return !blueprint.isCreating() && (hasAny(blueprint, KEY_CHANGES) || hasRebuildingAdd(blueprint)
                 || hasAny(blueprint, new String[] {Command.DROP_COLUMN, Command.RENAME_COLUMN}));
     }
 
@@ -420,6 +461,8 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                 return "blob";
             case ENUM:
                 return "varchar " + enumCheck(column.name(), column.allowed());
+            case RAW:
+                return column.rawDefinition().orElseThrow(IllegalStateException::new);
             default:
                 return super.type(column);
         }
@@ -428,16 +471,22 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return the auto-increment key, {@code not null} unless nullable, and the default, in
-     *     Laravel's order; collation and generated columns are not supported yet
+     * @return the auto-increment key, {@code not null} unless nullable (on a generated column only
+     *     after {@code nullable(false)}), the default and the generated expression, in Laravel's
+     *     order, then each check; a raw column gets only its checks, since its SQL says the rest;
+     *     collation is not supported yet
      */
     @Override
     protected String modifiers(Blueprint blueprint, ColumnDefinition column) {
         StringBuilder sql = new StringBuilder();
+        if (column.type() == ColumnType.RAW) {
+            appendChecks(sql, column);
+            return sql.toString();
+        }
         if (column.isAutoIncrement()) {
             sql.append(" primary key autoincrement");
         }
-        if (!column.isNullable()) {
+        if (column.isGenerated() ? column.isNotNullStated() : !column.isNullable()) {
             sql.append(" not null");
         }
         if (column.defaultValue().isPresent()) {
@@ -445,7 +494,68 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         } else if (column.type() == ColumnType.YEAR && column.usesCurrent()) {
             sql.append(" default ").append(CURRENT_YEAR);
         }
+        if (column.virtualAs().isPresent()) {
+            sql.append(" as (").append(column.virtualAs().get()).append(')');
+        } else if (column.storedAs().isPresent()) {
+            sql.append(" as (").append(column.storedAs().get()).append(") stored");
+        }
+        appendChecks(sql, column);
         return sql.toString();
+    }
+
+    private static void appendChecks(StringBuilder sql, ColumnDefinition column) {
+        for (String check : column.checks()) {
+            sql.append(" check (").append(check).append(')');
+        }
+    }
+
+    // The rebuild can carry only what it reads back; a raw column with COLLATE would make the table
+    // unchangeable later, and on an existing table the guards for generated columns and checks
+    // cannot see inside raw text, so those belong in the builder's own methods.
+    private static void refuseUncarriedRaw(Blueprint blueprint) {
+        for (ColumnDefinition column : blueprint.columns()) {
+            if (column.type() != ColumnType.RAW) {
+                continue;
+            }
+            List<SQLiteSqlTokens.Token> tokens = SQLiteSqlTokens.tokenize(column.rawDefinition().orElse(""));
+            if (SQLiteSqlTokens.hasWord(tokens, "collate")) {
+                throw new UnsupportedOperationException("Raw column " + column.name() + " has a COLLATE clause,"
+                        + " which a SQLite table rebuild cannot carry over");
+            }
+            if (!blueprint.isCreating() && (SQLiteSqlTokens.hasWord(tokens, "as")
+                    || SQLiteSqlTokens.hasWord(tokens, "check") || SQLiteSqlTokens.hasWord(tokens, "generated"))) {
+                throw new UnsupportedOperationException("Raw column " + column.name() + " on an existing table"
+                        + " cannot hold a check or generated expression; use check(), virtualAs() or storedAs()");
+            }
+        }
+    }
+
+    String tableCheck(String name, String sql) {
+        return "constraint " + wrap(name) + " check (" + sql + ")";
+    }
+
+    private void refuseOldGenerated(Blueprint blueprint, Connection connection) {
+        for (ColumnDefinition column : blueprint.columns()) {
+            if (column.isGenerated() && !atLeast(version(connection), GENERATED_COLUMNS_SINCE)) {
+                throw new UnsupportedOperationException("Generated columns need SQLite 3.31 or later; this database"
+                        + " runs " + version(connection));
+            }
+        }
+    }
+
+    // SQLite cannot add a stored column, and before 3.37 does not test a new column's check against
+    // existing rows; the rebuild copies every row through the new definition instead.
+    static boolean isRebuildingAdd(ColumnDefinition column) {
+        return !column.checks().isEmpty() || column.storedAs().isPresent();
+    }
+
+    private static boolean hasRebuildingAdd(Blueprint blueprint) {
+        for (Command command : blueprint.commands()) {
+            if (Command.ADD.equals(command.name()) && isRebuildingAdd(command.column())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Writes an enum's check exactly as Laravel does; the table rebuild reads it back in this form. */
@@ -518,6 +628,10 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
 
     boolean supportsRenameColumn(Connection connection) {
         return atLeast(version(connection), RENAME_COLUMN_SINCE);
+    }
+
+    boolean supportsTableXinfo(Connection connection) {
+        return atLeast(version(connection), TABLE_XINFO_SINCE);
     }
 
     boolean supportsDropColumn(Connection connection) {

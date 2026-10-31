@@ -42,6 +42,7 @@ public abstract class SchemaGrammar {
     public List<String> compile(Blueprint blueprint, Connection connection) {
         Objects.requireNonNull(blueprint, "blueprint");
         Objects.requireNonNull(connection, "connection");
+        refuseUnwrittenClauses(blueprint);
         List<String> statements = new ArrayList<>();
         for (Command command : blueprint.commands()) {
             statements.addAll(compileCommand(blueprint, command, connection));
@@ -95,6 +96,10 @@ public abstract class SchemaGrammar {
                 return compileDropColumn(blueprint, command, connection);
             case Command.RENAME_COLUMN:
                 return compileRenameColumn(blueprint, command, connection);
+            case Command.CHECK:
+                return compileCheck(blueprint, command, connection);
+            case Command.DROP_CHECK:
+                return compileDropCheck(blueprint, command, connection);
             default:
                 throw unsupported("The command " + command.name());
         }
@@ -309,6 +314,67 @@ public abstract class SchemaGrammar {
     }
 
     /**
+     * Compiles {@link Command#CHECK}: adding a named table check.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileCheck(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#DROP_CHECK}: dropping a named table check.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileDropCheck(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Tells whether {@link #modifiers(Blueprint, ColumnDefinition)} writes column checks and
+     * generated expressions.
+     *
+     * @implSpec The base returns {@code false}, so a grammar that has not learned them refuses such
+     *     a column instead of creating it without them.
+     *
+     * @return {@code true} if the grammar writes them
+     */
+    protected boolean supportsColumnClauses() {
+        return false;
+    }
+
+    /**
+     * Refuses columns whose checks or generated expressions this grammar would leave out.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @throws UnsupportedOperationException if a column has a check or generated expression and
+     *     {@link #supportsColumnClauses()} is {@code false}
+     */
+    protected final void refuseUnwrittenClauses(Blueprint blueprint) {
+        if (supportsColumnClauses()) {
+            return;
+        }
+        for (ColumnDefinition column : blueprint.columns()) {
+            if (!column.checks().isEmpty() || column.isGenerated()) {
+                throw unsupported("Checks and generated columns");
+            }
+        }
+    }
+
+    /**
      * Compiles {@link Command#RENAME_COLUMN}: renaming a column.
      *
      * @implSpec The base refuses the command.
@@ -441,6 +507,19 @@ public abstract class SchemaGrammar {
      */
     public SchemaQuery compileColumnNames(Connection connection, String table) {
         throw unsupported("Listing columns");
+    }
+
+    /**
+     * Returns Laravel's short name of the database this grammar writes for, such as
+     * {@code "sqlite"} or {@code "pgsql"}, so a migration can branch on it.
+     *
+     * @implSpec The base refuses; every grammar that ships with the library overrides it.
+     *
+     * @return the name, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not name its database
+     */
+    public String driverName() {
+        throw unsupported("Naming the database");
     }
 
     /**

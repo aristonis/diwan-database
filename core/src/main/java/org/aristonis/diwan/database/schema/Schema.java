@@ -281,6 +281,35 @@ public final class Schema {
         return new Blueprint(prefixed(table), connection.getTablePrefix(), isCreating);
     }
 
+    /**
+     * Runs one statement as given, for what the builder cannot say.
+     *
+     * <p>Like the other calls, it runs on this schema's connection: inside a migration it joins the
+     * migration's transaction, and under {@link #pretend(Consumer)} it is recorded, not run. The SQL
+     * is trusted, like an {@code Expression}: build it from constants only, never from user input. A
+     * migration that the migrator runs again with foreign keys off, after a SQLite table rebuild
+     * was refused, runs its statements again too, so keep them to the database.
+     *
+     * @param sql the statement, never {@code null} or blank
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code sql} is blank
+     * @throws org.aristonis.diwan.database.QueryException if the statement fails
+     */
+    public void statement(String sql) {
+        connection.statement(ColumnDefinition.trustedSql("statement", sql));
+    }
+
+    /**
+     * Returns Laravel's short name of this schema's database, such as {@code "sqlite"} or
+     * {@code "pgsql"}.
+     *
+     * @return the name, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not name its database
+     */
+    public String driverName() {
+        return grammar.driverName();
+    }
+
     private boolean isPretending() {
         return reader != connection;
     }

@@ -86,17 +86,21 @@ class SQLiteEnumRebuildTest {
     }
 
     @Test
-    void aCheckOnAnotherColumnIsRefused() {
+    void aCheckOnAnotherColumnIsCarriedWhereItWasWritten() {
         db.statement("create table odd (a varchar check (\"b\" in ('x')), b varchar)");
 
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("odd", t -> t.primary("a")));
+        schema.table("odd", t -> t.primary("a"));
+
+        assertThrows(QueryException.class, () -> db.insert("insert into odd (a, b) values ('1', 'y')"));
     }
 
     @Test
-    void aTableLevelCheckIsRefusedEvenInEnumShape() {
+    void aTableLevelCheckInEnumShapeStaysATableCheck() {
         db.statement("create table odd (a varchar, check (\"a\" in ('x')))");
 
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("odd", t -> t.primary("a")));
+        schema.table("odd", t -> t.primary("a"));
+
+        assertThrows(QueryException.class, () -> db.insert("insert into odd (a) values ('y')"));
     }
 
     @Test
@@ -111,10 +115,12 @@ class SQLiteEnumRebuildTest {
     }
 
     @Test
-    void anEnumCheckWrittenDifferentlyIsRefused() {
+    void anEnumCheckWrittenDifferentlyIsCarriedAsAPlainCheck() {
         db.statement("create table odd (s varchar check (\"s\" in ('x','y')))");
 
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("odd", t -> t.primary("s")));
+        schema.table("odd", t -> t.primary("s"));
+
+        assertThrows(QueryException.class, () -> db.insert("insert into odd (s) values ('z')"));
     }
 
     @Test
@@ -128,14 +134,16 @@ class SQLiteEnumRebuildTest {
     }
 
     @Test
-    void collationGeneratedColumnsAndWithoutRowidAreStillRefused() {
+    void collationAndWithoutRowidAreStillRefusedWhileGeneratedColumnsAreCarried() {
         db.statement("create table c1 (s text collate nocase)");
         db.statement("create table c2 (a integer, b integer as (a * 2))");
         db.statement("create table c3 (a integer primary key) without rowid");
 
         assertThrows(UnsupportedOperationException.class, () -> schema.table("c1", t -> t.primary("s")));
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("c2", t -> t.primary("a")));
+        schema.table("c2", t -> t.primary("a"));
         assertThrows(UnsupportedOperationException.class, () -> schema.table("c3", t -> t.dropPrimary()));
+        db.insert("insert into c2 (a) values (4)");
+        assertEquals(8, ((Number) db.scalar("select b from c2").get()).intValue());
     }
 
     @Test
@@ -168,11 +176,14 @@ class SQLiteEnumRebuildTest {
     }
 
     @Test
-    void namedChecksAndStrictTablesAreRefused() {
+    void namedChecksAreCarriedAndStrictTablesRefused() {
         db.statement("create table named (s varchar constraint s_values check (\"s\" in ('x')))");
         db.statement("create table strict_t (a integer, b text) strict");
 
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("named", t -> t.primary("s")));
+        schema.table("named", t -> t.primary("s"));
         assertThrows(UnsupportedOperationException.class, () -> schema.table("strict_t", t -> t.primary("a")));
+        assertThrows(QueryException.class, () -> db.insert("insert into named (s) values ('y')"));
+        assertTrue(db.scalar("select sql from sqlite_master where name = 'named'").get().toString()
+                .contains("constraint s_values check"));
     }
 }

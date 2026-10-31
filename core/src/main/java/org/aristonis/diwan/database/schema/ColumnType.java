@@ -68,7 +68,9 @@ public enum ColumnType {
     /** One value out of a fixed list. */
     ENUM,
     /** Any number of values out of a fixed list. */
-    SET;
+    SET,
+    /** A column whose whole type is SQL the caller writes. */
+    RAW;
 
     /**
      * Tells whether the type is an integer that can count up as a key.

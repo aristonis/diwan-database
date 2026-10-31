@@ -51,6 +51,10 @@ public final class Command {
     public static final String DROP_COLUMN = "dropColumn";
     /** Renames a column; attributes {@link #FROM} and {@link #TO}. */
     public static final String RENAME_COLUMN = "renameColumn";
+    /** Adds a named table check; attributes {@link #NAME} and {@link #SQL}. */
+    public static final String CHECK = "check";
+    /** Drops a named table check; attribute {@link #NAME}. */
+    public static final String DROP_CHECK = "dropCheck";
 
     /** Attribute holding a {@link ColumnDefinition}. */
     public static final String COLUMN = "column";
@@ -62,6 +66,10 @@ public final class Command {
     public static final String TO = "to";
     /** Attribute holding the old name of an index or column, a {@code String}. */
     public static final String FROM = "from";
+    /** Attribute holding the name of a constraint that is not an index, such as a check, a {@code String}. */
+    public static final String NAME = "name";
+    /** Attribute holding trusted SQL, a {@code String}. */
+    public static final String SQL = "sql";
     /** Attribute holding a {@link ForeignKeyDefinition}. */
     public static final String FOREIGN_KEY = "foreignKey";
 

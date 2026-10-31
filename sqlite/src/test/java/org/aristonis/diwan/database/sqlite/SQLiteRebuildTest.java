@@ -256,13 +256,11 @@ class SQLiteRebuildTest {
 
     @Test
     void tablesWithFeaturesARebuildWouldLoseAreRefused() {
-        db.statement("create table checked (n integer check (n > 0))");
         db.statement("create table triggered (n integer)");
         db.statement("create trigger t_ins after insert on triggered begin select 1; end");
         db.statement("create table viewed (n integer)");
         db.statement("create view v as select n from viewed");
 
-        assertThrows(UnsupportedOperationException.class, () -> schema.table("checked", t -> t.primary("n")));
         assertThrows(UnsupportedOperationException.class, () -> schema.table("triggered", t -> t.primary("n")));
         assertThrows(UnsupportedOperationException.class, () -> schema.table("viewed", t -> t.primary("n")));
     }

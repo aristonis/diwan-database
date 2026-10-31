@@ -44,6 +44,11 @@ public class ColumnDefinition {
     private boolean isPrimary;
     private boolean isUnsigned;
     private String comment;
+    private final List<String> checks = new ArrayList<>();
+    private String virtualAs;
+    private String storedAs;
+    private String rawDefinition;
+    private boolean isNotNullStated;
     private boolean isChange;
     private boolean dropsUnique;
     private boolean dropsIndex;
@@ -85,6 +90,7 @@ public class ColumnDefinition {
     public ColumnDefinition nullable(boolean isNullable) {
         ensureOpen();
         this.isNullable = isNullable;
+        this.isNotNullStated = !isNullable;
         return this;
     }
 
@@ -270,6 +276,62 @@ public class ColumnDefinition {
         ensureOpen();
         this.isPrimary = false;
         this.dropsPrimary = true;
+        return this;
+    }
+
+    /**
+     * Adds a {@code CHECK} constraint on this column. Several checks are kept in the order given.
+     *
+     * <p>The SQL is written into the statement as given, like an {@link Expression}: build it from
+     * constants only, never from user input. On SQLite, adding a checked column to an existing table
+     * copies the whole table, so add such columns in one {@code Schema.table} call.
+     *
+     * @param sql the condition, without the {@code check} keyword or outer parentheses, never
+     *     {@code null} or blank
+     * @return this definition
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code sql} is blank
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition check(String sql) {
+        ensureOpen();
+        checks.add(trustedSql("check", sql));
+        return this;
+    }
+
+    /**
+     * Makes this a generated column the database computes on every read.
+     *
+     * <p>The SQL is written as given, like an {@link Expression}: build it from constants only, never from user input. A
+     * generated column cannot have a default, {@code useCurrent}, auto-increment or a primary key.
+     *
+     * @param sql the expression, never {@code null} or blank
+     * @return this definition
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code sql} is blank
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition virtualAs(String sql) {
+        ensureOpen();
+        this.virtualAs = trustedSql("virtualAs", sql);
+        return this;
+    }
+
+    /**
+     * Makes this a generated column the database computes on write and stores.
+     *
+     * <p>The SQL is written as given, like an {@link Expression}: build it from constants only, never from user input. A
+     * generated column cannot have a default, {@code useCurrent}, auto-increment or a primary key.
+     *
+     * @param sql the expression, never {@code null} or blank
+     * @return this definition
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code sql} is blank
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition storedAs(String sql) {
+        ensureOpen();
+        this.storedAs = trustedSql("storedAs", sql);
         return this;
     }
 
@@ -480,6 +542,63 @@ public class ColumnDefinition {
     }
 
     /**
+     * Returns the column's {@code CHECK} conditions.
+     *
+     * @return the conditions in the order given, unmodifiable; empty when there are none
+     */
+    public List<String> checks() {
+        return Collections.unmodifiableList(checks);
+    }
+
+    /**
+     * Returns the expression of a virtual generated column.
+     *
+     * @return the expression set with {@link #virtualAs(String)}, or empty
+     */
+    public Optional<String> virtualAs() {
+        return Optional.ofNullable(virtualAs);
+    }
+
+    /**
+     * Returns the expression of a stored generated column.
+     *
+     * @return the expression set with {@link #storedAs(String)}, or empty
+     */
+    public Optional<String> storedAs() {
+        return Optional.ofNullable(storedAs);
+    }
+
+    /**
+     * Tells whether the database computes the column.
+     *
+     * @return {@code true} after {@link #virtualAs(String)} or {@link #storedAs(String)}
+     */
+    public boolean isGenerated() {
+        return virtualAs != null || storedAs != null;
+    }
+
+    /**
+     * Returns the SQL that stands for the type of a {@link ColumnType#RAW} column.
+     *
+     * @return the definition given to {@code Blueprint.rawColumn}, or empty for other types
+     */
+    public Optional<String> rawDefinition() {
+        return Optional.ofNullable(rawDefinition);
+    }
+
+    /**
+     * Tells whether {@code nullable(false)} was called.
+     *
+     * <p>Grammars use it for generated columns, which, as in Laravel, are not marked
+     * {@code not null} unless asked: their value follows the columns they are computed from.
+     *
+     * @return {@code true} after {@code nullable(false)}
+     */
+    public boolean isNotNullStated() {
+        return isNotNullStated;
+    }
+
+    /**
      * Tells whether the column redefines an existing one.
      *
      * @return {@code true} after {@link #change()}
@@ -508,8 +627,27 @@ public class ColumnDefinition {
         return Optional.ofNullable(uniqueIndex);
     }
 
+    void rawDefinition(String sql) {
+        this.rawDefinition = trustedSql("rawColumn", sql);
+    }
+
     void freeze() {
+        if (virtualAs != null && storedAs != null) {
+            throw new IllegalArgumentException("Column " + name + " cannot be both virtualAs and storedAs");
+        }
+        if (isGenerated() && (defaultValue != null || usesCurrent || isAutoIncrement || isPrimary)) {
+            throw new IllegalArgumentException("Generated column " + name
+                    + " cannot have a default, useCurrent, auto-increment or a primary key");
+        }
         isFrozen = true;
+    }
+
+    static String trustedSql(String what, String sql) {
+        Objects.requireNonNull(sql, "sql");
+        if (sql.trim().isEmpty()) {
+            throw new IllegalArgumentException("The SQL of " + what + " is blank");
+        }
+        return sql;
     }
 
     private void ensureOpen() {

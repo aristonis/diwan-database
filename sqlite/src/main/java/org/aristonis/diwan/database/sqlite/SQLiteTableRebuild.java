@@ -32,6 +32,8 @@ final class SQLiteTableRebuild {
     private final Connection connection;
     private final SQLiteTableState state;
     private final List<String> statements = new ArrayList<>();
+    // Old names of columns SQLite renamed in place; its own rewrite of expressions is not in the state.
+    private final List<String> renamedInPlace = new ArrayList<>();
     private boolean isRebuildPending;
 
     SQLiteTableRebuild(SQLiteSchemaGrammar grammar, Blueprint blueprint, Connection connection) {
@@ -46,6 +48,9 @@ final class SQLiteTableRebuild {
             apply(command);
         }
         if (isRebuildPending) {
+            for (String old : renamedInPlace) {
+                state.refuseIfMentioned(old, false);
+            }
             refuseReferencedInsideTransaction();
             statements.addAll(rebuild());
         }
@@ -56,15 +61,27 @@ final class SQLiteTableRebuild {
         switch (command.name()) {
             case Command.ADD:
                 ColumnDefinition column = command.column();
+                isRebuildPending |= SQLiteSchemaGrammar.isRebuildingAdd(column);
                 boolean isEnum = column.type() == ColumnType.ENUM;
                 state.addColumn(column.name(), isEnum ? "varchar" : grammar.typeOf(column), column.allowed(),
                         grammar.modifiersOf(blueprint, column), !isRebuildPending);
+                state.describe(column.name(), expressions(column), column.isGenerated());
                 inPlace(grammar.compileOne(blueprint, command, connection));
                 break;
             case Command.CHANGE:
                 ColumnDefinition changed = command.column();
                 state.changeColumn(changed.name(), changed.type() == ColumnType.ENUM ? "varchar"
                         : grammar.typeOf(changed), changed.allowed(), grammar.modifiersOf(blueprint, changed));
+                state.describe(changed.name(), expressions(changed), changed.isGenerated());
+                isRebuildPending = true;
+                break;
+            case Command.CHECK:
+                state.addCheck(command.string(Command.NAME),
+                        grammar.tableCheck(command.string(Command.NAME), command.string(Command.SQL)));
+                isRebuildPending = true;
+                break;
+            case Command.DROP_CHECK:
+                state.dropCheck(command.string(Command.NAME));
                 isRebuildPending = true;
                 break;
             case Command.PLAIN_INDEX:
@@ -113,6 +130,13 @@ final class SQLiteTableRebuild {
         }
     }
 
+    private static List<String> expressions(ColumnDefinition column) {
+        List<String> found = new ArrayList<>(column.checks());
+        column.virtualAs().ifPresent(found::add);
+        column.storedAs().ifPresent(found::add);
+        return found;
+    }
+
     private void inPlace(List<String> sql) {
         if (!isRebuildPending) {
             statements.addAll(sql);
@@ -129,9 +153,11 @@ final class SQLiteTableRebuild {
         boolean isNative = !isRebuildPending && grammar.supportsRenameColumn(connection);
         if (!isNative) {
             refuseIfReferenced(from);
+            state.refuseIfMentioned(from, false);
         }
         state.renameColumn(from, to, isNative);
         if (isNative) {
+            renamedInPlace.add(from);
             statements.add("alter table " + table() + " rename column " + grammar.quote(from) + " to "
                     + grammar.quote(to));
         } else {
@@ -144,6 +170,7 @@ final class SQLiteTableRebuild {
         for (String name : names) {
             if (!isNative) {
                 refuseIfReferenced(name);
+                state.refuseIfMentioned(name, true);
             }
             state.dropColumn(name);
             if (isNative) {
@@ -192,7 +219,8 @@ final class SQLiteTableRebuild {
         StringBuilder targets = new StringBuilder();
         StringBuilder sources = new StringBuilder();
         for (SQLiteTableState.Column column : state.columns) {
-            if (column.source == null) {
+            // SQLite computes generated columns itself and refuses a value for them.
+            if (column.source == null || column.isGenerated) {
                 continue;
             }
             if (targets.length() > 0) {
@@ -228,7 +256,7 @@ final class SQLiteTableRebuild {
             if (column.name.equalsIgnoreCase(state.autoIncrementColumn == null ? "" : state.autoIncrementColumn)) {
                 sql.append(" primary key autoincrement");
             }
-            sql.append(column.rest);
+            sql.append(column.rest).append(column.extras);
         }
         if (!state.primaryKey.isEmpty()) {
             separate(sql).append("primary key (").append(columnize(state.primaryKey)).append(')');
@@ -239,6 +267,9 @@ final class SQLiteTableRebuild {
         for (SQLiteTableState.Key key : state.keys) {
             separate(sql).append(grammar.foreignKeySql(key.columns, key.table, key.references, key.onDelete,
                     key.onUpdate));
+        }
+        for (SQLiteTableState.TableCheck check : state.checks) {
+            separate(sql).append(check.sql);
         }
         return sql.toString();
     }

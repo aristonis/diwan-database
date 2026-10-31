@@ -1585,6 +1585,64 @@ public final class Blueprint {
     }
 
     /**
+     * Adds a column whose type and everything after it is SQL the caller writes, for what the
+     * builder cannot say.
+     *
+     * <p>The SQL is written as given, like an {@link Expression}: build it from constants only, never from user input.
+     * It says the column's nullability and default itself; {@code nullable()} and
+     * {@code defaultValue()} add nothing, and only {@code check()} is written after it. On SQLite
+     * it cannot hold COLLATE, which a later table rebuild could not carry, and on an existing table
+     * it cannot hold a check or generated expression.
+     *
+     * @param column the column name, never {@code null}
+     * @param sql the definition after the name, such as {@code "integer not null default 0"},
+     *     never {@code null} or blank
+     * @return the column definition, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if the name is invalid or {@code sql} is blank
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ColumnDefinition rawColumn(String column, String sql) {
+        ColumnDefinition definition = new ColumnDefinition(column, ColumnType.RAW, 0, 0, 0);
+        definition.rawDefinition(sql);
+        return add(definition);
+    }
+
+    /**
+     * Adds a named {@code CHECK} constraint on the table.
+     *
+     * <p>The SQL is written as given, like an {@link Expression}: build it from constants only, never from user input.
+     *
+     * @param name the constraint name, never {@code null}; {@link #dropCheck(String)} drops it by this
+     *     name
+     * @param sql the condition, without the {@code check} keyword or outer parentheses, never
+     *     {@code null} or blank
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if the name is invalid or {@code sql} is blank
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public void check(String name, String sql) {
+        ensureOpen();
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.NAME, SchemaNames.check("check", name));
+        attributes.put(Command.SQL, ColumnDefinition.trustedSql("check", sql));
+        commands.add(new Command(Command.CHECK, attributes));
+    }
+
+    /**
+     * Drops a named table {@code CHECK} constraint.
+     *
+     * @param name the constraint name, never {@code null}
+     * @throws NullPointerException if {@code name} is {@code null}
+     * @throws IllegalArgumentException if the name is invalid
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public void dropCheck(String name) {
+        ensureOpen();
+        commands.add(new Command(Command.DROP_CHECK, single(Command.NAME, SchemaNames.check("check", name))));
+    }
+
+    /**
      * Renames a column.
      *
      * @param from the current name, never {@code null}
