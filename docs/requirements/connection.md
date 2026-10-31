@@ -180,6 +180,14 @@ FR39. A driver classifies its own failures as unique violations or concurrency f
 driver reads vendor codes only for the database that owns them and never classifies a lost
 connection as a concurrency failure.
 
+## Android
+
+- `AndroidSqliteDriver.of(SQLiteDatabase)` or `of(SQLiteOpenHelper)` plugs Android's own SQLite
+  into `Connection.builder().driver(...)` on Android 9 (API 28) and later.
+- Sessions share the database and never close it; transactions use Android's transaction calls and
+  savepoints; discarding a session rolls back a transaction it began.
+- Values and failure kinds match the JDBC driver on SQLite.
+
 ## 5. Non-functional requirements
 
 NFR1. The test suite passes on Java 17, 21 and 25.

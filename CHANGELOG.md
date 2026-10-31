@@ -9,6 +9,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Android module `diwan-database-android`: `AndroidSqliteDriver` over Android's `SQLiteDatabase`
+  for Android 9 and later, with transactions, savepoints and the JDBC driver's failure kinds.
 - PostgreSQL module `diwan-database-pgsql`: `PostgresSchemaGrammar` with Laravel's PostgreSQL types
   and modifiers, every blueprint command including `change()`, schema reads, and
   `PostgresMigrationLock` on an advisory lock. `DatabaseVersion` compares database versions for
@@ -83,3 +85,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pools that hand out connections with auto-commit off.
 - Build: one Java 17 JAR tested on JDK 17, 21 and 25, checked against the Android 28 API, with
   80% line coverage and Javadoc under `-Xdoclint:all` enforced.
+
+### Fixed
+
+- SQLite: the foreign key check after a table rebuild used the table-valued
+  `pragma_foreign_key_check(?)`, which SQLite before 3.26 (Android 9) rejects; it now uses the
+  pragma statement.

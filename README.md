@@ -25,7 +25,8 @@ the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar i
 ## Requirements
 
 - Java 17 or later. The JAR is plain Java 17 bytecode and is tested on JDK 17, 21 and 25.
-- Android 9 (API 28) or later, through a driver that does not need JDBC (planned). The build
+- Android 9 (API 28) or later, through `diwan-database-android`, a driver over Android's own
+  `SQLiteDatabase`. The build
   checks the core against the Android 28 API.
 - Inside Spring, through a `JdbcConnectionProvider` that reports Spring's transaction, so
   Diwan Database nests inside it with savepoints instead of committing it.
@@ -56,6 +57,19 @@ Migrator migrator = Migrator.builder(schema)
         .migrations(migrations)
         .lock(new PostgresMigrationLock(dataSource))
         .build();
+```
+
+On Android, add the Android module and the SQLite grammar:
+
+```kotlin
+implementation("org.aristonis:diwan-database-android:0.1.0")
+implementation("org.aristonis:diwan-database-sqlite:0.1.0")
+```
+
+```java
+SQLiteDatabase database = helper.getWritableDatabase();
+Connection db = Connection.builder().name("app").driver(AndroidSqliteDriver.of(database)).build();
+Migrator.builder(SQLiteSchema.of(db)).migrations(migrations).build().run();
 ```
 
 Not yet published. Build it locally with `./gradlew check`.
