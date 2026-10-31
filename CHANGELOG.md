@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Schema builder (`Schema`, `Blueprint`, `ColumnDefinition`): `create`, `table`, `drop`,
+  `dropIfExists`, `rename`, `hasTable` and `hasColumn`, with the columns `id`, `string`, `text`,
+  `integer`, `bigInteger`, `booleanColumn`, `decimal`, `date`, `timestamp`, `json` and
+  `timestamps`, and the modifiers `nullable`, `defaultValue`, `useCurrent`, `unique`,
+  `autoIncrement`, `unsigned` and `comment`.
+- `SchemaGrammar` for database modules to extend, with `Command`, `Expression` and `SchemaQuery`.
+- Module `photisma-database-sqlite` with `SQLiteSchemaGrammar` and `SQLiteSchema`.
 - `Migration` contract: `name`, `up`, `down`, `withinTransaction`, `shouldRun` and `connection`.
 - `MigrationRepository` and `DatabaseMigrationRepository`: the migrations table with Laravel's
   operations and ordering, on SQLite, PostgreSQL and MySQL; `MigrationEntry` for its rows.

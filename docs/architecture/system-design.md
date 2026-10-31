@@ -10,7 +10,7 @@ idioms where PHP shaped Laravel's choices.
 |---|---|---|
 | Connection | Running SQL, transactions, pretend mode, errors | [connection-design.md](connection-design.md) |
 | Driver interface and adapters | One physical connection per session; JDBC adapter; Android adapter later | [connection-design.md](connection-design.md) |
-| Schema | Blueprint, column and index definitions, schema builder, schema grammars per database | not built yet |
+| Schema | Blueprint, column definitions, schema builder (built); index and foreign key definitions later; a grammar per database module | [ADR 0008](../adr/0008-schema-grammar-per-database-module.md), [requirements](../requirements/schema.md) |
 | Migrations | Migration contract and migrations table (built); migrator and commands later | [ADR 0007](../adr/0007-migrations-table-without-a-schema-builder.md), [requirements](../requirements/migrations.md) |
 | Query builder | Fluent queries, query grammars and processors | not built yet |
 | Models | Active-record models, relations, casts | not built yet |
@@ -25,8 +25,9 @@ that does not need JDBC.
 
 | Module | Artifact | Holds |
 |---|---|---|
-| `core` | `org.aristonis:photisma-database` | The connection, the driver interface, the JDBC adapter and the migrations package; later layers join it when built |
-| one per driver (planned) | `org.aristonis:photisma-database-<driver>` | That database's grammars and driver details |
+| `core` | `org.aristonis:photisma-database` | The connection, the driver interface, the JDBC adapter, migrations and the schema builder; later layers join it when built |
+| `sqlite` | `org.aristonis:photisma-database-sqlite` | The SQLite schema grammar |
+| one per further database (planned) | `org.aristonis:photisma-database-<driver>` | That database's grammars and driver details |
 
 ## Diagram: Photisma Database layers
 

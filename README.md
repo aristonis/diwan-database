@@ -11,12 +11,13 @@ The connection layer is in place: running SQL, nested transactions with savepoin
 deadlocks, joining a transaction someone else owns, pretend mode, and errors that keep personal
 data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. The
 `Migration` contract and the migrations table (`DatabaseMigrationRepository`) are in place for the
-migrator to build on.
+migrator to build on. The schema builder creates and changes tables through a grammar per database;
+the SQLite grammar ships in `photisma-database-sqlite`.
 
 | Layer | State |
 |---|---|
 | Connection, driver interface, JDBC adapter | available |
-| Schema builder | planned |
+| Schema builder: common columns, SQLite grammar | available |
 | Migrations: contract and migrations table | available |
 | Migrator | planned |
 | Query builder | planned |
@@ -35,6 +36,12 @@ migrator to build on.
 
 ```kotlin
 implementation("org.aristonis:photisma-database:0.1.0")
+```
+
+For SQLite schema building, add the SQLite module:
+
+```kotlin
+implementation("org.aristonis:photisma-database-sqlite:0.1.0")
 ```
 
 Not yet published. Build it locally with `./gradlew check`.
@@ -82,6 +89,21 @@ Inside a transaction, pass the connection you were handed (`tx`) to everything t
 default the outer connection refuses calls from inside its own transaction, because they would run
 outside it.
 
+### Schema builder
+
+```java
+import org.aristonis.photisma.database.schema.Schema;
+import org.aristonis.photisma.database.sqlite.SQLiteSchema;
+
+Schema schema = SQLiteSchema.of(db);
+schema.create("users", table -> {
+    table.id();
+    table.string("email").unique();
+    table.booleanColumn("active").defaultValue(true);
+    table.timestamps();
+});
+```
+
 ### Migrations
 
 ```java
@@ -96,12 +118,15 @@ final class CreateUsersTable extends Migration {
 
     @Override
     public void up(Connection db) {
-        db.statement("create table users (id integer primary key, email text not null unique)");
+        SQLiteSchema.of(db).create("users", table -> {
+            table.id();
+            table.string("email").unique();
+        });
     }
 
     @Override
     public void down(Connection db) {
-        db.statement("drop table users");
+        SQLiteSchema.of(db).drop("users");
     }
 }
 
@@ -119,6 +144,8 @@ migrations.log("2026_10_31_000000_create_users_table", batch);
 - [Connection design](docs/architecture/connection-design.md)
 - [Connection requirements](docs/requirements/connection.md)
 - [Connection behavior](docs/behavior/connection/README.md)
+- [Schema builder requirements](docs/requirements/schema.md)
+- [Schema builder behavior](docs/behavior/schema/README.md)
 - [Migrations requirements](docs/requirements/migrations.md)
 - [Migrations behavior](docs/behavior/migrations/README.md)
 - [Decision records](docs/adr/)
