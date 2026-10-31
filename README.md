@@ -113,6 +113,16 @@ schema.create("posts", table -> {
 
 On SQLite, adding or dropping a key on a filled table rebuilds it and keeps every row.
 
+`change()` redefines a column. As in Laravel 11 and later, the new definition replaces the old one
+in full, so restate every modifier you want to keep:
+
+```java
+schema.table("posts", table -> table.string("title", 500).nullable().change());
+```
+
+Changing an auto-increment column is not supported. On SQLite, rename or drop a column that another
+table references in a separate `Schema.table` call from a `change()`.
+
 ### Migrations
 
 ```java

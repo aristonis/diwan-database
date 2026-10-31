@@ -55,3 +55,14 @@
 | E41 | A default text that contains `check`, `collate` or `as` | Not mistaken for a constraint | `SQLiteEnumRebuildTest#wordsInsideLiteralsDoNotTripTheRefusals` |
 | E42 | Helpers and drop helpers in a real migration and rollback | Columns and index added and removed | `MigratorTypesTest#helpersAddAndDropTheirColumns` |
 | E43 | Empty, null or repeated enum values; bad lengths and precisions | Refused before anything runs | `BlueprintTypesTest#invalidValuesAndRangesAreRefused` |
+| E44 | A nullable column changed without `nullable()` | Becomes not null | `SQLiteChangeColumnTest#aNullableColumnChangedWithoutNullableBecomesNotNull` |
+| E45 | Null rows, then a change to not null | Fails; table and rows as before | `SQLiteChangeColumnTest#rowsThatBreakTheNewDefinitionLeaveTheTableAsItWas` |
+| E46 | An enum list shrinks while a row holds a removed value | Fails; table as before | `SQLiteChangeColumnTest#aRemovedEnumValueStillInUseFails` |
+| E47 | `change()` on a missing column | Refused | `SQLiteChangeColumnTest#aMissingColumnIsRefused` |
+| E48 | `change()` inside `Schema.create` | Refused before anything runs | `ChangeColumnBlueprintTest#changeInsideCreateIsRefused` |
+| E49 | A change to or from auto-increment | Refused | `ChangeColumnBlueprintTest#changeToAutoIncrementIsRefused`, `SQLiteChangeColumnTest#theAutoIncrementColumnCannotBeChanged` |
+| E50 | A changed column that another table's key points at, or that has its own key | Keys kept and enforced | `SQLiteChangeColumnTest#indexesKeysBothWaysAndTheSequenceSurvive` |
+| E51 | `unique(false).change()` | The conventional unique index is dropped | `SQLiteChangeColumnTest#uniqueFalseDropsAndUniqueAddsTheIndex` |
+| E52 | A column changed and renamed, or changed twice, in one call | Refused before anything runs | `ChangeColumnBlueprintTest#changeAndRenameOfOneColumnAreRefusedEitherWay`, `ChangeColumnBlueprintTest#theSameColumnChangedTwiceIsRefused` |
+| E53 | `change()` on a table the rebuild cannot carry | Still refused | `SQLiteChangeColumnTest#aTableTheRebuildCannotCarryStaysRefused` |
+| E54 | `change()` under pretend | SQL listed, table unchanged | `SQLiteChangeColumnTest#pretendListsTheRebuildAndChangesNothing` |

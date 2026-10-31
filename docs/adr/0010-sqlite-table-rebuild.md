@@ -32,10 +32,15 @@ a transaction, which is where migrations run.
    columns, triggers, views, partial or expression indexes) are refused.
 7. Column rename and drop run in place where SQLite supports them. On older versions a column
    another table's key references is refused, since the rebuild would leave that key on the old name.
+8. `change()` always rebuilds, since SQLite cannot alter a column. The new definition takes the
+   column's place in the picture and rows are copied from the old column; a row that breaks it
+   fails the copy and the whole change rolls back.
 
 ## Consequences
 
 - Key changes on filled SQLite tables keep every row in every table.
+- Every `change()` copies the whole table, so changes to one table belong in one `Schema.table`
+  call, where they share a single rebuild.
 - A migration that rebuilds a referenced table runs twice: once with enforcement on until the
   rebuild is refused and rolled back, then with it off. Its database work is undone between the
   two; outside effects of `up` are not, so migrations should keep to the database.

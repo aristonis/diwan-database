@@ -86,6 +86,16 @@ SQLite
 - `dropForeign` by name is refused, since SQLite keys have no names.
 - An enum is `varchar` with `check ("<column>" in (...))`; a table rebuild keeps that check, under
   the column's current name. `set` is refused.
+- `change()` on a column redefines it through a table rebuild. The new definition replaces the old
+  one in full, so a modifier not stated again (nullable, default, comment) is dropped.
+  `unique(false)`, `index(false)` and `primary(false)` on a changed column drop the conventionally
+  named index. Rows, indexes, keys in both directions and the auto-increment counter are kept.
+- Refused before any SQL: `change()` in `Schema.create`, on a missing column, on or to an
+  auto-increment column, the same column changed twice, or changed and renamed in one call.
+  Removing auto-increment from a column is not supported.
+- On SQLite, `unique(false)` drops a unique index, not a unique constraint written inside the
+  table definition. A `change()` makes the whole call a rebuild, so a column another table
+  references is renamed or dropped in a separate `Schema.table` call.
 
 Safety and errors
 
@@ -104,7 +114,7 @@ Safety and errors
 
 ## 5. Non-goals
 
-Fulltext, spatial, partial and expression indexes, changing a column's type, `foreignIdFor`,
+Fulltext, spatial, partial and expression indexes, `change()` on other databases, `foreignIdFor`,
 spatial, vector and computed columns, the modifiers `after`, `first`, `charset`, `collation`,
 `storedAs`, `virtualAs` and `useCurrentOnUpdate`, the PostgreSQL and MySQL grammars, temporary tables,
 schema-qualified names, listings of tables and columns.

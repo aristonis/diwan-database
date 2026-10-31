@@ -9,6 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `ColumnDefinition.change()` redefines an existing column, as in Laravel 11 and later: the new
+  definition replaces the old one in full. `unique(false)`, `index(false)` and `primary(false)`
+  drop the column's conventional index. On SQLite the change runs as a table rebuild.
 - Every common Laravel column type: tiny, small and medium integers and `unsigned*` forms,
   `*Increments`, `floatColumn`, `doubleColumn`, `charColumn`, `tinyText`, `mediumText`,
   `longText`, `dateTime`, `dateTimeTz`, `time`, `timeTz`, `timestampTz`, `year`, `binary`, `uuid`,
