@@ -108,7 +108,7 @@ class SchemaTest {
 
     @Test
     void unknownCommandsAreRefused() {
-        Blueprint blueprint = new Blueprint("t", false);
+        Blueprint blueprint = new Blueprint("t", "", false);
         blueprint.addCommand("spatialIndex", java.util.Collections.<String, Object>emptyMap());
 
         UnsupportedOperationException error = assertThrows(UnsupportedOperationException.class,

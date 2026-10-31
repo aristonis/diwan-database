@@ -29,6 +29,26 @@ public final class Command {
     public static final String RENAME = "rename";
     /** Adds a unique index; attributes {@link #INDEX} and {@link #COLUMNS}. */
     public static final String UNIQUE = "unique";
+    /** Adds a plain index; attributes {@link #INDEX} and {@link #COLUMNS}. */
+    public static final String PLAIN_INDEX = "index";
+    /** Sets the primary key; attributes {@link #INDEX} and {@link #COLUMNS}. */
+    public static final String PRIMARY = "primary";
+    /** Adds a foreign key; attributes {@link #FOREIGN_KEY}, {@link #INDEX} and {@link #COLUMNS}. */
+    public static final String FOREIGN = "foreign";
+    /** Drops a plain index; attribute {@link #INDEX}, and {@link #COLUMNS} when dropped by columns. */
+    public static final String DROP_INDEX = "dropIndex";
+    /** Drops a unique index; attribute {@link #INDEX}, and {@link #COLUMNS} when dropped by columns. */
+    public static final String DROP_UNIQUE = "dropUnique";
+    /** Drops the primary key; attribute {@link #INDEX}. */
+    public static final String DROP_PRIMARY = "dropPrimary";
+    /** Drops a foreign key; attribute {@link #INDEX}, and {@link #COLUMNS} when dropped by columns. */
+    public static final String DROP_FOREIGN = "dropForeign";
+    /** Renames an index; attributes {@link #FROM} and {@link #TO}. */
+    public static final String RENAME_INDEX = "renameIndex";
+    /** Drops columns; attribute {@link #COLUMNS}. */
+    public static final String DROP_COLUMN = "dropColumn";
+    /** Renames a column; attributes {@link #FROM} and {@link #TO}. */
+    public static final String RENAME_COLUMN = "renameColumn";
 
     /** Attribute holding a {@link ColumnDefinition}. */
     public static final String COLUMN = "column";
@@ -36,8 +56,12 @@ public final class Command {
     public static final String COLUMNS = "columns";
     /** Attribute holding the index name, a {@code String}. */
     public static final String INDEX = "index";
-    /** Attribute holding the new table name, prefix included, a {@code String}. */
+    /** Attribute holding the new name: of the table, prefix included, or of an index or column. */
     public static final String TO = "to";
+    /** Attribute holding the old name of an index or column, a {@code String}. */
+    public static final String FROM = "from";
+    /** Attribute holding a {@link ForeignKeyDefinition}. */
+    public static final String FOREIGN_KEY = "foreignKey";
 
     private final String name;
     private final Map<String, Object> attributes;
@@ -139,6 +163,31 @@ public final class Command {
      *
      * @return the name and attribute keys, never {@code null}
      */
+    /**
+     * Returns the {@link #FOREIGN_KEY} attribute.
+     *
+     * @return the foreign key, never {@code null}
+     * @throws IllegalStateException if the command has no foreign key
+     */
+    public ForeignKeyDefinition foreignKey() {
+        Object value = require(FOREIGN_KEY);
+        if (!(value instanceof ForeignKeyDefinition)) {
+            throw new IllegalStateException("Attribute foreignKey of command " + name + " is not a foreign key");
+        }
+        return (ForeignKeyDefinition) value;
+    }
+
+    /**
+     * Tells whether the command has an attribute.
+     *
+     * @param key the attribute name, never {@code null}
+     * @return {@code true} if the attribute is set
+     * @throws NullPointerException if {@code key} is {@code null}
+     */
+    public boolean has(String key) {
+        return attributes.containsKey(Objects.requireNonNull(key, "key"));
+    }
+
     @Override
     public String toString() {
         return "Command[" + name + ", " + attributes.keySet() + "]";

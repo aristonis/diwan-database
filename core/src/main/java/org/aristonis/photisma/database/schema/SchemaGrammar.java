@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.aristonis.photisma.database.Connection;
+import org.aristonis.photisma.database.TransactionCallback;
 
 /**
  * Turns a {@link Blueprint} into SQL for one database.
@@ -75,6 +76,25 @@ public abstract class SchemaGrammar {
                 return Collections.singletonList(compileRename(blueprint, command, connection));
             case Command.UNIQUE:
                 return Collections.singletonList(compileUnique(blueprint, command, connection));
+            case Command.PLAIN_INDEX:
+                return Collections.singletonList(compileIndex(blueprint, command, connection));
+            case Command.PRIMARY:
+                return compilePrimary(blueprint, command, connection);
+            case Command.FOREIGN:
+                return compileForeign(blueprint, command, connection);
+            case Command.DROP_INDEX:
+            case Command.DROP_UNIQUE:
+                return Collections.singletonList(compileDropIndex(blueprint, command, connection));
+            case Command.DROP_PRIMARY:
+                return compileDropPrimary(blueprint, command, connection);
+            case Command.DROP_FOREIGN:
+                return compileDropForeign(blueprint, command, connection);
+            case Command.RENAME_INDEX:
+                return compileRenameIndex(blueprint, command, connection);
+            case Command.DROP_COLUMN:
+                return compileDropColumn(blueprint, command, connection);
+            case Command.RENAME_COLUMN:
+                return compileRenameColumn(blueprint, command, connection);
             default:
                 throw unsupported("The command " + command.name());
         }
@@ -166,6 +186,231 @@ public abstract class SchemaGrammar {
     protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
         return "create unique index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
                 + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
+    }
+
+    /**
+     * Compiles {@link Command#PLAIN_INDEX}.
+     *
+     * @implSpec The base returns {@code create index <index> on <table> (<columns>)}.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statement, never {@code null}
+     */
+    protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
+        return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
+                + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
+    }
+
+    /**
+     * Compiles {@link Command#DROP_INDEX} and {@link Command#DROP_UNIQUE}.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statement, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected String compileDropIndex(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#PRIMARY}: the primary key.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compilePrimary(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#FOREIGN}: a foreign key.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileForeign(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#DROP_PRIMARY}: dropping the primary key.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileDropPrimary(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#DROP_FOREIGN}: dropping a foreign key.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileDropForeign(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#RENAME_INDEX}: renaming an index.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileRenameIndex(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#DROP_COLUMN}: dropping columns.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileDropColumn(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Compiles {@link Command#RENAME_COLUMN}: renaming a column.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}, may be empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    protected List<String> compileRenameColumn(Blueprint blueprint, Command command, Connection connection) {
+        throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Lists the indexes of a table, the primary key included.
+     *
+     * @implSpec The base refuses the listing.
+     *
+     * @param connection the connection to read with, never {@code null}
+     * @param table the full table name, prefix included, never {@code null}
+     * @return the indexes, unmodifiable, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     */
+    public List<IndexInfo> indexes(Connection connection, String table) {
+        throw unsupported("Listing indexes");
+    }
+
+    /**
+     * Lists the foreign keys of a table.
+     *
+     * @implSpec The base refuses the listing.
+     *
+     * @param connection the connection to read with, never {@code null}
+     * @param table the full table name, prefix included, never {@code null}
+     * @return the foreign keys, unmodifiable, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     */
+    public List<ForeignKeyInfo> foreignKeys(Connection connection, String table) {
+        throw unsupported("Listing foreign keys");
+    }
+
+    /**
+     * Runs work in one transaction with foreign key enforcement switched off, as Laravel's
+     * {@code withoutForeignKeyConstraints} does.
+     *
+     * @implSpec The base runs the work in a transaction on the connection as is. A grammar whose
+     *     database can switch enforcement off for one connection overrides it; the promise that a
+     *     failure undoes the whole work holds only where schema changes are transactional.
+     *
+     * @param <T> the type of the result
+     * @param connection the connection, never {@code null}, outside any transaction
+     * @param work the work, never {@code null}
+     * @return the result of the work, may be {@code null}
+     * @throws IllegalStateException if the connection is inside a transaction
+     * @throws RuntimeException any failure of the work, after the transaction is undone
+     */
+    public <T> T withoutForeignKeyConstraints(Connection connection, TransactionCallback<T> work) {
+        if (connection.transactionLevel() > 0) {
+            throw new IllegalStateException("Foreign key enforcement can only be switched off outside a transaction");
+        }
+        return connection.transaction(work);
+    }
+
+    /**
+     * Checks every table for rows that break a foreign key, as the last step of work run with
+     * enforcement off.
+     *
+     * @implSpec The base does nothing.
+     *
+     * @param connection the connection the work ran on, never {@code null}
+     * @throws ForeignKeyCheckException if a row breaks a foreign key
+     */
+    public void checkForeignKeys(Connection connection) {
+    }
+
+    /**
+     * Tells whether a blueprint must run with foreign key enforcement off to keep data safe.
+     *
+     * @implSpec The base returns {@code false}.
+     *
+     * @param blueprint the checked blueprint, never {@code null}
+     * @return {@code true} if the schema builder must run it through
+     *     {@link #withoutForeignKeyConstraints}
+     */
+    protected boolean requiresForeignKeysOff(Blueprint blueprint) {
+        return false;
+    }
+
+    /**
+     * Returns queries that must find no rows once a blueprint's statements ran, each finding a row
+     * that breaks a foreign key.
+     *
+     * @implSpec The base returns none. Each row must have the columns {@code table} and
+     *     {@code parent}.
+     *
+     * @param blueprint the checked blueprint, never {@code null}
+     * @param connection the connection the statements ran on, never {@code null}
+     * @return the queries, never {@code null}, may be empty
+     */
+    protected List<SchemaQuery> compileForeignKeyChecks(Blueprint blueprint, Connection connection) {
+        return Collections.emptyList();
     }
 
     /**

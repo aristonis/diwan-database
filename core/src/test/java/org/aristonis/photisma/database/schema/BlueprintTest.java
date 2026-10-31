@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class BlueprintTest {
 
     private static Blueprint creating() {
-        return new Blueprint("users", true);
+        return new Blueprint("users", "", true);
     }
 
     @Test
@@ -116,7 +116,7 @@ class BlueprintTest {
 
     @Test
     void prepareFreezesColumnsAndAddsImpliedCommands() {
-        Blueprint table = new Blueprint("app_users", false);
+        Blueprint table = new Blueprint("app_users", "app_", false);
         ColumnDefinition email = table.string("email").unique();
         table.string("nick").unique("nick_idx");
 
@@ -162,7 +162,7 @@ class BlueprintTest {
 
     @Test
     void generatedIndexNamesAreLowercaseWithDashesAndDotsReplaced() {
-        Blueprint table = new Blueprint("My-Table", true);
+        Blueprint table = new Blueprint("My-Table", "", true);
         table.string("A.b").unique();
 
         table.prepare(63);

@@ -12,10 +12,12 @@ import java.util.Set;
 import java.util.function.Supplier;
 import org.aristonis.photisma.database.Connection;
 import org.aristonis.photisma.database.LoggedQuery;
+import org.aristonis.photisma.database.TransactionCallback;
 import org.aristonis.photisma.database.driver.DriverCapability;
 import org.aristonis.photisma.database.migrations.MigrationFailedException.Direction;
 import org.aristonis.photisma.database.migrations.MigrationFailedException.Phase;
 import org.aristonis.photisma.database.migrations.MigrationResult.Outcome;
+import org.aristonis.photisma.database.schema.ForeignKeysOffRequiredException;
 import org.aristonis.photisma.database.schema.Schema;
 
 /**
@@ -380,8 +382,7 @@ public final class Migrator {
         }
         Schema target = schemaFor(migration);
         try {
-            List<LoggedQuery> queries = target.connection().pretend(
-                    recorder -> invoke(migration, direction, Schema.of(recorder, target.grammar())));
+            List<LoggedQuery> queries = target.pretend(schema -> invoke(migration, direction, schema));
             return new MigrationResult(name, Outcome.PRETENDED, 0, queries);
         } catch (RuntimeException failure) {
             throw new MigrationFailedException(name, direction, Phase.MIGRATION, completed, failure);
@@ -397,14 +398,25 @@ public final class Migrator {
         try {
             if (usesTransaction(migration, target)) {
                 isRecordedInside = isRepositoryConnection;
-                target.connection().transaction(tx -> {
+                TransactionCallback<Void> work = tx -> {
                     invoke(migration, direction, Schema.of(tx, target.grammar()));
                     if (isRepositoryConnection) {
                         record(new DatabaseMigrationRepository(Schema.of(tx, defaultSchema.grammar()), table),
                                 name, direction, batch);
                     }
                     return null;
-                });
+                };
+                try {
+                    target.connection().transaction(work);
+                } catch (ForeignKeysOffRequiredException needsSwitch) {
+                    // The attempt was rolled back. Run it again with enforcement off, so a table rebuild
+                    // cannot fire other tables' delete actions; every table is checked before commit.
+                    target.grammar().withoutForeignKeyConstraints(target.connection(), tx -> {
+                        work.run(tx);
+                        target.grammar().checkForeignKeys(tx);
+                        return null;
+                    });
+                }
             } else {
                 invoke(migration, direction, target);
             }

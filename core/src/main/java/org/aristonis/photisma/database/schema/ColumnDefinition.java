@@ -15,8 +15,10 @@ import java.util.Optional;
  * <p>A definition is changed only inside the schema callback. Once the schema builder has checked
  * the blueprint, the definition is frozen and every modifier throws {@link IllegalStateException},
  * so a grammar cannot change what it compiles.
+ *
+ * <p>The class is open only to {@link ForeignIdColumnDefinition}; its constructor is not public.
  */
-public final class ColumnDefinition {
+public class ColumnDefinition {
 
     private final String name;
     private final ColumnType type;
@@ -28,6 +30,9 @@ public final class ColumnDefinition {
     private Object defaultValue;
     private boolean isUnique;
     private String uniqueIndex;
+    private boolean isIndexed;
+    private String plainIndex;
+    private boolean isPrimary;
     private boolean isUnsigned;
     private String comment;
     private boolean isFrozen;
@@ -127,6 +132,47 @@ public final class ColumnDefinition {
         ensureOpen();
         this.uniqueIndex = SchemaNames.check("index", indexName);
         this.isUnique = true;
+        return this;
+    }
+
+    /**
+     * Adds an index on this column, named {@code <table>_<column>_index}.
+     *
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition index() {
+        ensureOpen();
+        this.isIndexed = true;
+        this.plainIndex = null;
+        return this;
+    }
+
+    /**
+     * Adds an index on this column with a chosen name.
+     *
+     * @param indexName the index name, never {@code null}, not empty, without control characters
+     * @return this definition
+     * @throws NullPointerException if {@code indexName} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition index(String indexName) {
+        ensureOpen();
+        this.plainIndex = SchemaNames.check("index", indexName);
+        this.isIndexed = true;
+        return this;
+    }
+
+    /**
+     * Makes this column the table's primary key.
+     *
+     * @return this definition
+     * @throws IllegalStateException if the definition is frozen
+     */
+    public ColumnDefinition primary() {
+        ensureOpen();
+        this.isPrimary = true;
         return this;
     }
 
@@ -269,6 +315,28 @@ public final class ColumnDefinition {
      */
     public Optional<String> comment() {
         return Optional.ofNullable(comment);
+    }
+
+    /**
+     * Tells whether the column has a plain index of its own.
+     *
+     * @return {@code true} after {@link #index()} or {@link #index(String)}
+     */
+    public boolean isIndexed() {
+        return isIndexed;
+    }
+
+    /**
+     * Tells whether the column is the primary key on its own.
+     *
+     * @return {@code true} after {@link #primary()}
+     */
+    public boolean isPrimary() {
+        return isPrimary;
+    }
+
+    Optional<String> plainIndex() {
+        return Optional.ofNullable(plainIndex);
     }
 
     Optional<String> uniqueIndex() {

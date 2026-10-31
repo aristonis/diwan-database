@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.aristonis.photisma.database.Connection;
+import org.aristonis.photisma.database.LoggedQuery;
 import org.aristonis.photisma.database.driver.DriverCapability;
 
 /**
@@ -29,16 +30,25 @@ import org.aristonis.photisma.database.driver.DriverCapability;
  * connection is not in one yet and the database can undo schema changes; otherwise they run one by
  * one, and those before a failure stay applied.
  *
+ * <p>On SQLite, adding or dropping a primary or foreign key on an existing table rebuilds the
+ * table. Outside a transaction the schema builder runs the rebuild through
+ * {@link #withoutForeignKeyConstraints(Consumer)} on its own; inside one, a rebuild of a table other
+ * tables point at is refused with {@link ForeignKeysOffRequiredException}, because SQLite would apply
+ * their delete actions. The migrator catches it and runs that migration again with enforcement off.
+ *
  * <p>Instances are immutable and as safe to share between threads as their connection.
  */
 public final class Schema {
 
     private final Connection connection;
     private final SchemaGrammar grammar;
+    // Reads the live schema; differs from connection only in pretend mode, where writes are recorded.
+    private final Connection reader;
 
-    private Schema(Connection connection, SchemaGrammar grammar) {
+    private Schema(Connection connection, SchemaGrammar grammar, Connection reader) {
         this.connection = connection;
         this.grammar = grammar;
+        this.reader = reader;
     }
 
     /**
@@ -51,7 +61,8 @@ public final class Schema {
      * @throws NullPointerException if an argument is {@code null}
      */
     public static Schema of(Connection connection, SchemaGrammar grammar) {
-        return new Schema(Objects.requireNonNull(connection, "connection"), Objects.requireNonNull(grammar, "grammar"));
+        Objects.requireNonNull(connection, "connection");
+        return new Schema(connection, Objects.requireNonNull(grammar, "grammar"), connection);
     }
 
     /**
@@ -148,6 +159,76 @@ public final class Schema {
     }
 
     /**
+     * Lists a table's indexes, its primary key included.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @return the indexes, unmodifiable, never {@code null}; empty if the table does not exist
+     * @throws NullPointerException if {@code table} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public List<IndexInfo> indexes(String table) {
+        return grammar.indexes(reader, prefixed(table));
+    }
+
+    /**
+     * Lists a table's foreign keys.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @return the foreign keys, unmodifiable, never {@code null}; empty if the table does not exist
+     * @throws NullPointerException if {@code table} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws UnsupportedOperationException if the grammar cannot list foreign keys
+     */
+    public List<ForeignKeyInfo> foreignKeys(String table) {
+        return grammar.foreignKeys(reader, prefixed(table));
+    }
+
+    /**
+     * Runs schema work in one transaction with foreign key enforcement switched off, as Laravel's
+     * {@code Schema::withoutForeignKeyConstraints} does.
+     *
+     * <p>On SQLite the work runs on one physical connection with {@code PRAGMA foreign_keys} off,
+     * and the setting is put back afterwards; if it cannot be put back, that session is discarded
+     * instead of closed, so a driver that can abort the connection keeps it out of the pool. Rows the work writes are not checked against foreign keys,
+     * except those a table rebuild copies. In pretend mode the work only runs.
+     *
+     * @param work the work, given a schema builder for the switched-off connection, never
+     *     {@code null}
+     * @throws NullPointerException if {@code work} is {@code null}
+     * @throws IllegalStateException if the connection is inside a transaction
+     * @throws RuntimeException any failure of the work, after the transaction is undone
+     */
+    public void withoutForeignKeyConstraints(Consumer<Schema> work) {
+        Objects.requireNonNull(work, "work");
+        if (isPretending()) {
+            work.accept(this);
+            return;
+        }
+        grammar.withoutForeignKeyConstraints(connection, tx -> {
+            work.accept(new Schema(tx, grammar, tx));
+            return null;
+        });
+    }
+
+    /**
+     * Records the statements schema work would run, without changing the database.
+     *
+     * <p>Unlike a schema builder made on a pretend connection, this one reads the live schema, so
+     * a change that depends on the table's current shape, such as a SQLite rebuild, lists its real
+     * statements. A table made earlier in the same pretend run does not exist yet for such a read.
+     *
+     * @param work the work, given a recording schema builder, never {@code null}
+     * @return the recorded statements in order, unmodifiable, never {@code null}
+     * @throws NullPointerException if {@code work} is {@code null}
+     * @throws RuntimeException any failure of the work
+     */
+    public List<LoggedQuery> pretend(Consumer<Schema> work) {
+        Objects.requireNonNull(work, "work");
+        return connection.pretend(recorder -> work.accept(new Schema(recorder, grammar, reader)));
+    }
+
+    /**
      * Tells whether a table exists.
      *
      * @param table the table name without prefix, never {@code null}
@@ -197,7 +278,11 @@ public final class Schema {
     }
 
     private Blueprint blueprint(String table, boolean isCreating) {
-        return new Blueprint(prefixed(table), isCreating);
+        return new Blueprint(prefixed(table), connection.getTablePrefix(), isCreating);
+    }
+
+    private boolean isPretending() {
+        return reader != connection;
     }
 
     private String prefixed(String table) {
@@ -213,15 +298,37 @@ public final class Schema {
 
     private void build(Blueprint blueprint) {
         blueprint.prepare(grammar.maxIdentifierLength());
-        List<String> statements = grammar.compile(blueprint, connection);
-        if (statements.size() > 1 && connection.transactionLevel() == 0
+        List<String> statements = grammar.compile(blueprint, reader);
+        if (!blueprint.isCreating()) {
+            DropColumnGuard.check(blueprint, grammar, reader);
+        }
+        if (isPretending()) {
+            run(connection, statements);
+        } else if (grammar.requiresForeignKeysOff(blueprint) && connection.transactionLevel() == 0) {
+            grammar.withoutForeignKeyConstraints(connection, tx -> {
+                runChecked(tx, blueprint, statements);
+                return null;
+            });
+        } else if (statements.size() > 1 && connection.transactionLevel() == 0
                 && connection.getDriverInfo().supports(DriverCapability.TRANSACTIONAL_DDL)) {
             connection.transaction(tx -> {
-                run(tx, statements);
+                runChecked(tx, blueprint, statements);
                 return null;
             });
         } else {
-            run(connection, statements);
+            runChecked(connection, blueprint, statements);
+        }
+    }
+
+    private void runChecked(Connection target, Blueprint blueprint, List<String> statements) {
+        run(target, statements);
+        for (SchemaQuery check : grammar.compileForeignKeyChecks(blueprint, target)) {
+            List<Map<String, Object>> rows = target.select(check.sql(), check.bindings());
+            if (!rows.isEmpty()) {
+                Map<String, Object> first = rows.get(0);
+                throw new ForeignKeyCheckException(String.valueOf(first.get("table")),
+                        String.valueOf(first.get("parent")), rows.size());
+            }
         }
     }
 
