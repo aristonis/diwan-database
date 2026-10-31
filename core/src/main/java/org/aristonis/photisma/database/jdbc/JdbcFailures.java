@@ -4,8 +4,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.IdentityHashMap;
-import java.util.Locale;
 import java.util.Set;
+import org.aristonis.photisma.database.driver.DatabaseFamily;
 import org.aristonis.photisma.database.driver.DriverException;
 import org.aristonis.photisma.database.driver.DriverFailureKind;
 
@@ -46,52 +46,7 @@ final class JdbcFailures {
     /** Bounds the walk over a very long cause chain. */
     private static final int MAX_CHAIN = 32;
 
-    /** The database families whose vendor codes are understood. */
-    enum Family {
-        /** SQLite. */
-        SQLITE,
-        /** PostgreSQL. */
-        POSTGRESQL,
-        /** MySQL and MariaDB. */
-        MYSQL,
-        /** Microsoft SQL Server. */
-        SQLSERVER,
-        /** Oracle Database. */
-        ORACLE,
-        /** Any other or unknown database; its vendor codes are not read. */
-        OTHER
-    }
-
     private JdbcFailures() {
-    }
-
-    /**
-     * Classifies a product name into a database family.
-     *
-     * @param productName the database product name, or {@code null} if unknown
-     * @return the family, never {@code null}
-     */
-    static Family family(String productName) {
-        if (productName == null) {
-            return Family.OTHER;
-        }
-        String name = productName.toLowerCase(Locale.ROOT);
-        if (name.contains("sqlite")) {
-            return Family.SQLITE;
-        }
-        if (name.contains("postgresql")) {
-            return Family.POSTGRESQL;
-        }
-        if (name.contains("mysql") || name.contains("mariadb")) {
-            return Family.MYSQL;
-        }
-        if (name.contains("microsoft sql server")) {
-            return Family.SQLSERVER;
-        }
-        if (name.contains("oracle")) {
-            return Family.ORACLE;
-        }
-        return Family.OTHER;
     }
 
     /**
@@ -102,7 +57,7 @@ final class JdbcFailures {
      * @return the driver failure, never {@code null}
      */
     static DriverException translate(SQLException failure, String productName) {
-        Family family = family(productName);
+        DatabaseFamily family = DatabaseFamily.of(productName);
         String state = null;
         int vendorCode = 0;
         boolean isConnectionFailure = false;
@@ -159,7 +114,7 @@ final class JdbcFailures {
         return t.getCause();
     }
 
-    private static boolean isUnique(Family family, String state, int code, String text) {
+    private static boolean isUnique(DatabaseFamily family, String state, int code, String text) {
         if (UNIQUE_STATE.equals(state)) {
             return true;
         }
@@ -190,7 +145,7 @@ final class JdbcFailures {
         return false;
     }
 
-    private static boolean isConcurrency(Family family, String state, int code) {
+    private static boolean isConcurrency(DatabaseFamily family, String state, int code) {
         if (SERIALIZATION_STATE.equals(state) || DEADLOCK_STATE.equals(state)) {
             return true;
         }

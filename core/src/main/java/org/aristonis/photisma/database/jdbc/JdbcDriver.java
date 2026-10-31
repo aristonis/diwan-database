@@ -4,10 +4,10 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import org.aristonis.photisma.database.driver.DatabaseFamily;
 import org.aristonis.photisma.database.driver.Driver;
 import org.aristonis.photisma.database.driver.DriverCapability;
 import org.aristonis.photisma.database.driver.DriverException;
@@ -127,12 +127,12 @@ public final class JdbcDriver implements Driver {
     }
 
     static Set<DriverCapability> capabilities(String productName) {
-        String name = productName.toLowerCase(Locale.ROOT);
+        DatabaseFamily family = DatabaseFamily.of(productName);
         Set<DriverCapability> result = EnumSet.noneOf(DriverCapability.class);
-        boolean isPostgres = name.contains("postgresql");
-        boolean isSqlite = name.contains("sqlite");
-        boolean isMysqlFamily = name.contains("mysql") || name.contains("mariadb");
-        boolean isSqlServer = name.contains("microsoft sql server");
+        boolean isPostgres = family == DatabaseFamily.POSTGRESQL;
+        boolean isSqlite = family == DatabaseFamily.SQLITE;
+        boolean isMysqlFamily = family == DatabaseFamily.MYSQL;
+        boolean isSqlServer = family == DatabaseFamily.SQLSERVER;
         if (isPostgres || isSqlite || isMysqlFamily) {
             result.add(DriverCapability.SAVEPOINT_RELEASE);
         }
