@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.photisma.database.driver.DriverException;
+import org.aristonis.photisma.database.driver.DriverInfo;
 
 /**
  * Holds the SQL methods every connection shares: argument checks, the mapping of each method to a
@@ -15,6 +16,9 @@ import org.aristonis.photisma.database.driver.DriverException;
  * through {@link #run(PendingStatement)}, which keeps one execution path for every statement.
  */
 abstract class AbstractConnection implements Connection {
+
+    /** Stands in for the SQL in errors raised while reading the database description. */
+    private static final String DRIVER_INFO = "(read database description)";
 
     private final ConnectionSettings settings;
 
@@ -135,6 +139,15 @@ abstract class AbstractConnection implements Connection {
     @Override
     public final String getTablePrefix() {
         return settings.tablePrefix();
+    }
+
+    @Override
+    public final DriverInfo getDriverInfo() {
+        try {
+            return settings.driverInfo();
+        } catch (DriverException failure) {
+            throw queryFailure(DRIVER_INFO, Collections.<Object>emptyList(), failure);
+        }
     }
 
     private boolean execute(String sql, List<Object> bindings) {

@@ -178,7 +178,7 @@ public final class ConnectionBuilder {
             throw new IllegalStateException("a driver source is required");
         }
         return new RootConnection(driver, new ConnectionSettings(
-                name, tablePrefix, showBindingsInErrors, strictTransactions, cleanupFailureHandler));
+                name, tablePrefix, showBindingsInErrors, strictTransactions, cleanupFailureHandler, driver));
     }
 
     private static void logCleanupFailure(Throwable failure) {

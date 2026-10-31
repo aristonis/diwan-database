@@ -3,6 +3,7 @@ package org.aristonis.photisma.database;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.aristonis.photisma.database.driver.DriverInfo;
 
 /**
  * Sends SQL to one database and manages transactions on it.
@@ -365,4 +366,17 @@ public interface Connection {
      * @return the prefix, never {@code null}, empty when none was configured
      */
     String getTablePrefix();
+
+    /**
+     * Describes the database behind this connection.
+     *
+     * <p>In pretend mode this still describes the real database, so code that picks SQL by
+     * database can record the statements it would run. A driver may borrow one database connection
+     * the first time it is asked, so with a pool of one connection, call it first outside a
+     * transaction.
+     *
+     * @return the driver's description, never {@code null}
+     * @throws QueryException if the driver has to ask the database and that fails
+     */
+    DriverInfo getDriverInfo();
 }
