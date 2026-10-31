@@ -233,7 +233,8 @@ class MigratorSqliteTest {
     @Test
     void entriesWithoutAMigrationAreReportedAndKept() {
         migrator(createTable("old", "old"), createTable("a", "a")).run();
-        Migrator migrator = migrator(createTable("a", "a"), createTable("b", "b"));
+        Migrator migrator = Migrator.builder(schema).add(createTable("a", "a")).add(createTable("b", "b"))
+                .allowMissingOnRollback().build();
 
         List<MigrationStatus> status = migrator.status();
         List<MigrationResult> rolledBack = migrator.rollback();
@@ -364,5 +365,43 @@ class MigratorSqliteTest {
 
         assertEquals("a", failure.migration());
         assertEquals(MigrationFailedException.Phase.MIGRATION, failure.phase());
+    }
+
+    @Test
+    void olderCodeCannotRollBackANewerBatch() {
+        migrator(createTable("a", "a"), createTable("b", "b")).run();
+        Migrator older = migrator(createTable("a", "a"));
+
+        MissingMigrationsException refused = assertThrows(MissingMigrationsException.class, older::rollback);
+        assertThrows(MissingMigrationsException.class, older::reset);
+        assertThrows(MissingMigrationsException.class, () -> older.rollbackSteps(2));
+        assertThrows(MissingMigrationsException.class, () -> older.rollbackBatch(1));
+
+        assertEquals(Collections.singletonList("b"), refused.names());
+        assertTrue(refused.getMessage().contains("nothing was rolled back"));
+        assertTrue(schema.hasTable("a") && schema.hasTable("b"), "nothing undone");
+        assertEquals(Arrays.asList("a", "b"), older.repository().getRan());
+        assertEquals(Arrays.asList("b:NOT_FOUND:1", "a:PRETENDED:0"), names(older.pretendRollback()));
+    }
+
+    @Test
+    void aHostileRecordNameIsShownSafely() {
+        migrator(createTable("a", "a")).run();
+        db.insert("insert into migrations (migration, batch) values (?, ?)", "evil\u2028line", 1);
+
+        MissingMigrationsException refused = assertThrows(MissingMigrationsException.class,
+                () -> migrator(createTable("a", "a")).rollback());
+
+        assertTrue(refused.getMessage().contains("evil?line"));
+        assertEquals("evil\u2028line", refused.names().get(0));
+    }
+
+    @Test
+    void aCorruptRecordFailsLoudlyInsteadOfBeingUndone() {
+        migrator(createTable("a", "a")).run();
+        db.insert("insert into migrations (migration, batch) values (?, ?)", "evil\nline", 1);
+
+        assertThrows(IllegalArgumentException.class, () -> migrator(createTable("a", "a")).rollback());
+        assertTrue(schema.hasTable("a"));
     }
 }

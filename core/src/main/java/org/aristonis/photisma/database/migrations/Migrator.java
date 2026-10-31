@@ -36,7 +36,8 @@ import org.aristonis.photisma.database.schema.Schema;
  * in between leaves the change applied and unrecorded, as in Laravel.
  *
  * <p>A failure stops the call with a {@link MigrationFailedException}; migrations before the failed
- * one stay applied and recorded.
+ * one stay applied and recorded. A rollback or reset that reaches records whose migrations this
+ * migrator does not have is refused before anything is undone ({@link MissingMigrationsException}).
  *
  * <p>Every call refuses to start while one of the migrator's connections is inside a
  * transaction, because nothing it recorded would be final until that transaction ends. Only one
@@ -54,6 +55,7 @@ public final class Migrator {
     private final String table;
     private final DatabaseMigrationRepository repository;
     private final MigrationLock lock;
+    private final boolean isMissingAllowed;
 
     private Migrator(Builder builder, Map<String, Migration> named) {
         this.defaultSchema = builder.defaultSchema;
@@ -69,6 +71,7 @@ public final class Migrator {
         this.table = builder.table;
         this.repository = new DatabaseMigrationRepository(defaultSchema, table);
         this.lock = builder.lock;
+        this.isMissingAllowed = builder.isMissingAllowed;
     }
 
     /**
@@ -159,6 +162,8 @@ public final class Migrator {
      * Rolls back the last batch.
      *
      * @return one result per entry of the batch, newest first; empty when nothing ran
+     * @throws MissingMigrationsException if a record to undo has no migration in this migrator,
+     *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.photisma.database.QueryException if reading the migrations table fails
@@ -174,6 +179,8 @@ public final class Migrator {
      * @param steps how many migrations to roll back, at least 1
      * @return one result per entry, newest first; empty when nothing ran
      * @throws IllegalArgumentException if {@code steps} is below 1
+     * @throws MissingMigrationsException if a record to undo has no migration in this migrator,
+     *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.photisma.database.QueryException if reading the migrations table fails
@@ -191,6 +198,8 @@ public final class Migrator {
      *
      * @param batch the batch number
      * @return one result per entry of the batch, newest first; empty when there is no such batch
+     * @throws MissingMigrationsException if a record to undo has no migration in this migrator,
+     *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.photisma.database.QueryException if reading the migrations table fails
@@ -204,6 +213,8 @@ public final class Migrator {
      * Rolls back every migration that ran, newest first.
      *
      * @return one result per entry; empty when nothing ran
+     * @throws MissingMigrationsException if a record to undo has no migration in this migrator,
+     *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.photisma.database.QueryException if reading the migrations table fails
@@ -327,6 +338,17 @@ public final class Migrator {
     }
 
     private List<MigrationResult> rollBack(List<MigrationEntry> entries) {
+        if (!isMissingAllowed) {
+            List<String> missing = new ArrayList<>();
+            for (MigrationEntry entry : entries) {
+                if (!byName.containsKey(entry.name())) {
+                    missing.add(entry.name());
+                }
+            }
+            if (!missing.isEmpty()) {
+                throw new MissingMigrationsException(missing);
+            }
+        }
         List<MigrationResult> results = new ArrayList<>();
         for (MigrationEntry entry : entries) {
             Migration migration = byName.get(entry.name());
@@ -454,6 +476,7 @@ public final class Migrator {
         private final List<Migration> migrations = new ArrayList<>();
         private String table = DatabaseMigrationRepository.DEFAULT_TABLE;
         private MigrationLock lock = MigrationLock.NONE;
+        private boolean isMissingAllowed;
 
         private Builder(Schema defaultSchema) {
             this.defaultSchema = defaultSchema;
@@ -528,6 +551,18 @@ public final class Migrator {
          */
         public Builder lock(MigrationLock lock) {
             this.lock = Objects.requireNonNull(lock, "lock");
+            return this;
+        }
+
+        /**
+         * Lets rollback and reset go ahead when some records have no migration in this migrator,
+         * as Laravel does: the known migrations are undone and the unknown records are reported as
+         * {@link MigrationResult.Outcome#NOT_FOUND} and kept. By default such a call is refused.
+         *
+         * @return this builder
+         */
+        public Builder allowMissingOnRollback() {
+            this.isMissingAllowed = true;
             return this;
         }
 
