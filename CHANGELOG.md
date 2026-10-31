@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Every common Laravel column type: tiny, small and medium integers and `unsigned*` forms,
+  `*Increments`, `floatColumn`, `doubleColumn`, `charColumn`, `tinyText`, `mediumText`,
+  `longText`, `dateTime`, `dateTimeTz`, `time`, `timeTz`, `timestampTz`, `year`, `binary`, `uuid`,
+  `ulid`, `ipAddress`, `macAddress`, `jsonb`, `enumColumn`, `set`; precision on float, time and
+  timestamp columns; `ColumnDefinition.precision`, `allowed` and `usesCurrent`.
+- Helpers: `timestampsTz`, `nullableTimestamps`, `datetimes`, `softDeletes` (three forms),
+  `rememberToken`, `foreignUuid`, `foreignUlid`, the `morphs` family, and their drop helpers.
+- SQLite: enum as a checked `varchar` that table rebuilds carry over.
+
 - Indexes and keys: `Blueprint.index`, `unique`, `primary`, `foreign`, `foreignId` with
   `ForeignIdColumnDefinition.constrained`, `ForeignKeyDefinition` and `ForeignKeyAction`; the drops
   `dropIndex`, `dropUnique`, `dropPrimary`, `dropForeign`, `dropConstrainedForeignId`;

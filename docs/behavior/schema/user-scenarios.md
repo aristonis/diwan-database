@@ -46,3 +46,12 @@
 | E32 | `dropForeign(name)` on SQLite | Refused: use the columns form | `SQLiteKeysTest#droppingAForeignKeyByNameIsRefused` |
 | E33 | Pretend a migration that rebuilds | Real statements listed; nothing changes | `MigratorKeysTest#pretendListsTheRebuildAndTouchesNothing` |
 | E34 | Incomplete foreign key, empty or repeated columns | Refused before anything runs | `BlueprintKeysTest#incompleteForeignKeysAreRefused`, `BlueprintKeysTest#emptyOrRepeatedColumnListsAreRefused` |
+| E35 | Every column type on SQLite | Laravel's SQLite type | `SQLiteTypesTest#everyTypeHasLaravelsSqliteType` |
+| E36 | Enum value outside the list, or one with quotes and SQL | Refused; the hostile one stored literally | `SQLiteTypesTest#enumRefusesOtherValuesAndKeepsHostileOnesLiteral` |
+| E37 | `year().useCurrent()`, `time().useCurrent()` | Current year and time filled in | `SQLiteTypesTest#currentDefaultsAreFilledIn` |
+| E38 | `set` on SQLite | Refused | `SQLiteTypesTest#setIsRefusedOnSqlite` |
+| E39 | Table with an enum gets a key later, or the enum is renamed on old SQLite | Check kept under the current name | `SQLiteEnumRebuildTest#anEnumSurvivesARebuildWithItsCheck`, `#aRenamedEnumKeepsItsCheckOnOldSqlite` |
+| E40 | A check on another column, a table-level check, or an enum check written differently | Rebuild refused | `SQLiteEnumRebuildTest#aCheckOnAnotherColumnIsRefused`, `#aTableLevelCheckIsRefusedEvenInEnumShape`, `#anEnumCheckWrittenDifferentlyIsRefused` |
+| E41 | A default text that contains `check`, `collate` or `as` | Not mistaken for a constraint | `SQLiteEnumRebuildTest#wordsInsideLiteralsDoNotTripTheRefusals` |
+| E42 | Helpers and drop helpers in a real migration and rollback | Columns and index added and removed | `MigratorTypesTest#helpersAddAndDropTheirColumns` |
+| E43 | Empty, null or repeated enum values; bad lengths and precisions | Refused before anything runs | `BlueprintTypesTest#invalidValuesAndRangesAreRefused` |

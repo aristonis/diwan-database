@@ -98,6 +98,9 @@ schema.create("users", table -> {
     table.id();
     table.string("email").unique();
     table.booleanColumn("active").defaultValue(true);
+    table.enumColumn("role", Arrays.asList("admin", "member")).defaultValue("member");
+    table.rememberToken();
+    table.softDeletes();
     table.timestamps();
 });
 schema.create("posts", table -> {

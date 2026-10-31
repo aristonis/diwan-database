@@ -31,12 +31,26 @@ Schema builder
 
 Columns, with Laravel's defaults
 
-- `id()` (auto-increment big integer primary key), `string` (255), `text`, `integer`, `bigInteger`,
-  `booleanColumn`, `decimal` (8, 2), `date`, `timestamp`, `json`, `timestamps()` (nullable
-  `created_at` and `updated_at`).
+- Keys: `id()`, `increments`, `integerIncrements`, `tinyIncrements`, `smallIncrements`,
+  `mediumIncrements`, `bigIncrements` (unsigned auto-increment primary keys).
+- Numbers: `tinyInteger`, `smallInteger`, `mediumInteger`, `integer`, `bigInteger` and their
+  `unsigned*` forms; `decimal` (8, 2); `floatColumn` (precision 53 binary digits); `doubleColumn`.
+- Text: `string` (255), `charColumn` (255), `tinyText`, `text`, `mediumText`, `longText`.
+- Dates: `date`, `dateTime`, `dateTimeTz`, `time`, `timeTz`, `timestamp`, `timestampTz` (each
+  with an optional fractional-second precision, 0 to 6), `year`.
+- Other: `booleanColumn`, `json`, `jsonb`, `binary`, `uuid`, `ulid` (char 26), `ipAddress`,
+  `macAddress`, `enumColumn(values)`, `set(values)`; `uuid()`, `ulid()`, `ipAddress()` and
+  `macAddress()` use Laravel's default column names.
+- Helpers: `timestamps`, `timestampsTz`, `nullableTimestamps`, `datetimes`; `softDeletes`,
+  `softDeletesTz`, `softDeletesDatetime` (`deleted_at`); `rememberToken`; `foreignId`,
+  `foreignUuid`, `foreignUlid`; `morphs`, `numericMorphs`, `uuidMorphs`, `ulidMorphs` and their
+  `nullable*` forms; drop helpers `dropTimestamps`, `dropTimestampsTz`, `dropSoftDeletes`,
+  `dropSoftDeletesTz`, `dropRememberToken`, `dropMorphs`.
+- Java keywords change name: `booleanColumn`, `floatColumn`, `doubleColumn`, `charColumn`,
+  `enumColumn`; `default` is `defaultValue`.
 - Modifiers: `nullable`, `defaultValue` (text, numbers, booleans, `Expression`, or `null` for SQL
-  `NULL`), `useCurrent` on date and timestamp, `unique` and `unique(name)`, `autoIncrement` on
-  integer columns, `unsigned` and `comment` (ignored on SQLite).
+  `NULL`), `useCurrent` on every date, time and year column, `unique`, `index`, `primary`,
+  `autoIncrement` on integer columns, `unsigned` and `comment` (ignored on SQLite).
 
 Indexes and keys
 
@@ -70,6 +84,8 @@ SQLite
 - `renameColumn` and `dropColumn` run in place on SQLite 3.25 and 3.35 and later, and rebuild the
   table on older versions such as Android 9's, where a column another table references is refused.
 - `dropForeign` by name is refused, since SQLite keys have no names.
+- An enum is `varchar` with `check ("<column>" in (...))`; a table rebuild keeps that check, under
+  the column's current name. `set` is refused.
 
 Safety and errors
 
@@ -89,5 +105,6 @@ Safety and errors
 ## 5. Non-goals
 
 Fulltext, spatial, partial and expression indexes, changing a column's type, `foreignIdFor`,
-uuid and ulid keys, other column types, the PostgreSQL and MySQL grammars, temporary tables,
+spatial, vector and computed columns, the modifiers `after`, `first`, `charset`, `collation`,
+`storedAs`, `virtualAs` and `useCurrentOnUpdate`, the PostgreSQL and MySQL grammars, temporary tables,
 schema-qualified names, listings of tables and columns.

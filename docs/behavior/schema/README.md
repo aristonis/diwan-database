@@ -40,13 +40,17 @@ schema.dropIfExists("people");
 | Link tables | `foreignId(...).constrained()`, `foreign(...).references(...).on(...)`, `cascadeOnDelete` and the other actions, `dropForeign`, `dropConstrainedForeignId` |
 | Change columns | `dropColumn`, `renameColumn` |
 | Work around keys | `withoutForeignKeyConstraints` |
-| Declare columns | `id`, `string`, `text`, `integer`, `bigInteger`, `booleanColumn`, `decimal`, `date`, `timestamp`, `json`, `timestamps` |
+| Declare columns | every Laravel column type: integers and `*Increments`, `floatColumn`, `doubleColumn`, `decimal`, `string`, `charColumn`, the text family, the date and time family, `year`, `booleanColumn`, `json`, `jsonb`, `binary`, `uuid`, `ulid`, `ipAddress`, `macAddress`, `enumColumn`, `set` |
+| Use Laravel's shortcuts | `timestamps` and its variants, `softDeletes`, `rememberToken`, `foreignUuid`, `foreignUlid`, the `morphs` family, and their drop helpers |
 | Shape a column | `nullable`, `defaultValue`, `useCurrent`, `unique`, `index`, `primary`, `autoIncrement`, `unsigned`, `comment` |
 
 ## How it behaves
 
-- Laravel names that are Java keywords change: `boolean` is `booleanColumn`, `default` is
+- Laravel names that are Java keywords change: `boolean`, `float`, `double`, `char` and `enum`
+  are `booleanColumn`, `floatColumn`, `doubleColumn`, `charColumn` and `enumColumn`; `default` is
   `defaultValue`.
+- On SQLite an enum refuses any value outside its list, and keeps that rule through every later
+  table rebuild; `set` is refused, since SQLite has nothing like it.
 - The connection's table prefix goes in front of every table and generated index name.
 - Any name is allowed except empty names and names with control characters; quotes inside a name
   are escaped, so a name cannot carry SQL.
