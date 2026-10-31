@@ -35,6 +35,10 @@ abstract class AbstractConnection implements Connection {
 
     /** Translates a driver failure into the exception callers see, keeping the driver failure as cause. */
     final QueryException queryFailure(String sql, List<Object> bindings, DriverException failure) {
+        if (failure.isForeignKeyViolation()) {
+            return new ForeignKeyViolationException(
+                    settings.name(), sql, bindings, failure, settings.showBindingsInErrors());
+        }
         if (failure.isUniqueViolation()) {
             return new UniqueConstraintViolationException(
                     settings.name(), sql, bindings, failure, settings.showBindingsInErrors());

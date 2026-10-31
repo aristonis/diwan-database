@@ -79,6 +79,14 @@ public class QueryException extends RuntimeException {
         this.concurrencyFailure = cause.isConcurrencyFailure();
     }
 
+    // PostgreSQL refuses CREATE INDEX CONCURRENTLY, VACUUM and the like inside a transaction.
+    private static String hint(DriverException cause) {
+        return "25001".equals(cause.sqlState().orElse(""))
+                ? " The statement cannot run inside a transaction; in a migration, make withinTransaction()"
+                        + " return false."
+                : "";
+    }
+
     private static String message(
             String connectionName, String sql, List<?> bindings, DriverException cause, boolean showBindings) {
         Objects.requireNonNull(connectionName, "connectionName");
@@ -87,7 +95,7 @@ public class QueryException extends RuntimeException {
         Objects.requireNonNull(cause, "cause");
         String base = "SQL: " + MessageText.sql(sql) + " (Connection: " + MessageText.name(connectionName)
                 + ", SQL state " + MessageText.name(cause.sqlState().orElse("unknown"))
-                + ", vendor code " + cause.vendorCode() + ")";
+                + ", vendor code " + cause.vendorCode() + ")" + hint(cause);
         if (!showBindings) {
             return base;
         }

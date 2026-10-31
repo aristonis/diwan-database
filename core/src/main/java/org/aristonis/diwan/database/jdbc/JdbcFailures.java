@@ -16,6 +16,14 @@ final class JdbcFailures {
     private static final String SERIALIZATION_STATE = "40001";
     private static final String DEADLOCK_STATE = "40P01";
     private static final String CONNECTION_STATE_CLASS = "08";
+    private static final String FOREIGN_KEY_STATE = "23503";
+    private static final String CANCELLED_STATE = "57014";
+    private static final String LOCK_NOT_AVAILABLE_STATE = "55P03";
+    private static final String[] SERVER_GONE_STATES = {"57P01", "57P02", "57P03"};
+    private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+    private static final String[] SQLITE_FOREIGN_KEY_MARKERS = {
+        "SQLITE_CONSTRAINT_FOREIGNKEY", "FOREIGN KEY constraint failed"
+    };
 
     private static final int MYSQL_DUPLICATE = 1062;
     private static final int SQLITE_CONSTRAINT = 19;
@@ -80,8 +88,16 @@ final class JdbcFailures {
             if (databaseMessage == null && sql.getMessage() != null) {
                 databaseMessage = sql.getMessage();
             }
-            if (s != null && s.startsWith(CONNECTION_STATE_CLASS)) {
+            if (s != null && (s.startsWith(CONNECTION_STATE_CLASS) || isServerGone(s))) {
                 isConnectionFailure = true;
+            }
+            if (FOREIGN_KEY_STATE.equals(s) || family == DatabaseFamily.SQLITE
+                    && (code == SQLITE_CONSTRAINT_FOREIGNKEY || code == SQLITE_CONSTRAINT
+                    && mentions(sql.getMessage(), SQLITE_FOREIGN_KEY_MARKERS))) {
+                kinds.add(DriverFailureKind.FOREIGN_KEY_VIOLATION);
+            }
+            if (CANCELLED_STATE.equals(s)) {
+                kinds.add(DriverFailureKind.CANCELLED);
             }
             if (isUnique(family, s, code, sql.getMessage())) {
                 kinds.add(DriverFailureKind.UNIQUE_VIOLATION);
@@ -92,6 +108,7 @@ final class JdbcFailures {
         }
         if (isConnectionFailure) {
             kinds.remove(DriverFailureKind.CONCURRENCY);
+            kinds.add(DriverFailureKind.CONNECTION_LOST);
         }
         return new DriverException(
                 message(state, vendorCode), state, vendorCode, databaseMessage, failure, kinds);
@@ -138,11 +155,24 @@ final class JdbcFailures {
         }
     }
 
+    private static boolean isServerGone(String state) {
+        for (String gone : SERVER_GONE_STATES) {
+            if (gone.equals(state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean mentionsSqliteUnique(String text) {
+        return mentions(text, SQLITE_UNIQUE_MARKERS);
+    }
+
+    private static boolean mentions(String text, String[] markers) {
         if (text == null) {
             return false;
         }
-        for (String marker : SQLITE_UNIQUE_MARKERS) {
+        for (String marker : markers) {
             if (text.contains(marker)) {
                 return true;
             }
@@ -151,7 +181,8 @@ final class JdbcFailures {
     }
 
     private static boolean isConcurrency(DatabaseFamily family, String state, int code) {
-        if (SERIALIZATION_STATE.equals(state) || DEADLOCK_STATE.equals(state)) {
+        if (SERIALIZATION_STATE.equals(state) || DEADLOCK_STATE.equals(state)
+                || LOCK_NOT_AVAILABLE_STATE.equals(state)) {
             return true;
         }
         switch (family) {

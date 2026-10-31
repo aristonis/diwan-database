@@ -15,12 +15,38 @@ public enum DriverFailureKind {
     UNIQUE_VIOLATION,
 
     /**
-     * Marks a deadlock, a serialization failure, or a busy or locked database.
+     * Marks a deadlock, a serialization failure, a busy or locked database, or a lock that was not
+     * available in time (PostgreSQL {@code lock_timeout} or {@code NOWAIT}), so each retry may wait
+     * that timeout again.
      *
      * <p>A failure of this kind raised by a statement or savepoint command on the transaction's own
      * session is retryable at the outermost transaction. A failure raised by
      * {@link DriverSession#commit()} is never retried, whatever its kind, because the commit may
      * have landed; a driver must not report a connection lost during a commit as this kind.
      */
-    CONCURRENCY
+    CONCURRENCY,
+
+    /** Marks a failure caused by a foreign key constraint violation. */
+    FOREIGN_KEY_VIOLATION,
+
+    /** Marks a statement the database cancelled, such as one that ran past a statement timeout. */
+    CANCELLED,
+
+    /**
+     * Marks a failure that ended the connection: a network failure, or the server shutting down.
+     *
+     * <p>Never retried, and the session that saw it is dropped rather than handed back. It says
+     * nothing about whether a commit in flight landed: after a lost connection during a commit,
+     * check the data before repeating the work.
+     */
+    CONNECTION_LOST,
+
+    /**
+     * Marks a commit whose connection was lost before the database answered, so the work may or may
+     * not have been committed.
+     *
+     * <p>Never retried by the library. Check the data before repeating the work; repeating it blindly
+     * can apply it twice.
+     */
+    COMMIT_OUTCOME_UNKNOWN
 }

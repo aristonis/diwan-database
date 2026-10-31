@@ -153,6 +153,15 @@ public final class DriverException extends RuntimeException {
     }
 
     /**
+     * Tells whether the driver classified this failure as a foreign key constraint violation.
+     *
+     * @return {@code true} if the kinds include {@link DriverFailureKind#FOREIGN_KEY_VIOLATION}
+     */
+    public boolean isForeignKeyViolation() {
+        return kinds.contains(DriverFailureKind.FOREIGN_KEY_VIOLATION);
+    }
+
+    /**
      * Tells whether the driver classified this failure as a concurrency failure.
      *
      * @return {@code true} if the kinds include {@link DriverFailureKind#CONCURRENCY}

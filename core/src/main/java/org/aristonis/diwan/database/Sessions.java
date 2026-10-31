@@ -46,6 +46,11 @@ final class Sessions {
     // One set across the whole walk, so exceptions that suppress each other cannot loop forever.
     private static boolean isConnectionLost(Throwable failure, java.util.Set<Throwable> seen) {
         for (Throwable t = failure; t != null && seen.add(t); t = t.getCause()) {
+            if (t instanceof org.aristonis.diwan.database.driver.DriverException
+                    && ((org.aristonis.diwan.database.driver.DriverException) t).kinds()
+                            .contains(org.aristonis.diwan.database.driver.DriverFailureKind.CONNECTION_LOST)) {
+                return true;
+            }
             if (t instanceof org.aristonis.diwan.database.driver.DriverException) {
                 String state = ((org.aristonis.diwan.database.driver.DriverException) t).sqlState().orElse("");
                 if (state.startsWith("08") || state.equals("57P01") || state.equals("57P02")

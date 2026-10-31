@@ -38,6 +38,19 @@ public class AndroidSqliteFailuresTest {
     }
 
     @Test
+    public void aForeignKeyFailureIsItsOwnException() {
+        SQLiteDatabase database = SQLiteDatabase.create(null);
+        database.setForeignKeyConstraintsEnabled(true);
+        Connection db = Connection.builder().name("android").driver(AndroidSqliteDriver.of(database)).build();
+        db.statement("create table p (id integer primary key)");
+        db.statement("create table k (p_id integer references p (id))");
+
+        assertThrows(org.aristonis.diwan.database.ForeignKeyViolationException.class,
+                () -> db.insert("insert into k values (?)", 9));
+        database.close();
+    }
+
+    @Test
     public void otherConstraintFailuresHaveNoKind() {
         SQLiteDatabase database = SQLiteDatabase.create(null);
         Connection db = Connection.builder().name("android").driver(AndroidSqliteDriver.of(database)).build();

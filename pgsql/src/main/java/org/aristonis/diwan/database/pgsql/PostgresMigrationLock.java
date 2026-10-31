@@ -96,11 +96,12 @@ public final class PostgresMigrationLock implements MigrationLock {
             connection = dataSource.getConnection();
             connection.setAutoCommit(true);
             keepSessionAlive(connection);
-            long deadline = System.currentTimeMillis() + waitMillis;
+            // nanoTime, so a wall-clock jump neither ends the wait early nor stretches it.
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMillis);
             while (!ask(connection, "select pg_try_advisory_lock(?)")) {
-                if (System.currentTimeMillis() >= deadline) {
+                if (System.nanoTime() - deadline >= 0) {
                     throw new IllegalStateException("The migration lock is held by another process (PostgreSQL pid "
-                            + holder(connection) + "); waited " + waitMillis + " ms");
+                            + holderOrUnknown(connection) + "); waited " + waitMillis + " ms");
                 }
                 Thread.sleep(POLL_MILLIS);
             }
@@ -157,6 +158,15 @@ public final class PostgresMigrationLock implements MigrationLock {
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() && result.getBoolean(1);
             }
+        }
+    }
+
+    // A failing lookup must not replace the timeout with a less useful error.
+    private String holderOrUnknown(java.sql.Connection connection) {
+        try {
+            return holder(connection);
+        } catch (SQLException e) {
+            return "unknown";
         }
     }
 

@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.SqliteScripts;
 import org.aristonis.diwan.database.driver.SqliteText;
 
 /**
@@ -94,8 +95,11 @@ final class AndroidSqliteSession implements DriverSession {
     @Override
     public void executeUnprepared(String sql) {
         ensureOpen();
+        // execSQL runs only the first statement of a string; a script runs whole.
         try {
-            database.execSQL(Objects.requireNonNull(sql, "sql"));
+            for (String statement : SqliteScripts.split(Objects.requireNonNull(sql, "sql"))) {
+                database.execSQL(statement);
+            }
         } catch (RuntimeException e) {
             throw translate(e);
         }

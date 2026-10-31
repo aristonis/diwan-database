@@ -279,6 +279,10 @@ public interface Connection {
     /**
      * Runs SQL without preparing it or binding parameters.
      *
+     * <p>On SQLite a script of several statements runs whole, one statement after another. Outside a
+     * transaction each statement commits on its own, so a failure partway leaves the earlier ones
+     * applied; run the script in a transaction when it must be all or nothing.
+     *
      * @apiNote This runs raw SQL exactly as given: nothing is bound, quoted or escaped. Never pass
      *     untrusted text, and never build {@code sql} from user input; use a prepared method with
      *     bindings instead.

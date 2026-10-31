@@ -215,6 +215,13 @@ public class AndroidSqliteSessionTest {
     }
 
     @Test
+    public void aWholeScriptRuns() {
+        db.unprepared("create table s (n integer); insert into s values (1); insert into s values (2);");
+
+        assertEquals(2L, db.select("select count(*) as c from s").get(0).get("c"));
+    }
+
+    @Test
     public void rawStatementsRun() {
         db.unprepared("insert into v (i) values (11)");
 

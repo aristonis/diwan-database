@@ -502,16 +502,30 @@ final class SQLiteTableState {
      */
     void refuseIfMentioned(String name, boolean isOwnAllowed) {
         for (Column column : columns) {
-            if (isOwnAllowed && column.name.equalsIgnoreCase(name)) {
+            boolean isOwn = column.name.equalsIgnoreCase(name);
+            if (isOwnAllowed && isOwn) {
                 continue;
             }
             for (String expression : column.expressions) {
-                refuseIfNames(expression, name);
+                // A check the library generated from the column's type is rewritten on rename.
+                if (!(isOwn && isGeneratedMoneyCheck(expression, column.name))) {
+                    refuseIfNames(expression, name);
+                }
             }
         }
         for (TableCheck check : checks) {
             refuseIfNames(check.sql, name);
         }
+    }
+
+    // The shape SQLiteSchemaGrammar writes for a decimal money column; only its own column appears in it.
+    private static boolean isGeneratedMoneyCheck(String clause, String column) {
+        String c = quote(column);
+        return clause.startsWith("check (" + c + " is null or (typeof(" + c + ") = 'text' and ");
+    }
+
+    private static String quote(String name) {
+        return "\"" + name.replace("\"", "\"\"") + "\"";
     }
 
     // Constraint names and function names are skipped, so a column called "length" can still be renamed.
@@ -551,6 +565,17 @@ final class SQLiteTableState {
         if (find(to) != null) {
             throw new IllegalArgumentException("Column " + to + " already exists in table " + table);
         }
+        List<String> renamed = new ArrayList<>(column.expressions.size());
+        for (String expression : column.expressions) {
+            if (isGeneratedMoneyCheck(expression, column.name)) {
+                String moved = expression.replace(quote(column.name), quote(to));
+                column.extras = column.extras.replace(expression, moved);
+                renamed.add(moved);
+            } else {
+                renamed.add(expression);
+            }
+        }
+        column.expressions = Collections.unmodifiableList(renamed);
         column.name = to;
         if (hasRun) {
             column.source = to;

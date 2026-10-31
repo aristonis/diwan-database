@@ -22,6 +22,8 @@ final class AndroidSqliteFailures {
     // Android appends "(code 2067 SQLITE_CONSTRAINT_UNIQUE)", or "(code 2067)" on older versions.
     private static final Pattern CODE = Pattern.compile("\\(code (\\d+)");
     private static final String[] UNIQUE_MARKERS = {"UNIQUE constraint failed", "PRIMARY KEY must be unique"};
+    private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+    private static final String FOREIGN_KEY_MARKER = "FOREIGN KEY constraint failed";
 
     private AndroidSqliteFailures() {
     }
@@ -32,6 +34,10 @@ final class AndroidSqliteFailures {
         Set<DriverFailureKind> kinds = EnumSet.noneOf(DriverFailureKind.class);
         if (failure instanceof SQLiteConstraintException && isUnique(code, text)) {
             kinds.add(DriverFailureKind.UNIQUE_VIOLATION);
+        }
+        if (failure instanceof SQLiteConstraintException
+                && (code == SQLITE_CONSTRAINT_FOREIGNKEY || text.contains(FOREIGN_KEY_MARKER))) {
+            kinds.add(DriverFailureKind.FOREIGN_KEY_VIOLATION);
         }
         if (failure instanceof SQLiteDatabaseLockedException
                 || (code & PRIMARY_CODE_MASK) == SQLITE_BUSY || (code & PRIMARY_CODE_MASK) == SQLITE_LOCKED) {

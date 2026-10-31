@@ -24,11 +24,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.driver.SqliteScripts;
 import org.aristonis.diwan.database.driver.SqliteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverInfo;
@@ -156,8 +158,13 @@ final class JdbcSession implements DriverSession {
     public void executeUnprepared(String sql) {
         ensureOpen();
         Objects.requireNonNull(sql, "sql");
+        // The SQLite driver runs only a string's first statement; a script runs whole, as on PDO.
+        List<String> statements = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
+                ? SqliteScripts.split(sql) : Collections.singletonList(sql);
         try (Statement statement = connection.createStatement()) {
-            statement.execute(sql);
+            for (String one : statements) {
+                statement.execute(one);
+            }
         } catch (SQLException e) {
             throw failure(e);
         }
@@ -192,7 +199,7 @@ final class JdbcSession implements DriverSession {
             endTransaction();
             resumeAutoCommit();
         } catch (SQLException e) {
-            throw failure(e);
+            throw commitFailure(failure(e));
         }
     }
 
@@ -565,6 +572,17 @@ final class JdbcSession implements DriverSession {
             default:
                 return null;
         }
+    }
+
+    // A commit that lost its connection may have landed; the kind says so, apart from a plain loss.
+    private static DriverException commitFailure(DriverException failure) {
+        if (!failure.kinds().contains(DriverFailureKind.CONNECTION_LOST)) {
+            return failure;
+        }
+        Set<DriverFailureKind> kinds = EnumSet.copyOf(failure.kinds());
+        kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
+        return new DriverException(failure.getMessage(), failure.sqlState().orElse(null), failure.vendorCode(),
+                failure.databaseMessage().orElse(null), failure.getCause(), kinds);
     }
 
     private static DriverException duplicateLabel(String label) {
