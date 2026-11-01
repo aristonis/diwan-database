@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.query.Identifiers;
 
 /**
  * Turns a {@link Blueprint} into SQL for one database.
@@ -598,7 +599,7 @@ public abstract class SchemaGrammar {
      * @return the quoted identifier, never {@code null}
      */
     protected String wrap(String name) {
-        return "\"" + name.replace("\"", "\"\"") + "\"";
+        return Identifiers.quote(name, '"');
     }
 
     /**
@@ -618,11 +619,14 @@ public abstract class SchemaGrammar {
      *
      * @implSpec Text is put in single quotes with any single quote doubled; {@code true} and
      *     {@code false} become {@code '1'} and {@code '0'}, as in Laravel; numbers are quoted in
-     *     their plain decimal form; an {@link Expression} is written as given.
+     *     their plain decimal form; an {@link Expression} is written as given. A backslash is
+     *     not escaped, because SQLite and PostgreSQL (with standard strings) read it as an
+     *     ordinary character.
      *
      * @param value the value, never {@code null}, of a type {@link ColumnDefinition#defaultValue(Object)}
      *     keeps
      * @return the SQL literal, never {@code null}
+     * @throws IllegalArgumentException if text holds a NUL character
      */
     protected String literal(Object value) {
         if (value instanceof Expression) {
@@ -632,6 +636,9 @@ public abstract class SchemaGrammar {
             return ((Boolean) value) ? "'1'" : "'0'";
         }
         String text = value instanceof BigDecimal ? ((BigDecimal) value).toPlainString() : value.toString();
+        if (text.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("Strings with NUL characters cannot be escaped");
+        }
         return "'" + text.replace("'", "''") + "'";
     }
 
