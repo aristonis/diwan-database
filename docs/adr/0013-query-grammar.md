@@ -85,3 +85,72 @@ dispatch have no direct Java form. Moments and money also need a storage rule, a
   land on another session and return another row's id.
 - Echoing the caller's operator text after an allowlist check: two spellings of one operator in
   generated SQL, for no gain.
+
+## Addendum: joins, unions and subqueries
+
+Status: Accepted. This addendum extends the decision above; rule 4's reserved join and union
+buckets are now filled as described here.
+
+### Context
+
+Reports and application screens need joins, subqueries and unions. Laravel stores a subquery's
+bindings when it is attached but compiles its SQL only when the outer query compiles, so a
+subquery changed after attaching yields SQL and values that no longer match. PHP mixes many
+traits into one builder class; Java has no mixins, and one class holding every method passes 800
+lines.
+
+### Decision
+
+1. Attach-time freeze. A subquery given to any slot (select, from, join, where, order, union,
+   update value, `insertUsing`) is copied when it is attached, and its bindings are taken from that
+   copy into the bucket of the clause that holds it. The copy never changes, so the SQL compiled
+   later always matches its bindings. A consumer form fills a fresh plain builder on the same
+   connection and grammar. `clone()` shares these frozen copies and copies only the top-level lists.
+2. Binding order. The buckets keep Laravel's order: select, from, join, where, groupBy, having,
+   order, union, unionOrder. A join's own where values go to the join bucket. One golden test puts
+   a subquery in every slot and checks the values line up with the placeholders on both grammars
+   and both databases.
+3. Joins. `JoinClause` is a `Builder` subclass, as in Laravel: `on` compares columns, `where` binds
+   a value. Join types are inner, left, right and cross. An empty nested `on` group is skipped.
+   The covariant `JoinClause` return covers `on`, `orOn`, `where`, `orWhere`, `whereNull` and
+   `whereIn`; other where forms return `Builder`.
+4. Union wrap per dialect. After the first union, `orderBy`, `limit` and `offset` apply to the
+   whole union. SQLite wraps each part as `select * from (...)`, so a part may keep its own order
+   and limit; PostgreSQL wraps each part in parentheses. `count()` and the other aggregates over a
+   union, or over a query with havings, wrap the query as `temp_table`. `exists()` wraps the union.
+5. Writes with joins. An update or delete on a joined query is compiled from a copy, so the
+   caller's builder is unchanged: SQLite writes `rowid in (select alias.rowid ...)`, PostgreSQL
+   `ctid in (select ...)`. Update bindings are the set values (a subquery value in its column's
+   place), then join, then where, then the rest except select.
+6. The base grammar refuses an update or delete with joins and `insertOrIgnoreUsing`; only a
+   database grammar knows how to write them.
+7. A write needs a table. An insert, update, delete or truncate on a query that reads from a
+   subquery or raw SQL, or has no table, is refused before any SQL is compiled.
+8. The builder is split into package-private abstract layers with `Builder` as the public leaf,
+   and the query grammar the same way. Public methods are `final`, so the layers are not an
+   extension point.
+
+### Limits
+
+- A right join needs SQLite 3.39 or later. Older SQLite, as shipped with Android 9 to 13, reports
+  its own error, which passes through as `QueryException`.
+- An update or delete with a join on a SQLite table created `without rowid` fails with SQLite's
+  error.
+- Ordering a whole union by a subquery is refused by both databases, since a compound query may
+  only be ordered by a result column.
+
+### Consequences
+
+- Subqueries can be built once and reused; later changes to the caller's builder never leak in.
+- Javadoc links to methods declared in a package-private layer render as plain text in the
+  published HTML.
+
+### Alternatives rejected
+
+- Snapshot bindings at attach and compile SQL later, as Laravel does: SQL and values can drift.
+- Thin delegate methods instead of layers: every public method would still be documented in
+  `Builder`, which stays over 800 lines.
+- A self-typed `Builder<B>`: `JoinClause` extends `Builder`, which would already have fixed the
+  type parameter, so it could not narrow it.
+- Detecting `without rowid` tables or the SQLite version on every write: needs a schema or
+  version read per call.

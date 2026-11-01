@@ -39,6 +39,36 @@ Select and where
 - Date wheres apply to text date and time columns. Instant columns use `whereInstantBetween`, a
   range that includes the start and excludes the end.
 
+Joins
+
+- `join`, `leftJoin`, `rightJoin` and `crossJoin` with a column comparison or a join clause built
+  by a consumer; `joinWhere` and its left and right forms compare with a bound value; `joinSub`,
+  `leftJoinSub`, `rightJoinSub` and `crossJoinSub` join a subquery under an alias. A table may
+  carry an `as` alias.
+- A join clause offers `on`, `orOn`, nested `on` groups and every where form; a `null` value in a
+  join where is `is null`; an empty nested group adds nothing.
+- A right join needs SQLite 3.39 or later; on older SQLite the database's error passes through.
+
+Subqueries
+
+- A subquery is a builder, a consumer that fills a fresh builder, or (for `fromSub`, `joinSub`
+  and `selectSub`) raw SQL text.
+- `fromSub`, `fromRaw`, `from(query, alias)`, `selectSub`, `addSelect(alias, query)`; `whereIn`
+  and `whereNotIn` with a subquery; `whereExists`, `whereNotExists` and their `or` forms; a column
+  compared with a subquery and a subquery compared with a value; `whereRowValues`, which refuses
+  different column and value counts; `orderBy` a subquery.
+- A subquery is copied when attached: changing it afterwards changes neither the SQL nor the
+  values of the outer query.
+- Values come out in the same order as the placeholders, whichever slots hold subqueries.
+
+Unions
+
+- `union` and `unionAll` with a builder or a consumer. After the first union, `orderBy`, `limit`
+  and `offset` apply to the whole union; on SQLite each part may also keep its own order and limit.
+- `count` and the other aggregates over a union, or over a query with havings, count the combined
+  rows; `exists` works on a union.
+- Ordering a whole union by a subquery is refused by both databases.
+
 Order, group and limit
 
 - `orderBy`, `orderByDesc`, `latest`, `oldest`, `inRandomOrder`, `orderByRaw`, `reorder`; a
@@ -66,6 +96,13 @@ Write
 - `delete()` and `delete(id)`; update and delete with a limit change at most that many rows on
   both databases.
 - `truncate()` empties the table and resets its id counter.
+- `insertUsing(columns, query)` copies the rows a subquery returns; `insertOrIgnoreUsing` skips
+  rows that break a unique key (SQLite `insert or ignore`, PostgreSQL `on conflict do nothing`).
+- `update` accepts a subquery as a value, written as `(select ...)`.
+- Update and delete on a joined query change only the joined rows and leave the builder unchanged.
+  On SQLite this needs a table with a rowid; a `without rowid` table fails with SQLite's error.
+- A write on a query that reads from a subquery or raw SQL, or has no table, is refused before
+  anything runs.
 
 SQL output and copies
 
@@ -91,6 +128,7 @@ Values
 
 ## 5. Non-goals
 
-Joins, unions, subqueries, `whereExists`, chunking, cursors and pagination; JSON and full-text
-wheres; upsert, `insertOrIgnore` and `insertUsing`; dynamic wheres and macros; `dump` and `dd`;
-locks; bitwise operators; `distinct on`; a typed row object; Eloquent models; MySQL and SQL Server.
+Lateral joins, `straightJoin`, `updateFrom` and cross-database name prefixes; chunking, cursors
+and pagination; JSON and full-text wheres; upsert and `insertOrIgnore`; dynamic wheres and macros;
+`dump` and `dd`; locks; bitwise operators; `distinct on`; a typed row object; Eloquent models;
+MySQL and SQL Server.

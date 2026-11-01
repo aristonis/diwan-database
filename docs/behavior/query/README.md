@@ -18,6 +18,14 @@ long count = query.table("orders").where("status", "open").count();
 Object id = query.table("orders").insertGetId(Map.of("customer", "ada", "status", "open"));
 query.table("orders").where("id", id).update(Map.of("status", "paid"));
 query.table("orders").where("id", id).delete();
+
+List<Object> names = query.table("customers")
+        .select("customers.name")
+        .join("orders", "customers.id", "=", "orders.customer_id")
+        .whereExists(q -> q.from("payments").whereColumn("payments.customer_id", "customers.id"))
+        .union(query.table("archived_customers").select("name"))
+        .orderBy("name")
+        .pluck("name");
 ```
 
 ## What you can do
@@ -27,11 +35,22 @@ query.table("orders").where("id", id).delete();
 | Start a query | `table`, `query`, `select`, `addSelect`, `selectRaw`, `distinct` |
 | Filter rows | `where`, `orWhere`, `whereNot`, `whereIn`, `whereNull`, `whereBetween`, `whereLike`, `whereColumn`, `whereDate` and friends, `whereInstantBetween`, `whereAll`, `whereAny`, `whereNone`, `whereRaw` |
 | Sort, group and page | `orderBy`, `latest`, `oldest`, `inRandomOrder`, `reorder`, `groupBy`, `having`, `limit`, `offset`, `forPage` |
+| Combine | `join`, `leftJoin`, `rightJoin`, `crossJoin`, `joinSub`, `union`, `unionAll` |
+| Use a subquery | `fromSub`, `selectSub`, `whereIn` or `whereExists` with a query, `whereRowValues`, `orderBy` a query |
 | Read | `get`, `first`, `find`, `value`, `pluck`, `exists`, `doesntExist` |
 | Count and sum | `count`, `min`, `max`, `sum`, `avg` |
-| Write | `insert`, `insertGetId`, `update`, `increment`, `decrement`, `delete`, `truncate` |
+| Write | `insert`, `insertGetId`, `insertUsing`, `insertOrIgnoreUsing`, `update`, `increment`, `decrement`, `delete`, `truncate` |
 | See the SQL | `toSql`, `getBindings`, `toRawSql` |
 | Copy | `clone`, `newQuery` |
 
 Money is written explicitly (`Money.toMinor(amount, 2)` or `Money.toText(amount, scale)`) and read
 with `MoneyAmount.read`. An `Instant` is stored as `Blueprint.instant` stores it on each database.
+
+## Limits
+
+- A right join needs SQLite 3.39 or later. Older SQLite, including Android 9 to 13, reports its
+  own error as a `QueryException`.
+- An update or delete with a join on a SQLite `without rowid` table fails with SQLite's error.
+- Neither database lets a whole union be ordered by a subquery.
+- A write needs a table: insert, update, delete and truncate are refused on a query that reads
+  from a subquery or raw SQL.

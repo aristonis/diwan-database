@@ -235,6 +235,35 @@ text date columns; use `whereInstantBetween` on instant columns. A builder is no
 `clone()` gives an independent copy. Differences from Laravel are listed in
 [ADR 0013](docs/adr/0013-query-grammar.md).
 
+Joins, subqueries and unions:
+
+```java
+List<Map<String, Object>> rows = query.table("orders")
+        .join("customers", "customers.id", "=", "orders.customer_id")
+        .leftJoinSub(query.table("payments").selectRaw("order_id, sum(amount) as paid")
+                .groupBy("order_id"), "p", "p.order_id", "=", "orders.id")
+        .whereExists(q -> q.from("notes").whereColumn("notes.order_id", "orders.id"))
+        .select("orders.id", "customers.name", "p.paid")
+        .get();
+
+List<Object> latest = query.table("orders").select("id").where("status", "open")
+        .union(query.table("archived_orders").select("id"))
+        .orderByDesc("id")
+        .limit(20)
+        .pluck("id");
+long open = query.table("orders").where("status", "open")
+        .union(query.table("archived_orders").where("status", "open")).count();
+
+query.table("archive").insertUsing(List.of("id", "total"),
+        q -> q.from("orders").select("id", "total").where("status", "closed"));
+query.table("orders").join("customers", "customers.id", "=", "orders.customer_id")
+        .where("customers.blocked", true).update(Map.of("status", "held"));
+```
+
+A subquery is copied when attached, so changing it later does not change the outer query. A right
+join needs SQLite 3.39 or later (older Android SQLite reports its own error). An update or delete
+with a join needs a table with a rowid on SQLite. Writes need a table, not a subquery.
+
 ### Migrations
 
 ```java

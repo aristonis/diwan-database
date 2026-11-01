@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Query builder joins, subqueries and unions: `join`, `leftJoin`, `rightJoin`, `crossJoin`, their
+  `Where` and `Sub` forms and `JoinClause`; `fromSub`, `fromRaw`, `selectSub`, subqueries in
+  `where`, `whereIn`, `whereExists` and `orderBy`, and `whereRowValues`; `union` and `unionAll`
+  with order, limit and aggregates over the whole union; `insertUsing`, `insertOrIgnoreUsing`, an
+  update with a subquery value, and update or delete through a join. A subquery is copied when
+  attached, so its SQL and values never drift apart. A right join needs SQLite 3.39 or later.
+- A write on a query that reads from a subquery, or has no table, is refused with
+  `IllegalStateException` before any SQL is compiled.
 - Query builder: `QueryFactory` and `Builder` with Laravel's names for select, where (including
   nested, `in`, `null`, `between`, `like`, date and `whereInstantBetween`), order, group, having,
   limit, reads, aggregates, insert, `insertGetId`, update, increment, delete and truncate;

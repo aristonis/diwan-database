@@ -15,6 +15,22 @@ so that I can follow an insert with related writes.
 Done when: `insertGetId` returns the id on every supported database, including older Android
 SQLite.
 
+### Combine tables and queries
+
+As an application developer, I want joins, subqueries and unions with Laravel's names, so that
+reports and screens that read several tables do not fall back to raw SQL.
+
+Done when: the same join, subquery or union chain returns the same rows on SQLite, PostgreSQL and
+Android, and its values line up with the placeholders.
+
+### Copy and change rows across tables
+
+As an application developer, I want to insert rows from a query and update or delete rows through
+a join, so that bulk changes run as one statement.
+
+Done when: `insertUsing` copies rows, `insertOrIgnoreUsing` skips duplicates, and a joined update
+or delete changes only the joined rows.
+
 ### Count without breaking my query
 
 As an application developer, I want to count or sum the rows a query matches, so that I can show
