@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Query builder: `QueryFactory` and `Builder` with Laravel's names for select, where (including
+  nested, `in`, `null`, `between`, `like`, date and `whereInstantBetween`), order, group, having,
+  limit, reads, aggregates, insert, `insertGetId`, update, increment, delete and truncate;
+  `toSql`, `getBindings` and `toRawSql`. Grammars and processors ship in the database modules:
+  `SQLiteQuery.of` (also for Android) and `PostgresQuery.of`. Instants are stored as
+  `Blueprint.instant` stores them; money is bound explicitly.
 - `ForeignKeyViolationException`, and the failure kinds `FOREIGN_KEY_VIOLATION`, `CANCELLED` and
   `CONNECTION_LOST`, and `COMMIT_OUTCOME_UNKNOWN` for a connection lost during a commit, which may or
   may not have landed; a lock that is not available (PostgreSQL 55P03) counts as a concurrency

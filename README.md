@@ -12,14 +12,15 @@ deadlocks, joining a transaction someone else owns, pretend mode, and errors tha
 data out of logs. It runs over a small driver interface; a JDBC adapter ships in the core. Migrations run through the `Migrator`: run, rollback, reset, status and pretend, one transaction per
 migration where the database allows. The schema builder creates and changes tables through a grammar per database;
 the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar in
-`diwan-database-pgsql`.
+`diwan-database-pgsql`. The query builder reads and writes rows with Laravel's method names,
+through a query grammar from the same modules.
 
 | Layer | State |
 |---|---|
 | Connection, driver interface, JDBC adapter | available |
 | Schema builder: SQLite and PostgreSQL grammars | available |
 | Migrations: contract, migrations table and migrator | available |
-| Query builder | planned |
+| Query builder: SQLite and PostgreSQL grammars | available |
 | Models | planned |
 
 ## Requirements
@@ -196,6 +197,44 @@ database, as the same amount.
 For moments, `table.instant("created_at")` stores whole microseconds on SQLite and `timestamptz` on
 PostgreSQL; convert with `Instants.toMicros` and `Instants.read`.
 
+### Query builder
+
+SQLite (and Android, which uses the same grammar):
+
+```java
+import org.aristonis.diwan.database.query.QueryFactory;
+import org.aristonis.diwan.database.sqlite.SQLiteQuery;
+
+QueryFactory query = SQLiteQuery.of(db);
+Object id = query.table("users").insertGetId(Map.of("email", "ada@example.com"));
+List<Map<String, Object>> active = query.table("users")
+        .where("email", "like", "%@example.com")
+        .whereNotNull("email")
+        .orderByDesc("id")
+        .limit(10)
+        .get();
+long total = query.table("users").count();
+query.table("users").where("id", id).update(Map.of("email", "ada@example.org"));
+```
+
+PostgreSQL:
+
+```java
+import org.aristonis.diwan.database.pgsql.PostgresQuery;
+
+QueryFactory query = PostgresQuery.of(db);
+Object id = query.table("users").insertGetId(Map.of("email", "grace@example.com"));
+Optional<Map<String, Object>> grace = query.table("users").find(id);
+query.table("users").where("id", id).delete();
+```
+
+Every value is bound as a parameter; `raw` and the `*Raw` methods write trusted SQL as given. An
+`Instant` is stored as `Blueprint.instant` stores it; bind money explicitly with `Money.toMinor` or
+`Money.toText` and read it with `MoneyAmount.read`. Date wheres (`whereDate` and friends) are for
+text date columns; use `whereInstantBetween` on instant columns. A builder is not thread-safe;
+`clone()` gives an independent copy. Differences from Laravel are listed in
+[ADR 0013](docs/adr/0013-query-grammar.md).
+
 ### Migrations
 
 ```java
@@ -238,6 +277,8 @@ migrator.rollback();  // undoes the last batch
 - [Connection behavior](docs/behavior/connection/README.md)
 - [Schema builder requirements](docs/requirements/schema.md)
 - [Schema builder behavior](docs/behavior/schema/README.md)
+- [Query builder requirements](docs/requirements/query.md)
+- [Query builder behavior](docs/behavior/query/README.md)
 - [Migrations requirements](docs/requirements/migrations.md)
 - [Migrations behavior](docs/behavior/migrations/README.md)
 - [Migrator requirements](docs/requirements/migrator.md)
