@@ -18,6 +18,9 @@ import java.util.Locale;
  * written into the SQL instead of bound. List fields are unmodifiable copies and may hold
  * {@code null}. A {@link Nested} condition returns a copy of its builder, so every condition is
  * effectively immutable.
+ *
+ * <p>Conditions that hold a subquery are top-level classes in this package: {@link WhereSub},
+ * {@link WhereSubValue}, {@link WhereInSub}, {@link WhereExists}, plus {@link WhereRowValues}.
  */
 public interface Where {
 
@@ -52,11 +55,7 @@ public interface Where {
             this.value = value;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -108,11 +107,7 @@ public interface Where {
             this.sql = sql;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -155,11 +150,7 @@ public interface Where {
             this.not = not;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -223,11 +214,7 @@ public interface Where {
             this.value = value;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -273,11 +260,7 @@ public interface Where {
             this.values = Clauses.copy(values);
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -323,11 +306,7 @@ public interface Where {
             this.values = Clauses.copy(values);
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -370,11 +349,7 @@ public interface Where {
             this.column = column;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -408,11 +383,7 @@ public interface Where {
             this.column = column;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -452,11 +423,7 @@ public interface Where {
             this.not = not;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -514,11 +481,7 @@ public interface Where {
             this.not = not;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -576,11 +539,7 @@ public interface Where {
             this.not = not;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -645,11 +604,7 @@ public interface Where {
             this.value = value;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -716,11 +671,7 @@ public interface Where {
             this.second = second;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;
@@ -772,11 +723,7 @@ public interface Where {
             this.query = query;
         }
 
-        /**
-         * Returns the joining word.
-         *
-         * @return the joining word
-         */
+        /** {@inheritDoc} */
         @Override
         public String conjunction() {
             return conjunction;

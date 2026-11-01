@@ -67,4 +67,42 @@ public interface Order {
             return sql;
         }
     }
+
+    /**
+     * A subquery and its direction: {@code (select ...) desc}. The SQL was compiled when the entry
+     * was added, as Laravel does, and its bindings went to the order bucket at that moment.
+     */
+    final class Sub implements Order {
+        private final String sql;
+        private final String direction;
+
+        /**
+         * Creates the entry.
+         *
+         * @param sql the subquery's SQL, without parentheses
+         * @param direction {@code asc} or {@code desc}
+         */
+        public Sub(String sql, String direction) {
+            this.sql = sql;
+            this.direction = direction;
+        }
+
+        /**
+         * Returns the subquery's SQL.
+         *
+         * @return the SQL, without parentheses
+         */
+        public String sql() {
+            return sql;
+        }
+
+        /**
+         * Returns the direction.
+         *
+         * @return {@code asc} or {@code desc}
+         */
+        public String direction() {
+            return direction;
+        }
+    }
 }

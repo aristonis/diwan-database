@@ -170,4 +170,67 @@ class PostgresQueryGrammarTest {
     void theShortcutRefusesNull() {
         assertThrows(NullPointerException.class, () -> PostgresQuery.of(null));
     }
+
+    @Test
+    void insertOrIgnoreUsingAddsOnConflictDoNothing() {
+        Builder select = db().table("table2").select("bar").where("foreign_id", 5);
+
+        String sql = db().grammar().compileInsertOrIgnoreUsing(db().table("table1"), List.of("foo"), select.toSql());
+
+        assertEquals("insert into \"table1\" (\"foo\") select \"bar\" from \"table2\" where \"foreign_id\" = ?"
+                + " on conflict do nothing", sql);
+    }
+
+    @Test
+    void updateWithAJoinPicksTheRowsByCtidAndLeavesTheBuilderAlone() {
+        Builder query = db().table("users").join("orders", "users.id", "=", "orders.user_id").where("users.id", 1);
+        String before = query.toSql();
+
+        String sql = db().grammar().compileUpdate(query, row("email", "foo", "name", "bar"));
+
+        assertEquals("update \"users\" set \"email\" = ?, \"name\" = ? where \"ctid\" in (select \"users\".\"ctid\""
+                + " from \"users\" inner join \"orders\" on \"users\".\"id\" = \"orders\".\"user_id\""
+                + " where \"users\".\"id\" = ?)", sql);
+        assertEquals(before, query.toSql());
+    }
+
+    @Test
+    void updateWithAJoinUsesTheTableAlias() {
+        Builder query = db().table("users as u").join("orders as o", "u.id", "=", "o.user_id").where("o.total", ">", 9);
+
+        assertEquals("update \"users\" as \"u\" set \"name\" = ? where \"ctid\" in (select \"u\".\"ctid\""
+                + " from \"users\" as \"u\" inner join \"orders\" as \"o\" on \"u\".\"id\" = \"o\".\"user_id\""
+                + " where \"o\".\"total\" > ?)", db().grammar().compileUpdate(query, row("name", "x")));
+    }
+
+    @Test
+    void updateWithAJoinBindsValuesThenJoinThenWhere() {
+        Builder query = db().table("users")
+                .join("orders", j -> j.on("users.id", "=", "orders.user_id").where("orders.paid", 2))
+                .where("users.id", 3);
+
+        assertEquals(List.of(1, 2, 3),
+                db().grammar().prepareBindingsForUpdate(query.getRawBindings(), row("name", 1)));
+    }
+
+    @Test
+    void deleteWithAJoinPicksTheRowsByCtid() {
+        Builder query = db().table("users").join("contacts", "users.id", "=", "contacts.id")
+                .where("users.email", "foo");
+        String before = query.toSql();
+
+        assertEquals("delete from \"users\" where \"ctid\" in (select \"users\".\"ctid\" from \"users\""
+                + " inner join \"contacts\" on \"users\".\"id\" = \"contacts\".\"id\""
+                + " where \"users\".\"email\" = ?)", db().grammar().compileDelete(query));
+        assertEquals(before, query.toSql());
+    }
+
+    @Test
+    void unionPartsAreWrappedInParentheses() {
+        Builder query = db().table("a").select("x").where("x", 1).union(db().table("b").select("x"))
+                .orderBy("x").limit(2);
+
+        assertEquals("(select \"x\" from \"a\" where \"x\" = ?) union (select \"x\" from \"b\")"
+                + " order by \"x\" asc limit 2", query.toSql());
+    }
 }

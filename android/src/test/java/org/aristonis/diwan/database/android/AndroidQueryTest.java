@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.android;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.QueryException;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.values.Instants;
@@ -26,6 +28,7 @@ import org.robolectric.annotation.Config;
 public class AndroidQueryTest {
 
     private static final int MONEY_SCALE = 2;
+    private static final int[] RIGHT_JOIN_SQLITE = {3, 39};
 
     private SQLiteDatabase database;
     private Connection db;
@@ -134,5 +137,111 @@ public class AndroidQueryTest {
         String sql = query.table("items").where("name", "o'k").where("qty", ">", 2).toRawSql();
 
         assertEquals("select * from \"items\" where \"name\" = 'o''k' and \"qty\" > 2", sql);
+    }
+
+    private void seedShop() {
+        db.statement("create table customers (id integer primary key, name text)");
+        db.statement("create table orders (id integer primary key, customer_id integer, total integer)");
+        query.table("customers").insert(List.of(
+                Map.of("id", 1, "name", "ann"), Map.of("id", 2, "name", "bob"), Map.of("id", 3, "name", "cy")));
+        query.table("orders").insert(List.of(
+                Map.of("id", 1, "customer_id", 1, "total", 10),
+                Map.of("id", 2, "customer_id", 1, "total", 20),
+                Map.of("id", 3, "customer_id", 2, "total", 5)));
+    }
+
+    @Test
+    public void innerAndLeftJoinsReturnTheMatchingRows() {
+        seedShop();
+
+        List<Object> inner = query.table("customers").join("orders", "customers.id", "=", "orders.customer_id")
+                .orderBy("orders.id").pluck("customers.name");
+        List<Object> withoutOrders = query.table("customers")
+                .leftJoin("orders", "customers.id", "=", "orders.customer_id")
+                .whereNull("orders.id").pluck("customers.name");
+
+        assertEquals(List.of("ann", "ann", "bob"), inner);
+        assertEquals(List.of("cy"), withoutOrders);
+    }
+
+    @Test
+    public void rightJoinNeedsSqlite339AndOlderSqlitePassesItsErrorThrough() {
+        seedShop();
+        String version = db.getDriverInfo().databaseVersion();
+
+        if (isAtLeast(version, RIGHT_JOIN_SQLITE)) {
+            assertEquals(3, query.table("orders").rightJoin("customers", "customers.id", "=", "orders.customer_id")
+                    .where("customers.id", "<", 3).count());
+        } else {
+            assertThrows(QueryException.class, () -> query.table("orders")
+                    .rightJoin("customers", "customers.id", "=", "orders.customer_id").get());
+        }
+    }
+
+    @Test
+    public void whereExistsWithASubqueryFiltersTheOuterRows() {
+        seedShop();
+
+        List<Object> names = query.table("customers")
+                .whereExists(q -> q.from("orders").whereColumn("orders.customer_id", "customers.id")
+                        .where("total", ">", 10))
+                .pluck("name");
+
+        assertEquals(List.of("ann"), names);
+    }
+
+    @Test
+    public void unionPartsAndTheUnionTakeTheirOwnOrderAndLimit() {
+        seedShop();
+
+        List<Object> names = query.table("customers").select("name").orderBy("id").limit(1)
+                .union(query.table("customers").select("name").orderByDesc("id").limit(1))
+                .union(query.table("customers").select("name").where("id", 2))
+                .orderByDesc("name").limit(2).pluck("name");
+
+        assertEquals(List.of("cy", "bob"), names);
+    }
+
+    @Test
+    public void countOverAUnionCountsTheCombinedRows() {
+        seedShop();
+
+        assertEquals(6, query.table("customers").unionAll(query.table("customers")).count());
+        assertEquals(3, query.table("customers").union(query.table("customers")).count());
+    }
+
+    @Test
+    public void insertUsingCopiesTheSelectedRows() {
+        seedShop();
+        db.statement("create table archive (name text, total integer)");
+
+        int copied = query.table("archive").insertUsing(List.of("name", "total"), q -> q.from("orders")
+                .join("customers", "customers.id", "=", "orders.customer_id")
+                .select("customers.name", "orders.total").where("orders.total", ">=", 10));
+
+        assertEquals(2, copied);
+        assertEquals(List.of("ann", "ann"), query.table("archive").pluck("name"));
+    }
+
+    @Test
+    public void updateWithAJoinChangesOnlyTheJoinedRows() {
+        seedShop();
+
+        int changed = query.table("orders").join("customers", "customers.id", "=", "orders.customer_id")
+                .where("customers.name", "ann").update(Map.of("total", 0));
+
+        assertEquals(2, changed);
+        assertEquals(5L, query.table("orders").sum("total").longValue());
+    }
+
+    private static boolean isAtLeast(String version, int[] wanted) {
+        String[] parts = version.split("\\.");
+        for (int i = 0; i < wanted.length; i++) {
+            int part = i < parts.length ? Integer.parseInt(parts[i]) : 0;
+            if (part != wanted[i]) {
+                return part > wanted[i];
+            }
+        }
+        return true;
     }
 }

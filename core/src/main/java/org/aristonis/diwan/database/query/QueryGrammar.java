@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,7 +23,7 @@ import java.util.regex.Pattern;
  * <p>The base class writes Laravel's generic SQL. Each database module extends it and overrides
  * the {@code compile} and {@code where} methods its database writes differently. Laravel
  * dispatches a where clause by building a method name from a string; here
- * {@link #compileWhere(Builder, Where)} branches on the sealed {@link Where} type, and each branch
+ * {@link #compileWhere(Builder, Where)} branches on the {@link Where} type, and each branch
  * calls a protected method with Laravel's name, which is the method to override.
  *
  * <p>A grammar is built for one table prefix, the prefix of the connection it serves, and adds it
@@ -35,17 +36,10 @@ import java.util.regex.Pattern;
  *     out of the SQL text. Methods added in later versions come with a body, so existing grammars
  *     keep compiling.
  */
-public abstract class QueryGrammar {
+public abstract class QueryGrammar extends JoinUnionGrammar {
 
-    /** The keyword and space that open a compiled where clause, cut off when the clause is nested. */
-    private static final int WHERE_LENGTH = "where ".length();
     /** The keyword and space that open a compiled having clause, cut off when the clause is nested. */
     private static final int HAVING_LENGTH = "having ".length();
-    private static final Pattern LEADING_BOOLEAN = Pattern.compile("and |or ", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ALIAS = Pattern.compile("\\s+as\\s+", Pattern.CASE_INSENSITIVE);
-    private static final char QUOTE = '"';
-
-    private final String tablePrefix;
 
     /**
      * Creates a grammar.
@@ -55,7 +49,7 @@ public abstract class QueryGrammar {
      * @throws NullPointerException if {@code tablePrefix} is {@code null}
      */
     protected QueryGrammar(String tablePrefix) {
-        this.tablePrefix = Objects.requireNonNull(tablePrefix, "tablePrefix");
+        super(Objects.requireNonNull(tablePrefix, "tablePrefix"));
     }
 
     /**
@@ -82,18 +76,21 @@ public abstract class QueryGrammar {
 
     /**
      * Compiles a select statement. Components come in Laravel's fixed order: aggregate, columns,
-     * from, wheres, groups, havings, orders, limit, offset.
+     * from, joins, wheres, groups, havings, orders, limit, offset; then the unions with their own
+     * orders, limit and offset. An aggregate over a query with unions or havings runs on it as a
+     * subquery.
      *
      * @param query the query, never {@code null}
      * @return the SQL, never {@code null}
      * @throws UnsupportedOperationException if a clause is not supported
      */
     public String compileSelect(Builder query) {
-        if (query.getAggregate().isPresent() && !query.getHavings().isEmpty()) {
+        if (query.getAggregate().isPresent() && (!query.getHavings().isEmpty() || !query.unions.isEmpty())) {
             return compileUnionAggregate(query);
         }
         List<Object> columns = query.getColumns().isEmpty() ? Collections.<Object>singletonList("*") : query.getColumns();
-        return concatenate(compileComponents(query, columns)).trim();
+        String sql = concatenate(compileComponents(query, columns)).trim();
+        return query.unions.isEmpty() ? sql : wrapUnion(sql) + " " + compileUnions(query);
     }
 
     /**
@@ -107,8 +104,11 @@ public abstract class QueryGrammar {
         List<String> sql = new ArrayList<>();
         query.getAggregate().ifPresent(aggregate -> sql.add(compileAggregate(query, aggregate)));
         sql.add(compileColumns(query, columns));
-        if (query.getFrom() != null) {
-            sql.add(compileFrom(query, query.getFrom()));
+        if (query.getFrom() != null || query.fromExpression != null) {
+            sql.add(compileFrom(query, query.getFrom() != null ? query.getFrom() : query.fromExpression));
+        }
+        if (!query.joins.isEmpty()) {
+            sql.add(compileJoins(query, query.joins));
         }
         sql.add(compileWheres(query));
         if (!query.getGroups().isEmpty()) {
@@ -156,16 +156,17 @@ public abstract class QueryGrammar {
      * Compiles the from clause.
      *
      * @param query the query, never {@code null}
-     * @param table the table as given to the builder, never {@code null}
+     * @param table the table as given to the builder, or the {@link Expression} of a subquery or
+     *     raw SQL, never {@code null}
      * @return the SQL, never {@code null}
      */
-    protected String compileFrom(Builder query, String table) {
+    protected String compileFrom(Builder query, Object table) {
         return "from " + wrapTable(table);
     }
 
     /**
-     * Compiles an aggregate over a query with having clauses, which has to run on a subquery so the
-     * havings filter groups before they are counted.
+     * Compiles an aggregate over a query with having clauses or unions, which has to run on a
+     * subquery so the havings filter groups, or the union combines rows, before they are counted.
      *
      * @param query the query, never {@code null}, with an aggregate
      * @return the SQL, never {@code null}
@@ -178,6 +179,27 @@ public abstract class QueryGrammar {
     }
 
     /**
+     * Compiles the unions after the first part: each part, then the union's orders, limit and
+     * offset.
+     *
+     * @param query the query, never {@code null}, with at least one union
+     * @return the SQL, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support a clause
+     */
+    protected String compileUnions(Builder query) {
+        StringBuilder sql = new StringBuilder();
+        for (Union union : query.unions) {
+            sql.append(compileUnion(union));
+        }
+        if (!query.unionOrders.isEmpty()) {
+            sql.append(' ').append(compileOrders(query, query.unionOrders));
+        }
+        query.getUnionLimit().ifPresent(limit -> sql.append(' ').append(compileLimit(query, limit)));
+        query.getUnionOffset().ifPresent(offset -> sql.append(' ').append(compileOffset(query, offset)));
+        return sql.toString().trim();
+    }
+
+    /**
      * Compiles a query that tells whether any row matches.
      *
      * @param query the query, never {@code null}
@@ -185,321 +207,6 @@ public abstract class QueryGrammar {
      */
     public String compileExists(Builder query) {
         return "select exists(" + compileSelect(query) + ") as " + wrap("exists");
-    }
-
-    // ---- where ----
-
-    /**
-     * Compiles the where clause.
-     *
-     * @param query the query, never {@code null}
-     * @return {@code where ...}, or an empty string if the query has no conditions
-     * @throws UnsupportedOperationException if a condition is not supported
-     */
-    public String compileWheres(Builder query) {
-        List<Where> wheres = query.getWheres();
-        if (wheres.isEmpty()) {
-            return "";
-        }
-        List<String> sql = new ArrayList<>(wheres.size());
-        for (Where where : wheres) {
-            sql.add(where.conjunction() + " " + compileWhere(query, where));
-        }
-        return "where " + removeLeadingBoolean(String.join(" ", sql));
-    }
-
-    /**
-     * Compiles one condition, without its conjunction, by calling the method named after its type.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws UnsupportedOperationException if the condition is not supported
-     */
-    protected String compileWhere(Builder query, Where where) {
-        if (where instanceof Where.Basic) {
-            return whereBasic(query, (Where.Basic) where);
-        } else if (where instanceof Where.Raw) {
-            return whereRaw(query, (Where.Raw) where);
-        } else if (where instanceof Where.Like) {
-            return whereLike(query, (Where.Like) where);
-        } else if (where instanceof Where.NullSafeEquals) {
-            return whereNullSafeEquals(query, (Where.NullSafeEquals) where);
-        } else if (where instanceof Where.In) {
-            return whereIn(query, (Where.In) where);
-        } else if (where instanceof Where.NotIn) {
-            return whereNotIn(query, (Where.NotIn) where);
-        } else if (where instanceof Where.Null) {
-            return whereNull(query, (Where.Null) where);
-        } else if (where instanceof Where.NotNull) {
-            return whereNotNull(query, (Where.NotNull) where);
-        } else if (where instanceof Where.Between) {
-            return whereBetween(query, (Where.Between) where);
-        } else if (where instanceof Where.BetweenColumns) {
-            return whereBetweenColumns(query, (Where.BetweenColumns) where);
-        } else if (where instanceof Where.ValueBetween) {
-            return whereValueBetween(query, (Where.ValueBetween) where);
-        } else if (where instanceof Where.DateBased) {
-            return compileDateBased(query, (Where.DateBased) where);
-        } else if (where instanceof Where.Column) {
-            return whereColumn(query, (Where.Column) where);
-        } else if (where instanceof Where.Nested) {
-            return whereNested(query, (Where.Nested) where);
-        }
-        throw new IllegalStateException("Unknown where condition " + where.getClass().getName());
-    }
-
-    private String compileDateBased(Builder query, Where.DateBased where) {
-        switch (where.part()) {
-            case DATE:
-                return whereDate(query, where);
-            case TIME:
-                return whereTime(query, where);
-            case DAY:
-                return whereDay(query, where);
-            case MONTH:
-                return whereMonth(query, where);
-            default:
-                return whereYear(query, where);
-        }
-    }
-
-    /**
-     * Compiles a raw condition.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL as given, never {@code null}
-     */
-    protected String whereRaw(Builder query, Where.Raw where) {
-        return where.sql();
-    }
-
-    /**
-     * Compiles a column compared with a value.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereBasic(Builder query, Where.Basic where) {
-        return basic(where.column(), where.operator(), where.value());
-    }
-
-    /**
-     * Writes {@code column operator ?}. A {@code ?} inside the operator is doubled, Laravel's
-     * escape for PostgreSQL operators such as {@code ?|}, so it is not read as a placeholder.
-     */
-    private String basic(String column, String operator, Object value) {
-        return wrap(column) + " " + operator.replace("?", "??") + " " + parameter(value);
-    }
-
-    /**
-     * Compiles a {@code like} condition.
-     *
-     * @implSpec The base supports only case-insensitive matching, which is what {@code like}
-     *     already does on the databases it targets.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws UnsupportedOperationException if the match is case-sensitive
-     */
-    protected String whereLike(Builder query, Where.Like where) {
-        if (where.caseSensitive()) {
-            throw unsupported("Case-sensitive like");
-        }
-        return basic(where.column(), where.not() ? "not like" : "like", where.value());
-    }
-
-    /**
-     * Compiles a null-safe comparison.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereNullSafeEquals(Builder query, Where.NullSafeEquals where) {
-        return wrap(where.column()) + " is not distinct from " + parameter(where.value());
-    }
-
-    /**
-     * Compiles an {@code in} condition; an empty list writes {@code 0 = 1}.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereIn(Builder query, Where.In where) {
-        if (where.values().isEmpty()) {
-            return "0 = 1";
-        }
-        return wrap(where.column()) + " in (" + parameterize(where.values()) + ")";
-    }
-
-    /**
-     * Compiles a {@code not in} condition; an empty list writes {@code 1 = 1}.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereNotIn(Builder query, Where.NotIn where) {
-        if (where.values().isEmpty()) {
-            return "1 = 1";
-        }
-        return wrap(where.column()) + " not in (" + parameterize(where.values()) + ")";
-    }
-
-    /**
-     * Compiles an {@code is null} condition.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereNull(Builder query, Where.Null where) {
-        return wrap(where.column()) + " is null";
-    }
-
-    /**
-     * Compiles an {@code is not null} condition.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereNotNull(Builder query, Where.NotNull where) {
-        return wrap(where.column()) + " is not null";
-    }
-
-    /**
-     * Compiles a {@code between} condition on values.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereBetween(Builder query, Where.Between where) {
-        return wrap(where.column()) + " " + between(where.not()) + " " + parameter(where.values().get(0)) + " and "
-                + parameter(where.values().get(1));
-    }
-
-    /**
-     * Compiles a {@code between} condition on columns.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereBetweenColumns(Builder query, Where.BetweenColumns where) {
-        return wrap(where.column()) + " " + between(where.not()) + " " + wrap(where.columns().get(0)) + " and "
-                + wrap(where.columns().get(1));
-    }
-
-    /**
-     * Compiles a value between two columns.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereValueBetween(Builder query, Where.ValueBetween where) {
-        return parameter(where.value()) + " " + between(where.not()) + " " + wrap(where.columns().get(0)) + " and "
-                + wrap(where.columns().get(1));
-    }
-
-    private static String between(boolean not) {
-        return not ? "not between" : "between";
-    }
-
-    /**
-     * Compiles a condition on the date part of a column.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereDate(Builder query, Where.DateBased where) {
-        return dateBasedWhere("date", query, where);
-    }
-
-    /**
-     * Compiles a condition on the time part of a column.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereTime(Builder query, Where.DateBased where) {
-        return dateBasedWhere("time", query, where);
-    }
-
-    /**
-     * Compiles a condition on the day of the month of a column.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereDay(Builder query, Where.DateBased where) {
-        return dateBasedWhere("day", query, where);
-    }
-
-    /**
-     * Compiles a condition on the month of a column.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereMonth(Builder query, Where.DateBased where) {
-        return dateBasedWhere("month", query, where);
-    }
-
-    /**
-     * Compiles a condition on the year of a column.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereYear(Builder query, Where.DateBased where) {
-        return dateBasedWhere("year", query, where);
-    }
-
-    /**
-     * Writes {@code function(column) operator ?}.
-     *
-     * @param type the SQL function, a constant of the grammar, never user input
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String dateBasedWhere(String type, Builder query, Where.DateBased where) {
-        return type + "(" + wrap(where.column()) + ") " + where.operator() + " " + parameter(where.value());
-    }
-
-    /**
-     * Compiles two columns compared with each other.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereColumn(Builder query, Where.Column where) {
-        return wrap(where.first()) + " " + where.operator().replace("?", "??") + " " + wrap(where.second());
-    }
-
-    /**
-     * Compiles a group of conditions in parentheses.
-     *
-     * @param query the query, never {@code null}
-     * @param where the condition, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String whereNested(Builder query, Where.Nested where) {
-        return "(" + compileWheres(where.builder()).substring(WHERE_LENGTH) + ")";
     }
 
     // ---- group, having, order, limit ----
@@ -601,6 +308,9 @@ public abstract class QueryGrammar {
             } else if (order instanceof Order.Column) {
                 Order.Column column = (Order.Column) order;
                 sql.add(wrap(column.column()) + " " + column.direction());
+            } else if (order instanceof Order.Sub) {
+                Order.Sub sub = (Order.Sub) order;
+                sql.add("(" + sub.sql() + ") " + sub.direction());
             } else {
                 throw new IllegalStateException("Unknown order " + order.getClass().getName());
             }
@@ -734,18 +444,23 @@ public abstract class QueryGrammar {
      *
      * @param query the query, never {@code null}, with a table
      * @param values the columns and their new values, never {@code null} or empty; an
-     *     {@link Expression} is written as given
+     *     {@link Expression} is written as given, a {@link Builder} as {@code (select ...)}
      * @return the SQL, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code values} is empty
+     * @throws UnsupportedOperationException if the query has joins and the grammar cannot update
+     *     with joins, as the base grammar cannot
      */
     public String compileUpdate(Builder query, Map<String, ?> values) {
         Objects.requireNonNull(query, "query");
         if (Objects.requireNonNull(values, "values").isEmpty()) {
             throw new IllegalArgumentException("An update needs at least one column");
         }
-        return compileUpdateWithoutJoins(query, wrapTable(query.getFrom()), compileUpdateColumns(query, values),
-                compileWheres(query)).trim();
+        String table = wrapTable(query.getFrom());
+        String columns = compileUpdateColumns(query, values);
+        String where = compileWheres(query);
+        return (query.joins.isEmpty() ? compileUpdateWithoutJoins(query, table, columns, where)
+                : compileUpdateWithJoins(query, table, columns, where)).trim();
     }
 
     /**
@@ -758,7 +473,9 @@ public abstract class QueryGrammar {
     protected String compileUpdateColumns(Builder query, Map<String, ?> values) {
         List<String> sql = new ArrayList<>(values.size());
         for (Map.Entry<String, ?> entry : values.entrySet()) {
-            sql.add(wrap(entry.getKey()) + " = " + parameter(entry.getValue()));
+            Object value = entry.getValue();
+            sql.add(wrap(entry.getKey()) + " = "
+                    + (value instanceof Builder ? "(" + compileSelect((Builder) value) + ")" : parameter(value)));
         }
         return String.join(", ", sql);
     }
@@ -777,25 +494,31 @@ public abstract class QueryGrammar {
     }
 
     /**
-     * Orders the bindings of an update: the new values first, then every bucket except select.
+     * Orders the bindings of an update: the new values first, in column order, then every bucket
+     * except select (from, join, where and the rest). Laravel's base grammar puts the join
+     * bindings first, because its joined update writes the joins before {@code set}; the SQLite and
+     * PostgreSQL rewrites put the joins in a subquery after {@code set}, so they come after the
+     * values here.
      *
      * @param bindings the query's bindings by bucket, never {@code null}
      * @param values the columns and new values, never {@code null}; {@link Expression} values are
-     *     skipped
+     *     skipped, a {@link Builder} value contributes its own bindings in its place
      * @return the bindings, unmodifiable, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      */
     public List<Object> prepareBindingsForUpdate(Map<BindingType, List<Object>> bindings, Map<String, ?> values) {
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(values, "values");
-        List<Object> result = new ArrayList<>(bindings.getOrDefault(BindingType.JOIN, Collections.emptyList()));
+        List<Object> result = new ArrayList<>();
         for (Object value : values.values()) {
-            if (!(value instanceof Expression)) {
+            if (value instanceof Builder) {
+                result.addAll(((Builder) value).getBindings());
+            } else if (!(value instanceof Expression)) {
                 result.add(Clauses.castBinding(value));
             }
         }
         for (BindingType type : BindingType.values()) {
-            if (type != BindingType.SELECT && type != BindingType.JOIN) {
+            if (type != BindingType.SELECT) {
                 result.addAll(bindings.getOrDefault(type, Collections.emptyList()));
             }
         }
@@ -803,13 +526,70 @@ public abstract class QueryGrammar {
     }
 
     /**
+     * Orders the bindings of an update of this query, keeping only the buckets the compiled
+     * statement writes: those of {@link #prepareBindingsForUpdate(Map, Map)} when
+     * {@link #writesFullSelect} is {@code true}, otherwise from, join and where only, since a plain
+     * {@code update ... set ... where} writes no group, having, order or union clause.
+     *
+     * @param query the query, never {@code null}
+     * @param values the columns and new values, never {@code null}
+     * @return the bindings, unmodifiable, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    public List<Object> prepareBindingsForUpdate(Builder query, Map<String, ?> values) {
+        return prepareBindingsForUpdate(writtenBindings(query), values);
+    }
+
+    /**
+     * Orders the bindings of a delete of this query, keeping only the buckets the compiled
+     * statement writes, as for {@link #prepareBindingsForUpdate(Builder, Map)}.
+     *
+     * @param query the query, never {@code null}
+     * @return the bindings, unmodifiable, never {@code null}
+     * @throws NullPointerException if {@code query} is {@code null}
+     */
+    public List<Object> prepareBindingsForDelete(Builder query) {
+        return prepareBindingsForDelete(writtenBindings(query));
+    }
+
+    /**
+     * Tells whether this grammar writes an update or delete of the query through a whole
+     * {@code select} of it, which carries every clause and so every binding bucket but select.
+     *
+     * @implSpec The base returns {@code false}: it writes only the table, joins and wheres.
+     *
+     * @param query the query, never {@code null}
+     * @return {@code true} if the write embeds a full select of the query
+     */
+    protected boolean writesFullSelect(Builder query) {
+        return false;
+    }
+
+    private Map<BindingType, List<Object>> writtenBindings(Builder query) {
+        Map<BindingType, List<Object>> raw = Objects.requireNonNull(query, "query").getRawBindings();
+        if (writesFullSelect(query)) {
+            return raw;
+        }
+        Map<BindingType, List<Object>> written = new EnumMap<>(BindingType.class);
+        for (BindingType type : new BindingType[] {BindingType.FROM, BindingType.JOIN, BindingType.WHERE}) {
+            written.put(type, raw.getOrDefault(type, Collections.emptyList()));
+        }
+        return written;
+    }
+
+    /**
      * Compiles a delete of the rows the query's conditions match.
      *
      * @param query the query, never {@code null}, with a table
      * @return the SQL, never {@code null}
+     * @throws UnsupportedOperationException if the query has joins and the grammar cannot delete
+     *     with joins, as the base grammar cannot
      */
     public String compileDelete(Builder query) {
-        return compileDeleteWithoutJoins(query, wrapTable(query.getFrom()), compileWheres(query)).trim();
+        String table = wrapTable(query.getFrom());
+        String where = compileWheres(query);
+        return (query.joins.isEmpty() ? compileDeleteWithoutJoins(query, table, where)
+                : compileDeleteWithJoins(query, table, where)).trim();
     }
 
     /**
@@ -1020,233 +800,5 @@ public abstract class QueryGrammar {
      */
     protected String escapeBinary(byte[] value) {
         throw unsupported("Escaping binary values");
-    }
-
-    // ---- quoting ----
-
-    /**
-     * Quotes a column reference: splits {@code "a as b"} into a quoted name and alias, quotes each
-     * dotted segment (the first, a table, gets the prefix), and leaves {@code *} alone.
-     *
-     * @param value a {@code String}, or an {@link Expression} written as given; never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws NullPointerException if {@code value} is {@code null}
-     * @throws UnsupportedOperationException if the name is a JSON path ({@code ->})
-     */
-    public String wrap(Object value) {
-        Objects.requireNonNull(value, "value");
-        if (value instanceof Expression) {
-            return ((Expression) value).sql();
-        }
-        String name = value.toString();
-        if (name.toLowerCase(Locale.ROOT).contains(" as ")) {
-            return wrapAliasedValue(name);
-        }
-        if (isJsonSelector(name)) {
-            return wrapJsonSelector(name);
-        }
-        return wrapSegments(name.split("\\.", -1));
-    }
-
-    /**
-     * Quotes a table name, adding the prefix: {@code "users as u"} becomes
-     * {@code "app_users" as "app_u"}, and in {@code "schema.users"} only the table is prefixed.
-     *
-     * @param table a {@code String}, or an {@link Expression} written as given; never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws NullPointerException if {@code table} is {@code null}
-     */
-    public String wrapTable(Object table) {
-        return wrapTable(table, tablePrefix);
-    }
-
-    /**
-     * Quotes a table name with a given prefix.
-     *
-     * @param table a {@code String}, or an {@link Expression} written as given; never {@code null}
-     * @param prefix the prefix, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String wrapTable(Object table, String prefix) {
-        Objects.requireNonNull(table, "table");
-        if (table instanceof Expression) {
-            return ((Expression) table).sql();
-        }
-        String name = table.toString();
-        if (name.toLowerCase(Locale.ROOT).contains(" as ")) {
-            return wrapAliasedTable(name, prefix);
-        }
-        int dot = name.lastIndexOf('.');
-        if (dot >= 0) {
-            String prefixed = name.substring(0, dot) + "." + prefix + name.substring(dot + 1);
-            List<String> segments = new ArrayList<>();
-            for (String segment : prefixed.split("\\.", -1)) {
-                segments.add(wrapValue(segment));
-            }
-            return String.join(".", segments);
-        }
-        return wrapValue(prefix + name);
-    }
-
-    /**
-     * Quotes {@code "name as alias"}.
-     *
-     * @param value the aliased name, never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws IllegalArgumentException if the name or alias is empty, or the alias holds another
-     *     {@code as}
-     */
-    protected String wrapAliasedValue(String value) {
-        String[] segments = splitAlias(value);
-        return wrap(segments[0]) + " as " + wrapValue(segments[1]);
-    }
-
-    /**
-     * Quotes {@code "table as alias"}, prefixing both.
-     *
-     * @param value the aliased table, never {@code null}
-     * @param prefix the prefix, never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws IllegalArgumentException if the table or alias is empty, or the alias holds another
-     *     {@code as}
-     */
-    protected String wrapAliasedTable(String value, String prefix) {
-        String[] segments = splitAlias(value);
-        return wrapTable(segments[0], prefix) + " as " + wrapValue(prefix + segments[1]);
-    }
-
-    /**
-     * Splits {@code "name as alias"} in two. Laravel splits on every {@code as} and keeps the first
-     * two parts, silently dropping the rest, and fails on an empty alias; both are refused here.
-     */
-    private static String[] splitAlias(String value) {
-        String[] segments = ALIAS.split(value, 2);
-        if (segments.length < 2 || segments[0].trim().isEmpty() || segments[1].trim().isEmpty()
-                || ALIAS.matcher(" " + segments[1] + " ").find()) {
-            throw new IllegalArgumentException("An alias is written \"name as alias\" with one non-empty alias");
-        }
-        return segments;
-    }
-
-    /**
-     * Quotes the dotted segments of a column reference; with more than one, the first is a table.
-     *
-     * @param segments the segments, never empty
-     * @return the SQL, never {@code null}
-     */
-    protected String wrapSegments(String[] segments) {
-        List<String> wrapped = new ArrayList<>(segments.length);
-        for (int i = 0; i < segments.length; i++) {
-            wrapped.add(i == 0 && segments.length > 1 ? wrapTable(segments[i]) : wrapValue(segments[i]));
-        }
-        return String.join(".", wrapped);
-    }
-
-    /**
-     * Quotes one identifier segment; {@code *} is left as is.
-     *
-     * @param value the segment, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String wrapValue(String value) {
-        return "*".equals(value) ? value : Identifiers.quote(value, QUOTE);
-    }
-
-    /**
-     * Returns whether a name is a JSON path such as {@code data->name}.
-     *
-     * @param value the name, never {@code null}
-     * @return {@code true} if it holds {@code ->}
-     */
-    protected boolean isJsonSelector(String value) {
-        return value.contains("->");
-    }
-
-    /**
-     * Quotes a JSON path.
-     *
-     * @implSpec The base refuses, as Laravel's does.
-     *
-     * @param value the path, never {@code null}
-     * @return the SQL, never {@code null}
-     * @throws UnsupportedOperationException always, in the base
-     */
-    protected String wrapJsonSelector(String value) {
-        throw unsupported("JSON paths");
-    }
-
-    /**
-     * Quotes and joins column references.
-     *
-     * @param columns the columns, each a {@code String} or {@link Expression}, never {@code null}
-     * @return the columns separated by {@code ", "}, never {@code null}
-     */
-    public String columnize(Collection<?> columns) {
-        List<String> wrapped = new ArrayList<>(columns.size());
-        for (Object column : columns) {
-            wrapped.add(wrap(column));
-        }
-        return String.join(", ", wrapped);
-    }
-
-    /**
-     * Writes a placeholder for each value.
-     *
-     * @param values the values, never {@code null}
-     * @return the placeholders separated by {@code ", "}, never {@code null}
-     */
-    public String parameterize(Collection<?> values) {
-        List<String> parameters = new ArrayList<>(values.size());
-        for (Object value : values) {
-            parameters.add(parameter(value));
-        }
-        return String.join(", ", parameters);
-    }
-
-    /**
-     * Writes the placeholder for one value: an {@link Expression} as given, anything else as
-     * {@code ?}.
-     *
-     * @param value the value, may be {@code null}
-     * @return the SQL, never {@code null}
-     */
-    public String parameter(Object value) {
-        return value instanceof Expression ? ((Expression) value).sql() : "?";
-    }
-
-    /**
-     * Joins the non-empty segments with single spaces.
-     *
-     * @param segments the segments, never {@code null}, none {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String concatenate(List<String> segments) {
-        List<String> parts = new ArrayList<>(segments.size());
-        for (String segment : segments) {
-            if (!segment.isEmpty()) {
-                parts.add(segment);
-            }
-        }
-        return String.join(" ", parts);
-    }
-
-    /**
-     * Removes the conjunction in front of the first condition.
-     *
-     * @param value the joined conditions, never {@code null}
-     * @return the SQL, never {@code null}
-     */
-    protected String removeLeadingBoolean(String value) {
-        return LEADING_BOOLEAN.matcher(value).replaceFirst("");
-    }
-
-    /**
-     * Builds the error for something this grammar does not support.
-     *
-     * @param what what is not supported, starting with a capital letter
-     * @return the exception, never {@code null}
-     */
-    protected UnsupportedOperationException unsupported(String what) {
-        return new UnsupportedOperationException(what + " is not supported by " + getClass().getSimpleName());
     }
 }

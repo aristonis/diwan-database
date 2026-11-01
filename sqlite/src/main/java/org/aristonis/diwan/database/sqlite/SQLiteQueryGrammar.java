@@ -22,9 +22,16 @@ import org.aristonis.diwan.database.values.Instants;
  *
  * <p>Differences from the base grammar: SQLite's extra operators, case-sensitive {@code like}
  * through {@code glob}, {@code is} as the null-safe comparison, date wheres through
- * {@code strftime}, an update or delete with a limit through a {@code rowid} subselect, truncate as
- * two deletes, and every {@link Instant} binding written as the whole microseconds an
+ * {@code strftime}, an update or delete with joins or a limit through a {@code rowid} subselect,
+ * each union part wrapped as {@code select * from (...)}, {@code insert or ignore} from a subquery,
+ * truncate as two deletes, and every {@link Instant} binding written as the whole microseconds an
  * {@code instant} column stores.
+ *
+ * <p>Two limits come from SQLite itself and are not checked here. A right join needs SQLite 3.39
+ * or newer; older SQLite, such as the one in Android 9, refuses it with its own syntax error, which
+ * reaches the caller as a {@code QueryException}. An update or delete with joins selects the
+ * table's {@code rowid}, so on a {@code WITHOUT ROWID} table it fails the same way, with SQLite's
+ * "no such column" error; telling such a table apart would need a schema read on every call.
  *
  * <p>Laravel's {@code compileLock} returns an empty string for SQLite; the core builder has no
  * lock clause, so there is nothing to override.
@@ -194,6 +201,64 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     }
 
     /**
+     * Wraps one part of a union as {@code select * from (sql)}: SQLite refuses a parenthesised
+     * select in a compound, and the subquery keeps each part's own order and limit.
+     *
+     * @param sql the part's SQL, never {@code null}
+     * @return the wrapped SQL, never {@code null}
+     */
+    @Override
+    protected String wrapUnion(String sql) {
+        return "select * from (" + sql + ")";
+    }
+
+    /**
+     * Compiles an insert of the rows a subquery returns that skips rows breaking a unique or
+     * primary key constraint, with SQLite's {@code insert or ignore}.
+     *
+     * @param query the query naming the target table, never {@code null}
+     * @param columns the target columns, never {@code null}; empty or {@code ["*"]} leaves the
+     *     column list out
+     * @param sql the subquery's SQL, never {@code null}
+     * @return {@code insert or ignore into "t" ("a") select ...}, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    @Override
+    public String compileInsertOrIgnoreUsing(Builder query, List<String> columns, String sql) {
+        return "insert or ignore" + compileInsertUsing(query, columns, sql).substring("insert".length());
+    }
+
+    /**
+     * Compiles an update of a query with joins: the joined query, on a copy, selects the rowids
+     * of the rows to change. Bindings follow the {@code set} values, then the joins and wheres
+     * of the subselect, the order {@link QueryGrammar#prepareBindingsForUpdate} gives.
+     *
+     * @param query the query, never {@code null}, with a table; not changed
+     * @param table the wrapped table, never {@code null}
+     * @param columns the compiled {@code set} list, never {@code null}
+     * @param where the compiled where clause, never {@code null}; unused, the subselect holds it
+     * @return the SQL, never {@code null}
+     */
+    @Override
+    protected String compileUpdateWithJoins(Builder query, String table, String columns, String where) {
+        return "update " + table + " set " + columns + " where " + rowidIn(query);
+    }
+
+    /**
+     * Compiles a delete of a query with joins through a {@code rowid} subselect, as for
+     * {@link #compileUpdateWithJoins}.
+     *
+     * @param query the query, never {@code null}, with a table; not changed
+     * @param table the wrapped table, never {@code null}
+     * @param where the compiled where clause, never {@code null}; unused, the subselect holds it
+     * @return the SQL, never {@code null}
+     */
+    @Override
+    protected String compileDeleteWithJoins(Builder query, String table, String where) {
+        return "delete from " + table + " where " + rowidIn(query);
+    }
+
+    /**
      * Compiles an update; with a limit, the rows are chosen by a {@code rowid} subselect, since
      * SQLite builds without {@code update ... limit} by default.
      *
@@ -229,6 +294,16 @@ public class SQLiteQueryGrammar extends QueryGrammar {
             return super.compileDelete(query);
         }
         return "delete from " + wrapTable(query.getFrom()) + " where " + rowidIn(query);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote {@code true} with joins or a limit: the {@code rowid} subselect is a full select.
+     */
+    @Override
+    protected boolean writesFullSelect(Builder query) {
+        return query.hasJoins() || query.getLimit().isPresent();
     }
 
     /**

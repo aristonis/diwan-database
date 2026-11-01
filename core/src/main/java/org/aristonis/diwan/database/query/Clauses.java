@@ -65,16 +65,24 @@ final class Clauses {
         }
     }
 
+    /** Adds an insert value to the bindings; an {@link Expression} is written into the SQL instead. */
+    static void addInsertValue(List<Object> values, Object value) {
+        Object checked = checkValue(value);
+        if (!(checked instanceof Expression)) {
+            values.add(checked);
+        }
+    }
+
     /**
      * Rejects values that would silently mean something else. Laravel takes the first element of an
-     * array value and runs a builder or closure value as a subquery; neither is supported here.
+     * array value; a builder or consumer is a subquery only where a method says it takes one.
      */
     static Object checkValue(Object value) {
         if (value instanceof Collection || value instanceof Map || value instanceof Object[]) {
             throw new IllegalArgumentException("A list is not a single value; use whereIn for a list");
         }
         if (value instanceof Builder || value instanceof Consumer) {
-            throw new IllegalArgumentException("Subqueries are not supported");
+            throw new IllegalArgumentException("A subquery is not a value here; use a method that takes a subquery");
         }
         return castBinding(value);
     }

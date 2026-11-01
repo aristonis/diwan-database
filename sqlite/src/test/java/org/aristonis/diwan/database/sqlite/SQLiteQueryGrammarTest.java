@@ -216,4 +216,88 @@ class SQLiteQueryGrammarTest {
         }.exposed());
         assertTrue(new SQLiteQueryGrammar("app_").getTablePrefix().equals("app_"));
     }
+
+    // ---- unions, insert using, update and delete with joins ----
+
+    @Test
+    void eachUnionPartIsWrappedAsASelectFromASubquery() {
+        Builder query = db.table("a").where("x", 1).union(db.table("b").where("y", 2)).unionAll(db.table("c"));
+
+        assertEquals("select * from (select * from \"a\" where \"x\" = ?) union select * from (select * from \"b\" where \"y\" = ?)"
+                + " union all select * from (select * from \"c\")", query.toSql());
+        assertEquals(List.of(1, 2), query.getBindings());
+    }
+
+    @Test
+    void orderAndLimitAfterAUnionApplyToTheWholeUnion() {
+        Builder query = db.table("a").select("n").union(db.table("b").select("n")).orderBy("n").limit(5).offset(1);
+
+        assertEquals("select * from (select \"n\" from \"a\") union select * from (select \"n\" from \"b\")"
+                + " order by \"n\" asc limit 5 offset 1", query.toSql());
+    }
+
+    @Test
+    void unionPartsKeepTheirOwnOrderAndLimitInsideTheWrapper() {
+        Builder query = db.table("a").orderBy("n").limit(1).union(db.table("b").orderByDesc("n").limit(2));
+
+        assertEquals("select * from (select * from \"a\" order by \"n\" asc limit 1) union"
+                + " select * from (select * from \"b\" order by \"n\" desc limit 2)", query.toSql());
+    }
+
+    @Test
+    void insertOrIgnoreUsingWritesInsertOrIgnore() {
+        Builder query = db.table("users");
+
+        assertEquals("insert or ignore into \"users\" (\"name\") select \"name\" from \"guests\"",
+                query.getGrammar().compileInsertOrIgnoreUsing(query, List.of("name"), "select \"name\" from \"guests\""));
+        assertEquals("insert or ignore into \"users\" select * from \"guests\"",
+                query.getGrammar().compileInsertOrIgnoreUsing(query, List.of(), "select * from \"guests\""));
+    }
+
+    @Test
+    void anUpdateWithAJoinGoesThroughRowid() {
+        Builder query = db.table("users").join("posts", "users.id", "=", "posts.user_id").where("posts.v", 1);
+
+        String sql = query.getGrammar().compileUpdate(query, row("name", "x"));
+
+        assertEquals("update \"users\" set \"name\" = ? where \"rowid\" in (select \"users\".\"rowid\" from \"users\""
+                + " inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\" where \"posts\".\"v\" = ?)", sql);
+        assertEquals("select * from \"users\" inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\""
+                + " where \"posts\".\"v\" = ?", query.toSql(), "compiling must not change the caller's builder");
+    }
+
+    @Test
+    void anUpdateWithAJoinAndAnAliasSelectsTheAliasRowid() {
+        Builder query = db.table("users as u").leftJoin("posts as p", "u.id", "=", "p.user_id").whereNull("p.id");
+
+        assertEquals("update \"users\" as \"u\" set \"name\" = ? where \"rowid\" in (select \"u\".\"rowid\""
+                + " from \"users\" as \"u\" left join \"posts\" as \"p\" on \"u\".\"id\" = \"p\".\"user_id\""
+                + " where \"p\".\"id\" is null)", query.getGrammar().compileUpdate(query, row("name", "x")));
+    }
+
+    @Test
+    void aDeleteWithAJoinGoesThroughRowid() {
+        Builder query = db.table("users").join("posts", j -> j.on("users.id", "=", "posts.user_id").where("posts.v", 2));
+
+        assertEquals("delete from \"users\" where \"rowid\" in (select \"users\".\"rowid\" from \"users\""
+                + " inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\" and \"posts\".\"v\" = ?)",
+                query.getGrammar().compileDelete(query));
+        assertEquals("select * from \"users\" inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\""
+                + " and \"posts\".\"v\" = ?", query.toSql(), "compiling must not change the caller's builder");
+    }
+
+    @Test
+    void joinedUpdateBindingsLineUpWithTheMarks() {
+        Builder query = db.table("users").join("posts", j -> j.on("users.id", "=", "posts.user_id").where("posts.v", 2))
+                .where("users.id", ">", 3);
+        Map<String, Object> values = row("name", "x", "votes", db.table("posts").selectRaw("count(*)").where("w", 1));
+
+        String sql = query.getGrammar().compileUpdate(query, values);
+
+        assertEquals("update \"users\" set \"name\" = ?, \"votes\" = (select count(*) from \"posts\" where \"w\" = ?)"
+                + " where \"rowid\" in (select \"users\".\"rowid\" from \"users\" inner join \"posts\" on"
+                + " \"users\".\"id\" = \"posts\".\"user_id\" and \"posts\".\"v\" = ? where \"users\".\"id\" > ?)", sql);
+        assertEquals(List.of("x", 1, 2, 3),
+                query.getGrammar().prepareBindingsForUpdate(query.getRawBindings(), values));
+    }
 }

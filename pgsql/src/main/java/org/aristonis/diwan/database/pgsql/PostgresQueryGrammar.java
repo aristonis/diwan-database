@@ -18,8 +18,9 @@ import org.aristonis.diwan.database.query.Where;
  * {@code Illuminate\Database\Query\Grammars\PostgresGrammar}.
  *
  * <p>Differences from the base grammar: {@code like} compares the column as text, date wheres
- * use casts and {@code extract}, {@code insertGetId} uses {@code returning}, an update or delete
- * with a limit goes through a {@code ctid} subselect, and truncate restarts the identity.
+ * use casts and {@code extract}, {@code insertGetId} uses {@code returning}, an insert that ignores
+ * errors uses {@code on conflict do nothing}, an update or delete with joins or a limit goes through
+ * a {@code ctid} subselect, and truncate restarts the identity.
  *
  * <p>Laravel's operators that hold a {@code ?} (the JSON operators {@code ?}, {@code ?|},
  * {@code ?&} and {@code @?}) are left out, because JSON wheres are not supported; so are its
@@ -137,14 +138,26 @@ public class PostgresQueryGrammar extends QueryGrammar {
     /**
      * {@inheritDoc}
      *
-     * @implNote With a limit, the rows to change are picked by a {@code ctid} subselect, which
-     *     keeps the query's wheres, orders and limit. The subselect is compiled from a copy, so
-     *     {@code query} is not changed.
+     * @implNote Appends {@code on conflict do nothing}, which skips rows breaking any unique or
+     *     primary key constraint.
+     */
+    @Override
+    public String compileInsertOrIgnoreUsing(Builder query, List<String> columns, String sql) {
+        return compileInsertUsing(query, columns, sql) + " on conflict do nothing";
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote With joins or a limit, the rows to change are picked by a {@code ctid} subselect,
+     *     which keeps the query's joins, wheres, orders and limit. Its bindings (join, then where,
+     *     then order) follow the set values, the order {@code prepareBindingsForUpdate} gives. The
+     *     subselect is compiled from a copy, so {@code query} is not changed.
      */
     @Override
     public String compileUpdate(Builder query, Map<String, ?> values) {
         Objects.requireNonNull(query, "query");
-        if (!query.getLimit().isPresent()) {
+        if (!needsCtid(query)) {
             return super.compileUpdate(query, values);
         }
         if (Objects.requireNonNull(values, "values").isEmpty()) {
@@ -157,17 +170,31 @@ public class PostgresQueryGrammar extends QueryGrammar {
     /**
      * {@inheritDoc}
      *
-     * @implNote With a limit, the rows to delete are picked by a {@code ctid} subselect compiled
-     *     from a copy of {@code query}.
+     * @implNote With joins or a limit, the rows to delete are picked by a {@code ctid} subselect
+     *     compiled from a copy of {@code query}.
      */
     @Override
     public String compileDelete(Builder query) {
         Objects.requireNonNull(query, "query");
-        if (!query.getLimit().isPresent()) {
+        if (!needsCtid(query)) {
             return super.compileDelete(query);
         }
         return "delete from " + wrapTable(query.getFrom()) + " where " + wrap("ctid") + " in ("
                 + ctidSelect(query) + ")";
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote {@code true} with joins or a limit: the {@code ctid} subselect is a full select.
+     */
+    @Override
+    protected boolean writesFullSelect(Builder query) {
+        return needsCtid(query);
+    }
+
+    private static boolean needsCtid(Builder query) {
+        return query.getLimit().isPresent() || query.hasJoins();
     }
 
     private String ctidSelect(Builder query) {

@@ -177,10 +177,12 @@ class BuilderStateTest {
     }
 
     @Test
-    void subqueryValuesAreRejected() {
+    void subqueryValuesAreRejectedWhereNoSubqueryIsTaken() {
         Builder other = db().table("o");
 
-        assertThrows(IllegalArgumentException.class, () -> db().table("t").where("a", other));
+        assertThrows(IllegalArgumentException.class, () -> db().table("t").having("a", other));
+        assertThrows(IllegalArgumentException.class, () -> db().table("t").whereIn("a", List.of(other)));
+        assertThrows(IllegalArgumentException.class, () -> db().table("t").whereBetween("a", List.of(other, 1)));
     }
 
     @Test
@@ -331,7 +333,7 @@ class BuilderStateTest {
     void nullArgumentsAreRejected() {
         assertThrows(NullPointerException.class, () -> db().table(null));
         assertThrows(NullPointerException.class, () -> db().table("t").where((String) null, 1));
-        assertThrows(NullPointerException.class, () -> db().table("t").whereIn("a", null));
+        assertThrows(NullPointerException.class, () -> db().table("t").whereIn("a", (java.util.Collection<?>) null));
         assertThrows(NullPointerException.class, () -> QueryFactory.of(null, null, null));
     }
 
