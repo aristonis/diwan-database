@@ -76,3 +76,35 @@ password never reaches a response.
 
 Done when: visible filters first, hidden then removes, appended accessors are added, and a model
 can plug in its own JSON library.
+
+### Related models without reflection
+
+As an Android developer, I want relations declared by typed methods and a name map, so that R8
+cannot break them and the compiler checks the types.
+
+Done when: a relation declared wrongly fails at first use naming the model and the relation, and
+the same classes run on SQLite, PostgreSQL and Android.
+
+### No N+1 queries
+
+As an application developer, I want to eager load relations, so that a list of users with their
+posts and comments costs one query per level.
+
+Done when: `with`, `load` and `loadMissing` load nested and constrained relations, large key lists
+stay under the database's limits, and lazy loading can be refused for multi-row results.
+
+### Filtering by related rows
+
+As an application developer, I want `has`, `whereHas` and `whereRelation`, so that I can find
+users with matching posts without writing joins.
+
+Done when: each form compiles to an `exists` subquery, a self relation gets a stable alias, and
+the SQL is the same every time.
+
+### Writing through a relation
+
+As an application developer, I want `user.posts().create(...)` and `post.author().associate(user)`,
+so that foreign keys are set for me.
+
+Done when: the foreign key is set on every write, and a write from a parent without a key is
+refused before any SQL.

@@ -35,6 +35,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `makeVisible` and `append`. Moments serialize as ISO-8601 UTC with microseconds.
 - `JsonCodec` with a strict built-in RFC 8259 codec that keeps numbers exact; a model can plug in
   Jackson or Gson through `jsonCodec()` without a library dependency.
+- Model relations in `eloquent.relations`: `HasOne`, `HasMany` and `BelongsTo`, declared by a
+  typed method and a `RelationMap` returned from `relations()`, checked once per model class
+  without reflection (`RelationNotFoundException`, `InvalidRelationException`). Lazy reads with
+  `getRelationValue`, `related` and `relatedMany`; `getRelation`, `setRelation`,
+  `unsetRelation`, `relationLoaded` and `withoutRelations`. Eager loading with `with`, `without`,
+  `withOnly`, `load` and `loadMissing` on builders, models and collections, with dot paths,
+  column lists and constraints, also per chunk, page and `lazy()` page. Existence filters `has`,
+  `orHas`, `doesntHave`, `orDoesntHave`, `whereHas`, `orWhereHas`, `whereDoesntHave`,
+  `orWhereDoesntHave`, `whereRelation`, `orWhereRelation` and `whereGroup`. Writes through a
+  relation (`make`, `save`, `saveMany`, `create`, `createMany`, `associate`, `dissociate`) and
+  `withDefault`. Loaded relations appear in `toMap()` and `toJson()` under snake-case keys, and a
+  cycle ends. `ModelQuery.preventLazyLoading` refuses lazy reads on models from multi-row results
+  with `LazyLoadingViolationException`; `refresh()` reloads loaded relations.
+- Unlike Laravel, relations: drop null keys from eager loads (Laravel can read them as `0` and
+  fetch orphan rows); split long eager key lists to stay under SQLite's and PostgreSQL's parameter
+  limits; refuse an inexact integer key instead of truncating it; number self-join aliases per
+  query, so the SQL is the same every time; refuse an eager constraint with `limit` or `offset`;
+  add the matching key to a `with("posts:id,title")` column list; refuse a write through a
+  relation whose parent has no key; require the foreign key of `belongsTo`; never lazy load from
+  `getAttribute`; run both constraints when `with` names the same relation twice; and always
+  group a `whereHas` constraint. `cursor()` with eager loads is refused; use `lazy()`.
+- `whereIntegerInRaw` on the query builder: integer values written inline, anything that is not
+  exactly an integer refused with `IllegalArgumentException`.
 - Query builder chunking, streaming and pagination: `chunk`, `each`, `chunkMap`, `chunkById`,
   `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`; `cursor()` returning a
   `RowCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`

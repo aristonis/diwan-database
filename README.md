@@ -14,7 +14,7 @@ migration where the database allows. The schema builder creates and changes tabl
 the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar in
 `diwan-database-pgsql`. The query builder reads and writes rows with Laravel's method names,
 through a query grammar from the same modules. Models in `diwan-database-eloquent` add
-Eloquent's class-per-table API on top of the query builder.
+Eloquent's class-per-table API, with relations and eager loading, on top of the query builder.
 
 | Layer | State |
 |---|---|
@@ -510,8 +510,115 @@ Timestamps are written as Laravel writes them, UTC text `yyyy-MM-dd HH:mm:ss`, w
 `timestamps()` columns; return `TimestampFormat.INSTANT` from `timestampFormat()` for tables built
 with instant columns. Models are not thread-safe. Behavior and limits:
 [docs/behavior/eloquent](docs/behavior/eloquent/README.md); decisions:
-[ADR 0015](docs/adr/0015-eloquent-models.md) and, for casts,
-[ADR 0016](docs/adr/0016-attributes-casts-and-the-json-codec.md).
+[ADR 0015](docs/adr/0015-eloquent-models.md), for casts
+[ADR 0016](docs/adr/0016-attributes-casts-and-the-json-codec.md), and for relations
+[ADR 0017](docs/adr/0017-relations.md).
+
+#### Relations
+
+A relation is a typed method plus a name in `relations()`. The map is how names such as
+`"posts"` reach the method without reflection, so R8 cannot break it; it is checked once per class
+on first use, and a mistake fails with `InvalidRelationException` naming the model and relation.
+
+```java
+import org.aristonis.diwan.database.eloquent.relations.BelongsTo;
+import org.aristonis.diwan.database.eloquent.relations.HasMany;
+import org.aristonis.diwan.database.eloquent.relations.RelationMap;
+
+public final class User extends Model {
+    public static final ModelQuery<User> query = ModelQuery.of(User.class, User::new);
+
+    @Override
+    protected RelationMap<?> relations() {
+        return RelationMap.of(User.class).add("posts", User::posts);
+    }
+
+    public HasMany<Post> posts() {
+        return hasMany(Post.class, "user_id");      // hasOne works the same way
+    }
+}
+
+public final class Post extends Model {
+    public static final ModelQuery<Post> query = ModelQuery.of(Post.class, Post::new);
+
+    @Override
+    protected RelationMap<?> relations() {
+        return RelationMap.of(Post.class).add("author", Post::author);
+    }
+
+    public BelongsTo<User> author() {
+        return belongsTo(User.class, "user_id");    // the foreign key is required
+    }
+}
+```
+
+Read a relation lazily by name, or build a query from the method. A lazy read runs once and keeps
+the result on the model. `getAttribute("posts")` never loads a relation:
+
+```java
+ModelCollection<Post> posts = user.relatedMany("posts");   // select * from posts where user_id = ?
+User author = post.related("author");                      // null when there is none
+ModelCollection<Post> recent = user.posts().where("published", true).latest().get();
+```
+
+Eager load to avoid one query per model. Paths nest with dots, `name:col,...` selects columns
+(the matching key is added for you), and a constraint narrows the related query:
+
+```java
+ModelQuery<User> users = User.query.on(SQLiteQuery.of(db));
+ModelCollection<User> all = users.with("posts.comments").get();   // three queries in all
+users.with("posts", q -> q.where("published", true)).get();
+users.query().with("posts:id,title").paginate(20, 1);
+
+all.load("posts.author");        // on a collection already read
+user.loadMissing("posts");       // only what is not loaded yet
+```
+
+Null keys are dropped and long key lists are split so no statement passes SQLite's or
+PostgreSQL's parameter limits. An eager constraint runs once per chunk plus once, so keep it free
+of side effects; it may not set `limit` or `offset`. `cursor()` refuses eager loads; `lazy()` loads
+them per page.
+
+Filter by related rows with `exists` subqueries:
+
+```java
+users.query().has("posts").get();
+users.query().has("posts", ">=", 3).get();
+users.query().whereHas("posts", q -> q.where("title", "like", "Java%")).get();
+users.query().doesntHave("posts.comments").get();
+users.query().whereRelation("posts", "published", true).get();
+```
+
+Write through a relation; the foreign key is set for you. Writing from a parent that has no key
+yet throws `IllegalStateException` before any SQL, where Laravel writes a null key:
+
+```java
+Post post = user.posts().create(Map.of("title", "Hello"));   // user_id set
+user.posts().saveMany(List.of(draftA, draftB));             // no transaction, as in Laravel
+post.author().associate(otherUser);                         // sets user_id and the relation
+post.author().dissociate();
+```
+
+`hasOne` and `belongsTo` relations can return a default model with `withDefault()` when nothing
+is found. `toMap()` and `toJson()` include loaded relations after the attributes, under snake-case
+keys, honour `hidden` and `visible`, and stop on cycles.
+
+To catch N+1 queries in development, refuse lazy reads on models that came from a multi-row
+result. It is a process-wide setting; call it once at startup:
+
+```java
+ModelQuery.preventLazyLoading(true);
+users.query().get().get(0).relatedMany("posts");   // LazyLoadingViolationException
+```
+
+Two notes for relations:
+
+- A class literal such as `Post.class` does not run the class's static initialiser, and a relation
+  needs the related class's `query` entry to exist. Touch every model's `query` entry at startup
+  (for example, list them in one place), or make sure each model was used before a relation
+  names it.
+- The default foreign key is the snake-case class name plus `_id`. On Android, R8 renames classes,
+  so pass foreign keys explicitly, as above, or override `getForeignKey()`.
 
 ### Migrations
 

@@ -2,15 +2,15 @@
 
 What models must do, observed from outside. The reasons behind the choices are in
 [ADR 0015](../adr/0015-eloquent-models.md) and
-[ADR 0016](../adr/0016-attributes-casts-and-the-json-codec.md); the detailed contract of each
-type is its Javadoc.
+[ADR 0016](../adr/0016-attributes-casts-and-the-json-codec.md) and
+[ADR 0017](../adr/0017-relations.md); the detailed contract of each type is its Javadoc.
 
 ## 1. Problem
 
 Applications read and write rows as maps. Laravel developers expect Eloquent models: a class per
 table with `find`, `save` and `delete`, dirty tracking and mass-assignment protection. They also
 expect casts that read typed values, accessors and mutators, control over what a model serializes,
-and a dirty check that knows the cast.
+a dirty check that knows the cast, and relations between models that load lazily or eagerly.
 
 ## 2. Goal
 
@@ -74,6 +74,23 @@ builder, without reflection, annotations or build plugins.
 21. JSON is read and written through a codec the model chooses. The built-in codec is strict
     RFC 8259 and keeps numbers exact; Jackson or Gson can replace it without a dependency in the
     library.
+22. Relations: one-to-one, one-to-many and its inverse, declared by a typed method and a name map
+    checked once per model class. A typo or a bad declaration fails at first use, naming the model
+    and the relation.
+23. A relation is read lazily on first access and kept on the model. Relations can be eager
+    loaded on a query, on one model or on a collection, with nested paths, selected columns and
+    constraints, loading only what is missing on request.
+24. Eager loading drops null keys, queries each key once, and splits large key lists so no query
+    passes the database's parameter or statement limits. A constraint with a limit or offset is
+    refused.
+25. Queries can filter by the existence or count of related rows, with a constraint, nested paths
+    and self relations, through Laravel's `has`, `whereHas`, `whereRelation` family.
+26. Writes through a relation set the foreign key: make, save and create one or many children,
+    associate and dissociate a parent. A write from a parent without a key is refused before any
+    SQL.
+27. A one-to-one or inverse relation can return a default model when nothing is found.
+28. `toMap()` and `toJson()` include loaded relations and stop on cycles.
+29. Lazy loading can be refused for models that came from a multi-row result, process-wide.
 
 ## 4. Non-functional requirements
 
@@ -100,6 +117,30 @@ builder, without reflection, annotations or build plugins.
 | Accessor discovery | `getFooAttribute` found by name | Registered in `accessors()` | No reflection |
 | `immutable_*` casts | Differ from the mutable ones | Aliases | `java.time` is immutable |
 | Incrementing key | Implicitly cast to `int` | Not cast | Key comparison already treats numbers by value |
+| Relation lookup | Method found by name | Typed method plus a `relations()` name map | No reflection |
+| Relation constraints | Added in the constructor unless a static switch is off | Added by the lazy read paths only | Thread safety |
+| Self-join alias | Counter shared by the whole process | Counter per outermost query | The same query always gives the same SQL |
+| Null parent keys in eager loads | Reach the `in` list; an integer list reads them as `0` | Dropped | Orphan rows were fetched |
+| Bound eager keys | One `in` list of any size | Split per database limit | SQLite allows 999 parameters, PostgreSQL 65,535 |
+| Integer `in` list values | `"abc"` reads `0`, `1.9` reads `1` | Exact or refused | Silent wrong matches |
+| Write through a relation from a parent without a key | Writes a null foreign key | Refused | Silent orphan rows |
+| `getAttribute("posts")` | Lazy loads the relation | Attributes only; `getRelationValue`, `related`, `relatedMany` | No surprise queries |
+| Eager constraint with `limit` | Per-parent window query | Refused | SQLite on Android 9 has no window functions |
+| `belongsTo` foreign key | Guessed from the calling method name | Required | Java has no backtrace naming |
+| Lazy loading violation | Replaceable callback | Exception only | Smaller surface |
+| `with("posts:id,title")` without the foreign key | Matches nothing | The key column is added to the select | A silent empty result |
+| `with` the same relation twice | Last constraint wins | Both constraints run, first one first | The constraint map merges instead of replacing |
+| `whereHas` constraint | Grouped only when it contains an `or` | Always grouped; nothing added when empty | One rule; same rows |
+| `cursor()` with eager loads | Eager loads ignored | Throws; use `lazy()` | A silent missing relation |
+| Bound eager key type | Keys passed as read | The parent's Java type is kept (first value seen per key); matching treats `123` and `"123"` alike | PostgreSQL refuses `varchar = bigint` |
+| Internal access holders | None; PHP has no package privacy | Public classes in an `internal` package, not API, must not be called | No reflection and no `module-info` to hide them |
+| `preventLazyLoading` | Per process | Per process, a volatile flag; set once at startup, not from parallel tests | Same scope, but Java tests share one JVM |
+| Clauses chained inside a relation factory | Applied after the constraints the constructor added | Recorded and replayed after the lazy constraints; eager loads apply them to the key query; `has` takes their wheres | Constraints are added by the lazy read paths only |
+
+Kept as Laravel does it, for relations: a one-to-one relation takes the first row in database
+order, a relation loaded as null is not retried by `loadMissing`, an `or` inside an eager
+constraint is not grouped, writes through a relation run without a transaction, and saving a child
+does not set the relation on the parent.
 
 Kept as Laravel does it: decimals compare after rounding to the scale, `int` and `bool` compare by
 cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a value makes
@@ -108,9 +149,10 @@ cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a 
 ## 6. Scope and non-goals
 
 Not covered now, planned later: encrypted and hashed casts, collection and value-object cast
-classes, JSON path writes, cast-aware `increment`, relations, eager
-loading, query scopes, soft deletes, model events with a dispatcher and observers, factories.
-Also out: `push`, upsert through a model, read and write connections, annotations.
+classes, JSON path writes, cast-aware `increment`, many-to-many and through relations, polymorphic
+relations, relation counts and aggregates (`withCount`), per-parent limits in eager loads, `push`,
+query scopes, soft deletes, model events with a dispatcher and observers, factories.
+Also out: upsert through a model, read and write connections, annotations.
 
 ## 7. Acceptance criteria
 
@@ -132,3 +174,10 @@ Also out: `push`, upsert through a model, read and write connections, annotation
 12. `toMap` and `toJson` apply visible, hidden and appends in Laravel's order, with ISO-8601 UTC
     dates.
 13. A model that overrides `jsonCodec()` uses that codec.
+14. Users, posts and comments load lazily, eagerly (nested, constrained, chunked) and through
+    `whereHas` on SQLite, PostgreSQL and Android, with one query per relation level.
+15. Eager loading over more keys than one statement allows gives the same models as one query.
+16. A relation declared wrongly fails at first use with an exception naming the model and the
+    relation; an unknown name lists the known ones.
+17. With lazy loading prevented, a lazy read on a model from a multi-row result throws, and one
+    from a single-row result, a new model or an eager load does not.

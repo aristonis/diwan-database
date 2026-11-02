@@ -40,6 +40,12 @@ found.delete();
 | Find or make | `firstOrNew`, `firstOrCreate`, `updateOrCreate`, `create`, `forceCreate` |
 | Read many | `get`, `chunk`, `chunkById`, `each`, `lazy`, `lazyById`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` |
 | Reach the query builder | `query(Consumer<Builder>)`, `toBase()` |
+| Declare relations | override `relations()` with `RelationMap`; `hasOne`, `hasMany`, `belongsTo` in typed methods |
+| Read relations | `getRelationValue`, `related`, `relatedMany`, `relation(name)`, `getRelation`, `relationLoaded`, `setRelation`, `unsetRelation`, `withoutRelations` |
+| Eager load | `with`, `without`, `withOnly`, `load`, `loadMissing` |
+| Filter by related rows | `has`, `orHas`, `doesntHave`, `orDoesntHave`, `whereHas`, `orWhereHas`, `whereDoesntHave`, `orWhereDoesntHave`, `whereRelation`, `orWhereRelation`, `whereGroup` |
+| Write through a relation | `make`, `save`, `saveMany`, `create`, `createMany`, `associate`, `dissociate`, `withDefault` |
+| Refuse lazy loading | `ModelQuery.preventLazyLoading` |
 
 ## Casts, accessors and serialization
 
@@ -74,6 +80,37 @@ floats within 4 ULP, moments as instants, dates as dates, decimals after roundin
 makes a model dirty; changing a map a JSON cast returned does. `toMap` applies `visible`, then
 `hidden`, then `appends`; moments come out as ISO-8601 UTC with microseconds.
 
+## Relations
+
+```java
+public final class User extends Model {
+    public static final ModelQuery<User> query = ModelQuery.of(User.class, User::new);
+
+    @Override
+    protected RelationMap<?> relations() {
+        return RelationMap.of(User.class).add("posts", User::posts);
+    }
+
+    public HasMany<Post> posts() {
+        return hasMany(Post.class);   // posts.user_id = users.id
+    }
+}
+
+ModelQuery<User> users = User.query.on(SQLiteQuery.of(db));
+ModelCollection<User> all = users.with("posts").get();            // two queries in all
+ModelCollection<Post> posts = all.get(0).relatedMany("posts");    // loaded: no query
+Optional<User> writer = users.query()
+        .whereHas("posts", q -> q.where("title", "like", "Java%"))
+        .first();
+```
+
+A relation is read once and kept on the model. `with`, `load` and `loadMissing` take dot paths
+(`posts.comments`), a column list (`posts:id,title`; the matching key is added) or a constraint.
+Eager loading drops null keys and splits long key lists so no statement passes the database's
+limits. `has` and
+`whereHas` compile to `exists` subqueries; a relation to the same table gets an alias per level.
+`toMap()` writes loaded relations after the attributes under snake-case keys and stops on cycles.
+
 ## Limits
 
 - Models are not thread-safe. Share the `ModelQuery`; give each thread its own model instances.
@@ -90,7 +127,21 @@ makes a model dirty; changing a map a JSON cast returned does. `toMap` applies `
 - UUID version 7 and ULID keys made in the same millisecond are not ordered among themselves.
 - A `ModelCursor` that is neither exhausted nor closed keeps its connection. Use
   try-with-resources.
+- `cursor()` refuses eager loads; use `lazy()`, which loads them per page.
+- A related model's class must have run its static initialiser, so touch each model's `query`
+  entry at startup. A class literal such as `Post.class` does not run it.
+- A relation instance is single-use and not thread-safe. Call the relation method again for a new
+  query.
+- An eager constraint runs once per chunk plus once, and an `or` in it is not grouped, as in
+  Laravel. It may not set `limit` or `offset`.
+- `with` given the same relation twice runs both constraints; Laravel keeps the last.
+- Writes through a relation run without a transaction, as in Laravel.
+- Two-way relations loaded on both sides make `toMap()` output grow with the product of both
+  sides.
+- The default foreign key comes from the class name, which R8 renames on Android; pass keys or
+  override `getForeignKey()`.
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md). The decisions are in
-[ADR 0015](../../adr/0015-eloquent-models.md) and, for casts,
-[ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md).
+[ADR 0015](../../adr/0015-eloquent-models.md), for casts
+[ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md), and for relations
+[ADR 0017](../../adr/0017-relations.md).

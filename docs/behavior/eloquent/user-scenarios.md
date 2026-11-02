@@ -16,6 +16,16 @@ With casts:
 3. They change one key of the `options` map and save; only `options` and `updated_at` are written.
 4. They hide `password`, append a computed `display_name`, and send `toJson()` to the client.
 
+With relations:
+
+1. The developer declares `posts()` on `User`, `author()` and `comments()` on `Post`, and lists
+   them in `relations()`.
+2. They read users with `with("posts.comments")`: one query per level, whatever the number of
+   users.
+3. They find users with at least one post titled `Java%` through `whereHas`.
+4. They create a post through `user.posts().create(...)`; its `user_id` is set for them.
+5. They send `toJson()` of a user with its posts loaded; the posts appear under `posts`.
+
 ## Edge cases
 
 | # | Situation | What happens | Test |
@@ -65,3 +75,30 @@ With casts:
 | E43 | PostgreSQL `numeric`, `timestamptz`, `date` and `float8` Infinity columns | Each reads through its cast; Infinity breaks `toJson` | `PostgresCastsTest#columnTypesRead`, `PostgresCastsTest#infinityBreaksToJson` |
 | E44 | Casts on Android SQLite with text, integer and real storage | Same results as on the JVM | `AndroidCastsTest#decimalFromRealColumn`, `AndroidCastsTest#decimalFromIntegerColumn` |
 | E45 | A stored number like `1e-999999999` read through `int` or `decimal:N` | Reads as zero at once, no hang | `PrimitiveCastsTest#intTinyExponentReadsAsZeroQuickly`, `DecimalCastTest#tinyExponentRoundsToZeroQuickly` |
+| E46 | A relation name that is not in `relations()` | `RelationNotFoundException` listing the known names | `RelationRegistryTest#unknownNameListsKnownNames`, `RelationRegistryTest#typoInMapSurfacesAsNotFound` |
+| E47 | A relation map for another class, a null factory, or a related class without a `ModelQuery` entry | `InvalidRelationException` at first use, the same one on every later use | `RelationRegistryTest#mapClassMustMatch`, `RelationRegistryTest#nullFactoryRejected`, `RelationRegistryTest#unregisteredRelatedRejected`, `RelationRegistryTest#failedCheckRethrownSameMessage` |
+| E48 | Two threads use a model class's relations for the first time together | One check; no constraint leaks between threads | `RelationConcurrencyTest#registryInitRace`, `RelationConcurrencyTest#noConstraintLeak` |
+| E49 | `getAttribute("posts")` | Attributes only; no relation is loaded | `ModelRelationsTest#getAttributeDoesNotFallBackToRelations` |
+| E50 | A lazy read when the parent key or foreign key is null | Null or empty, no query | `HasManyTest#nullParentKeyRunsNoQuery`, `HasOneTest#nullParentKeyRunsNoQuery`, `BelongsToTest#nullForeignKeyReturnsNullWithoutQuery` |
+| E51 | Eager load where some parents have a null key | Null keys dropped, never read as `0`; all null runs no query | `EagerKeysTest#nullParentKeyNeverBecomesZero`, `EagerKeysTest#allNullKeysRunNoQuery` |
+| E52 | Key `"1"` against `1`, or `"01"`, `"1.0"`, `"-0"` against `1` and `0` | `"1"` matches; the others do not | `EagerKeysTest#canonicalIntegerTextMatches`, `EagerKeysTest#nonCanonicalTextIsNotNormalised`, `EagerKeysTest#minusZeroTextNotNormalised` |
+| E53 | More bound keys than one statement allows | Split per database; a constraint's own values shrink the chunk | `EagerLoadTest#probeShrinksBoundChunk`, `EagerLoadTest#nestedLoadedOnceAcrossChunks` |
+| E54 | 45,000 integer keys on SQLite | Inlined in three queries | `EagerKeysTest#fortyFiveThousandKeysMakeThreeSQLiteInlineChunks`, `EagerKeysTest#hugeInlinedListChunked` |
+| E55 | Eager constraint with `limit` or `offset` | `IllegalStateException` | `EagerLoadTest#constrainedLimitRefused`, `EagerLoadTest#constrainedOffsetRefused` |
+| E56 | An eager constraint with an `or` | Not grouped, as Laravel | `EagerLoadTest#orInConstraintDocumentedParity` |
+| E57 | A one-to-one relation with two matching rows | The first row wins | `HasOneTest#firstChildWinsOnDuplicates` |
+| E58 | `with("posts:id,title")` without the foreign key | The key is added so matching works | `EagerLoadTest#selectConstraintKeepsKey` |
+| E59 | `loadMissing` on a relation loaded as null | Not retried | `LoadMissingTest#loadedNullNotRetried` |
+| E60 | `cursor()` with eager loads | `IllegalStateException`; `lazy()` loads per page | `EagerLoadTest#cursorWithEagerRefused`, `EagerLoadTest#lazyBuffersAndLoads` |
+| E61 | `load` on a collection of mixed model classes | `IllegalArgumentException` | `EagerLoadTest#mixedClassesRefused`, `EagerLoadTest#mixedCollectionRejected` |
+| E62 | `whereHas` on a relation to the same table, nested | A new alias at each level, the same SQL every time | `RelationExistenceTest#selfRelationAliased`, `RelationExistenceTest#nestedSelfAliasesIncrement`, `RelationExistenceTest#selfAliasIsDeterministic` |
+| E63 | `doesntHave("posts.comments")` | Users with no post that has a comment | `RelationExistenceTest#nestedDoesntHave` |
+| E64 | `whereHas` with a constraint that adds no `where` | No empty group is written | `RelationExistenceTest#emptyConstraintAddsNoGroup` |
+| E65 | `save` or `create` through a relation of an unsaved parent | `IllegalStateException` before any SQL | `RelationWritesTest#nullParentKeyRefused` |
+| E66 | `associate` a parent without a key | `IllegalStateException`; the child is unchanged | `RelationWritesTest#nullOwnerKeyInAssociateRefused` |
+| E67 | `withDefault` on a missing one-to-one or inverse | A new default each time; a one-to-one default has its foreign key set | `WithDefaultTest#hasOneDefaultHasForeignKey`, `WithDefaultTest#belongsToDefaultIsBare`, `WithDefaultTest#defaultIsNewOnEveryUse` |
+| E68 | `toMap()` with a cycle (a post and its author's posts) | Ends; the repeated model has attributes only | `RelationSerializationTest#cycleTerminates`, `RelationSerializationTest#thousandTwoWayTerminates` |
+| E69 | A hidden relation, or a relation named like an attribute | Hidden is left out; the relation overwrites the attribute | `RelationSerializationTest#hiddenRelation`, `RelationSerializationTest#relationOverwritesSameNamedAttribute` |
+| E70 | Lazy read with lazy loading prevented, on a model from a multi-row result | `LazyLoadingViolationException`, no query | `LazyLoadingPreventionTest#multiRowModelBlocked` |
+| E71 | The same read on a single-row result, a new model or an eager-loaded relation | Allowed | `LazyLoadingPreventionTest#singleRowAndNewAllowed`, `LazyLoadingPreventionTest#eagerLoadedNotBlocked` |
+| E72 | `refresh()` on a model with loaded relations | The relations are reloaded | `ModelRelationsTest#refreshReloadsRelations` |
