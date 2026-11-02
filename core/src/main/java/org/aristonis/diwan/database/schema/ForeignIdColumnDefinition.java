@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.support.Inflector;
+
 /**
  * The column {@link Blueprint#foreignId(String)}, {@link Blueprint#foreignUuid(String)} or
  * {@link Blueprint#foreignUlid(String)} adds: a key column that can point at another table's key in

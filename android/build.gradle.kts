@@ -29,6 +29,7 @@ dependencies {
     testCompileOnly(files(androidJar))
     testRuntimeOnly(files(androidJar))
     testImplementation(project(":sqlite"))
+    testImplementation(project(":eloquent"))
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("junit:junit:4.13.2")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine")

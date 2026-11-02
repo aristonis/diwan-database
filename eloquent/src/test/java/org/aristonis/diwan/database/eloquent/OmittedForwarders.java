@@ -1,0 +1,88 @@
+package org.aristonis.diwan.database.eloquent;
+
+/**
+ * The query builder clauses EloquentBuilder deliberately does not forward: subquery and builder
+ * arguments, multi-column and value-range clauses, and rarer {@code or} and date variants. Each
+ * stays reachable through {@code EloquentBuilder.query(Consumer)}. Forward one by adding it to
+ * the builder and removing it here.
+ */
+final class OmittedForwarders {
+
+    static final String[] LIST = {
+        "orWhere(Builder,String,Object,)",
+        "orWhere(Consumer,String,Object,)",
+        "orWhere(String,String,Consumer,)",
+        "orWhereAll(List,Object,)",
+        "orWhereAll(List,String,Object,)",
+        "orWhereAny(List,Object,)",
+        "orWhereAny(List,String,Object,)",
+        "orWhereBetweenColumns(String,List,)",
+        "orWhereColumn(String,String,)",
+        "orWhereDate(String,Object,)",
+        "orWhereDate(String,String,Object,)",
+        "orWhereDay(String,Object,)",
+        "orWhereDay(String,String,Object,)",
+        "orWhereExists(Builder,)",
+        "orWhereExists(Consumer,)",
+        "orWhereIn(String,Builder,)",
+        "orWhereIn(String,Consumer,)",
+        "orWhereLike(String,Object,boolean,)",
+        "orWhereMonth(String,Object,)",
+        "orWhereMonth(String,String,Object,)",
+        "orWhereNone(List,Object,)",
+        "orWhereNone(List,String,Object,)",
+        "orWhereNot(Consumer,)",
+        "orWhereNot(Map,)",
+        "orWhereNot(String,String,Object,)",
+        "orWhereNotBetween(String,List,)",
+        "orWhereNotBetweenColumns(String,List,)",
+        "orWhereNotExists(Builder,)",
+        "orWhereNotExists(Consumer,)",
+        "orWhereNotIn(String,Builder,)",
+        "orWhereNotIn(String,Consumer,)",
+        "orWhereNotLike(String,Object,)",
+        "orWhereNotLike(String,Object,boolean,)",
+        "orWhereNullSafeEquals(String,Object,)",
+        "orWhereRowValues(List,String,List,)",
+        "orWhereTime(String,Object,)",
+        "orWhereTime(String,String,Object,)",
+        "orWhereValueBetween(Object,List,)",
+        "orWhereValueNotBetween(Object,List,)",
+        "orWhereYear(String,Object,)",
+        "orWhereYear(String,String,Object,)",
+        "orderBy(Builder,)",
+        "orderBy(Builder,String,)",
+        "orderBy(Consumer,)",
+        "orderBy(Consumer,String,)",
+        "orderByRaw(String,List,)",
+        "where(Builder,String,Object,)",
+        "where(Consumer,String,Object,)",
+        "where(String,String,Consumer,)",
+        "whereAll(List,Object,)",
+        "whereAll(List,String,Object,)",
+        "whereAny(List,Object,)",
+        "whereAny(List,String,Object,)",
+        "whereBetweenColumns(String,List,)",
+        "whereDay(String,String,Object,)",
+        "whereExists(Builder,)",
+        "whereIn(String,Builder,)",
+        "whereLike(String,Object,boolean,)",
+        "whereMonth(String,String,Object,)",
+        "whereNone(List,Object,)",
+        "whereNone(List,String,Object,)",
+        "whereNot(Map,)",
+        "whereNot(String,String,Object,)",
+        "whereNotBetweenColumns(String,List,)",
+        "whereNotExists(Builder,)",
+        "whereNotIn(String,Builder,)",
+        "whereNotLike(String,Object,boolean,)",
+        "whereNullSafeEquals(String,Object,)",
+        "whereRowValues(List,String,List,)",
+        "whereValueBetween(Object,List,)",
+        "whereValueNotBetween(Object,List,)",
+        "whereYear(String,String,Object,)",
+    };
+
+    private OmittedForwarders() {
+    }
+}

@@ -1,4 +1,4 @@
-package org.aristonis.diwan.database.schema;
+package org.aristonis.diwan.database.support;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -33,5 +33,20 @@ class InflectorTest {
         assertEquals("sheep", Inflector.plural("sheep"));
         assertEquals("", Inflector.plural(""));
         assertEquals("a_", Inflector.plural("a_"));
+    }
+
+    @Test
+    void snakeSplitsStudlyNamesAtCapitals() {
+        assertEquals("user", Inflector.snake("User"));
+        assertEquals("blog_post", Inflector.snake("BlogPost"));
+        assertEquals("h_t_m_l_page", Inflector.snake("HTMLPage"));
+        assertEquals("order2_line", Inflector.snake("Order2Line"));
+        assertEquals("", Inflector.snake(""));
+    }
+
+    @Test
+    void tableNameIsThePluralOfTheSnakeName() {
+        assertEquals("blog_posts", Inflector.plural(Inflector.snake("BlogPost")));
+        assertEquals("people", Inflector.plural(Inflector.snake("Person")));
     }
 }

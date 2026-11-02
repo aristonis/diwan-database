@@ -1,16 +1,20 @@
-package org.aristonis.diwan.database.schema;
+package org.aristonis.diwan.database.support;
 
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Guesses an English plural for {@link ForeignIdColumnDefinition#constrained()}.
+ * Guesses English plurals and snake case names for table and column names.
+ *
+ * <p>Internal: this class is public only so the library's own modules can share it. It is not
+ * part of the API and may change in any release.
  *
  * <p>Laravel uses a full inflector; these rules cover regular nouns and a short list of irregular
- * ones. A wrong guess is fixed by naming the table: {@code constrained("people")}.
+ * ones. A wrong guess is fixed by naming the table, for example {@code constrained("people")}.
+ * Stateless and safe to share across threads.
  */
-final class Inflector {
+public final class Inflector {
 
     private static final Map<String, String> IRREGULAR = new HashMap<>();
     private static final String[] UNCOUNTABLE = {"equipment", "information", "money", "news", "series", "sheep",
@@ -41,10 +45,33 @@ final class Inflector {
     /**
      * Pluralises the last word of a snake case name: {@code blog_category} gives
      * {@code blog_categories}.
+     *
+     * @param name the snake case name, not null
+     * @return the name with its last word pluralised
      */
-    static String plural(String name) {
+    public static String plural(String name) {
         int split = name.lastIndexOf('_') + 1;
         return name.substring(0, split) + pluralWord(name.substring(split));
+    }
+
+    /**
+     * Converts a studly name to snake case as Laravel's {@code Str::snake} does: an underscore
+     * goes before every capital that follows another character, then everything is lower case.
+     * {@code BlogPost} gives {@code blog_post} and {@code HTMLPage} gives {@code h_t_m_l_page}.
+     *
+     * @param name the studly name, not null
+     * @return the snake case name
+     */
+    public static String snake(String name) {
+        StringBuilder out = new StringBuilder(name.length() + 4);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (i > 0 && Character.isUpperCase(c)) {
+                out.append('_');
+            }
+            out.append(Character.toLowerCase(c));
+        }
+        return out.toString();
     }
 
     private static String pluralWord(String word) {
