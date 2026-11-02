@@ -4,8 +4,11 @@ import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.RandomAccess;
+import java.util.function.Consumer;
 
 /**
  * A read-only list of models, with Laravel's Eloquent collection helpers.
@@ -119,5 +122,72 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
             }
         }
         return new ModelCollection<>(ordered, source);
+    }
+
+    /**
+     * Eager loads relations onto every model, one query per relation per level, replacing any
+     * loaded value. Paths are as {@link EloquentBuilder#with(String...)}.
+     *
+     * @param relations the relation paths, none {@code null}
+     * @return this collection
+     * @throws NullPointerException if a path is {@code null}
+     * @throws IllegalArgumentException if the models are of more than one class, or a
+     *     {@code name:columns} path lists an empty column
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     *     names no relation; checked before any query
+     */
+    public ModelCollection<T> load(String... relations) {
+        EloquentRelationQueries.eagerLoad(models, WithParser.parse(relations), false);
+        return this;
+    }
+
+    /**
+     * Eager loads one relation onto every model, letting a callback constrain its query, as
+     * {@link EloquentBuilder#with(String, Consumer)}.
+     *
+     * @param relation the relation path, never {@code null}
+     * @param constraint the constraint on the relation's query, never {@code null}
+     * @return this collection
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if the models are of more than one class
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the path
+     *     names no relation
+     */
+    public ModelCollection<T> load(String relation, Consumer<EloquentBuilder<?>> constraint) {
+        return load(Collections.singletonMap(Objects.requireNonNull(relation, "relation"),
+                Objects.requireNonNull(constraint, "constraint")));
+    }
+
+    /**
+     * Eager loads relations onto every model, each with a callback constraining its query.
+     * An empty collection or map runs nothing.
+     *
+     * @param relations the constraints by relation path, no key or value {@code null}
+     * @return this collection
+     * @throws NullPointerException if the map, a path or a constraint is {@code null}
+     * @throws IllegalArgumentException if the models are of more than one class
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     *     names no relation
+     */
+    public ModelCollection<T> load(Map<String, Consumer<EloquentBuilder<?>>> relations) {
+        EloquentRelationQueries.eagerLoad(models, WithParser.parse(relations), false);
+        return this;
+    }
+
+    /**
+     * Eager loads the relations not loaded yet, level by level: for {@code "posts.comments"},
+     * posts on the models without them, then comments on every loaded post without them. A loaded
+     * {@code null} or empty value counts as loaded and is not read again.
+     *
+     * @param relations the relation paths, none {@code null}
+     * @return this collection
+     * @throws NullPointerException if a path is {@code null}
+     * @throws IllegalArgumentException if the models are of more than one class
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     *     names no relation
+     */
+    public ModelCollection<T> loadMissing(String... relations) {
+        EloquentRelationQueries.eagerLoad(models, WithParser.parse(relations), true);
+        return this;
     }
 }

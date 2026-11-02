@@ -66,6 +66,7 @@ final class OmittedForwarders {
         "whereDay(String,String,Object,)",
         "whereExists(Builder,)",
         "whereIn(String,Builder,)",
+        "whereIntegerInRaw(String,Collection,)",
         "whereLike(String,Object,boolean,)",
         "whereMonth(String,String,Object,)",
         "whereNone(List,Object,)",

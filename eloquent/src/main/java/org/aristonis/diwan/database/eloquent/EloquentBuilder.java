@@ -8,7 +8,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.query.Builder;
@@ -26,9 +28,13 @@ import org.aristonis.diwan.database.query.SimplePage;
  * have had their {@code retrieved()} hook run. Methods change this builder, as Laravel's do; start
  * a new one from {@link ModelQuery#query()} for each query. Not safe to share across threads.
  *
+ * <p>Relations named with {@link #with(String...)} are eager loaded after each read that returns
+ * models: {@link #get()}, {@link #first()} and the finds built on them, each chunk, each page and
+ * each buffer of {@link #lazy(int)}. {@link #cursor()} refuses them.
+ *
  * @param <T> the model class
  */
-public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> {
+public final class EloquentBuilder<T extends Model> extends EloquentRelationQueries<T> {
 
     private static final int DEFAULT_CHUNK = 1000;
 
@@ -41,15 +47,23 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
     }
 
     /**
-     * Returns existing models built from rows, without a query.
+     * Returns existing models built from rows, without a query. While
+     * {@link ModelQuery#preventsLazyLoading()} is on and there is more than one row, each model is
+     * marked so that a lazy relation read on it throws.
      *
      * @param rows the rows, never {@code null}
      * @return the models, in row order, never {@code null}
      */
     public ModelCollection<T> hydrate(List<? extends Map<String, ?>> rows) {
         List<T> models = new ArrayList<>(rows.size());
+        // Laravel's Builder::hydrate: only a result of more than one row is marked
+        boolean isMarked = rows.size() > 1 && ModelQuery.preventsLazyLoading();
         for (Map<String, ?> row : rows) {
-            models.add(hydrateOne(row));
+            T model = hydrateOne(row);
+            if (isMarked) {
+                model.markLazyLoadingPrevented();
+            }
+            models.add(model);
         }
         return new ModelCollection<>(models, source);
     }
@@ -68,7 +82,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      * @return the models, never {@code null}
      */
     public ModelCollection<T> get() {
-        return hydrate(query.get());
+        return eagerLoaded(hydrate(query.get()));
     }
 
     /**
@@ -78,7 +92,12 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      */
     public Optional<T> first() {
         Optional<Map<String, Object>> row = query.first();
-        return row.isPresent() ? Optional.of(hydrateOne(row.get())) : Optional.<T>empty();
+        if (!row.isPresent()) {
+            return Optional.empty();
+        }
+        T found = hydrateOne(row.get());
+        eagerLoaded(new ModelCollection<>(Collections.singletonList(found), source));
+        return Optional.of(found);
     }
 
     /**
@@ -308,7 +327,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      */
     public boolean chunk(int count, Predicate<ModelCollection<T>> callback) {
         enforceOrderBy();
-        return query.chunk(count, rows -> callback.test(hydrate(rows)));
+        return query.chunk(count, rows -> callback.test(eagerLoaded(hydrate(rows))));
     }
 
     /**
@@ -360,7 +379,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      * @return {@code false} when the callback stopped early
      */
     public boolean chunkById(int count, Predicate<ModelCollection<T>> callback, String column, String alias) {
-        return query.chunkById(count, rows -> callback.test(hydrate(rows)), column, alias);
+        return query.chunkById(count, rows -> callback.test(eagerLoaded(hydrate(rows))), column, alias);
     }
 
     /**
@@ -380,7 +399,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      */
     public Iterable<T> lazy(int count) {
         enforceOrderBy();
-        return mapped(query.lazy(count));
+        return mapped(query.lazy(count), count);
     }
 
     /**
@@ -402,10 +421,15 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      * @return the models, read as iterated, never {@code null}
      */
     public Iterable<T> lazyById(int count, String column, String alias) {
-        return mapped(query.lazyById(count, column, alias));
+        return mapped(query.lazyById(count, column, alias), count);
     }
 
-    private Iterable<T> mapped(Iterable<Map<String, Object>> rows) {
+    private Iterable<T> mapped(Iterable<Map<String, Object>> rows, int count) {
+        // Lazy-load prevention marks per page, as Laravel's lazy() hydrates each page as a whole.
+        if (hasEagerLoads() || ModelQuery.preventsLazyLoading()) {
+            Map<String, Consumer<EloquentBuilder<?>>> eager = getEagerLoads();
+            return () -> new EagerBuffer(rows.iterator(), count, eager);
+        }
         return () -> {
             Iterator<Map<String, Object>> it = rows.iterator();
             return new Iterator<T>() {
@@ -422,12 +446,59 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
         };
     }
 
+    // Reads count rows (the core reads pages of count), eager loads them as one collection, then
+    // yields them, so a lazy sequence with eager loads runs one relation query per page.
+    private final class EagerBuffer implements Iterator<T> {
+        private final Iterator<Map<String, Object>> rows;
+        private final int count;
+        private final Map<String, Consumer<EloquentBuilder<?>>> eager;
+        private Iterator<T> buffer = Collections.emptyIterator();
+
+        EagerBuffer(Iterator<Map<String, Object>> rows, int count,
+                Map<String, Consumer<EloquentBuilder<?>>> eager) {
+            this.rows = rows;
+            this.count = Math.max(1, count);
+            this.eager = eager;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (!buffer.hasNext() && rows.hasNext()) {
+                List<T> page = new ArrayList<>(count);
+                while (page.size() < count && rows.hasNext()) {
+                    page.add(hydrateOne(rows.next()));
+                }
+                if (page.size() > 1 && ModelQuery.preventsLazyLoading()) {
+                    page.forEach(Model::markLazyLoadingPrevented);
+                }
+                eagerLoad(page, eager, false);
+                buffer = page.iterator();
+            }
+            return buffer.hasNext();
+        }
+
+        @Override
+        public T next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return buffer.next();
+        }
+    }
+
     /**
      * Streams the models through one open cursor; close it, best with try-with-resources.
      *
+     * <p>Eager loads are refused: loading them per row would run one query per model, and Laravel
+     * ignores them here. {@link #lazy(int)} reads in pages and eager loads each page.
+     *
      * @return the open cursor, never {@code null}
+     * @throws IllegalStateException if eager loads are set
      */
     public ModelCursor<T> cursor() {
+        if (hasEagerLoads()) {
+            throw new IllegalStateException("Eager loading is not supported with cursor(); use lazy()");
+        }
         return new ModelCursor<>(query.cursor(), this::hydrateOne);
     }
 
@@ -461,7 +532,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      */
     public ModelPage<T> paginate(int perPage, int page) {
         LengthAwarePage rows = query.paginate(perPage, page);
-        return new ModelPage<>(rows, hydrate(rows.items()));
+        return new ModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 
     /**
@@ -492,7 +563,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
      */
     public SimpleModelPage<T> simplePaginate(int perPage, int page) {
         SimplePage rows = query.simplePaginate(perPage, page);
-        return new SimpleModelPage<>(rows, hydrate(rows.items()));
+        return new SimpleModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 
     /**
@@ -527,6 +598,6 @@ public final class EloquentBuilder<T extends Model> extends EloquentCreators<T> 
             query.orderBy(model.getQualifiedKeyName());
         }
         CursorPage rows = query.cursorPaginate(perPage, cursor);
-        return new CursorModelPage<>(rows, hydrate(rows.items()));
+        return new CursorModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 }

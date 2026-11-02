@@ -300,4 +300,12 @@ class SQLiteQueryGrammarTest {
         assertEquals(List.of("x", 1, 2, 3),
                 query.getGrammar().prepareBindingsForUpdate(query.getRawBindings(), values));
     }
+
+    @Test
+    void eagerChunkSizes() {
+        SQLiteQueryGrammar grammar = new SQLiteQueryGrammar("");
+
+        assertEquals(900, grammar.eagerKeyChunkSize());
+        assertEquals(20_000, grammar.inlineKeyChunkSize());
+    }
 }

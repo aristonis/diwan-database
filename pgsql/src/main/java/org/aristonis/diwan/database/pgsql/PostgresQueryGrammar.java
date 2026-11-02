@@ -42,6 +42,12 @@ public class PostgresQueryGrammar extends QueryGrammar {
     private static final int NIBBLE = 4;
     private static final int LOW_NIBBLE = 0x0f;
 
+    /** Bound eager keys per query: far under the protocol's 65,535 parameters per statement. */
+    private static final int EAGER_KEY_CHUNK_SIZE = 10_000;
+
+    /** Inlined eager keys per query: PostgreSQL has no small statement length limit. */
+    private static final int INLINE_KEY_CHUNK_SIZE = 50_000;
+
     /**
      * Creates a grammar.
      *
@@ -51,6 +57,28 @@ public class PostgresQueryGrammar extends QueryGrammar {
      */
     public PostgresQueryGrammar(String tablePrefix) {
         super(tablePrefix);
+    }
+
+    /**
+     * Returns 10,000: the wire protocol allows 65,535 parameters per statement, and the margin
+     * leaves room for the bindings of an eager constraint.
+     *
+     * @return the number of bound keys per eager query
+     */
+    @Override
+    public int eagerKeyChunkSize() {
+        return EAGER_KEY_CHUNK_SIZE;
+    }
+
+    /**
+     * Returns 50,000: PostgreSQL has no small statement length limit, so the chunk only bounds the
+     * size of one statement in memory.
+     *
+     * @return the number of inlined keys per eager query
+     */
+    @Override
+    public int inlineKeyChunkSize() {
+        return INLINE_KEY_CHUNK_SIZE;
     }
 
     /**

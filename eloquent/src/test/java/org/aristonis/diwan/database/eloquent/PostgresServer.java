@@ -21,7 +21,7 @@ import org.postgresql.ds.PGSimpleDataSource;
  * Without them the tests are skipped, unless {@code DIWAN_PG_REQUIRED} is set, as in CI, where a
  * missing server must fail the build rather than shrink it.
  */
-final class PostgresServer {
+public final class PostgresServer {
 
     private static final AtomicInteger DATABASES = new AtomicInteger();
     private static PostgresServer started;
@@ -38,7 +38,7 @@ final class PostgresServer {
     }
 
     /** Returns a connection to a new, empty database, or skips the test when PostgreSQL is not installed. */
-    static Connection newDatabase() {
+    public static Connection newDatabase() {
         return get().connect(newDatabaseName());
     }
 

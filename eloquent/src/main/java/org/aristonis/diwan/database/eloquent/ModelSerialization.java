@@ -3,10 +3,12 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastSerializer;
 import org.aristonis.diwan.database.eloquent.casts.CastValues;
@@ -47,15 +49,63 @@ abstract class ModelSerialization extends ModelAccessors {
      * lists, plus any value a cast or accessor returns that has no plain form.
      *
      * <p>Appended keys follow the stored ones, each read through its accessor, and are subject to
-     * the visible and hidden lists like any other key.
+     * the visible and hidden lists like any other key. Loaded relations follow the appends, each
+     * under its name in snake case unless {@link #snakeRelationKeys()} says otherwise, and filtered
+     * by the same visible and hidden lists: a model becomes its own map, a {@link ModelCollection}
+     * a list of maps, and a loaded {@code null} stays {@code null}. A relation key replaces an
+     * attribute of the same name.
      *
-     * @return a new mutable map in attribute order, then append order; never {@code null}
+     * <p>A model met again while it is already being serialised, as in a post whose author holds
+     * the same post, writes its attributes and appends only, so a cycle ends. The guard lets a model
+     * go once its own map is done, so an instance shared by several parents is written in full at
+     * each place it appears. With two-way relations loaded on many models, such as users holding
+     * their posts and each post holding its author, the output therefore grows with the product of
+     * the two sides — Laravel's behaviour too; drop one side with {@link #setHidden(List)} or
+     * {@link Model#withoutRelations()} when that is too much.
+     *
+     * @return a new mutable map in attribute order, then append order, then relation order; never
+     *     {@code null}
      * @throws IllegalStateException if an appended key has no accessor with a getter; the message
      *     names the key
      * @throws InvalidCastException if a cast cannot read or serialize a stored value, or an uncast
      *     timestamp column holds something that is not a moment
      */
     public Map<String, Object> toMap() {
+        return toMap(Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    /**
+     * Returns the map form, guarded against cycles by the models already being serialised.
+     *
+     * @param visiting the models whose maps are being built, by identity, never {@code null}; this
+     *     model is added for the duration of the call and removed after
+     * @return a new mutable map, never {@code null}
+     */
+    final Map<String, Object> toMap(Set<Model> visiting) {
+        Model model = self();
+        if (!visiting.add(model)) {
+            return attributesToMap();
+        }
+        try {
+            Map<String, Object> result = attributesToMap();
+            appendRelations(result, visiting);
+            return result;
+        } finally {
+            visiting.remove(model);
+        }
+    }
+
+    /**
+     * Writes the loaded relations into a map that already holds the attributes and appends. This
+     * layer has no relations, so it writes nothing.
+     *
+     * @param result the map being built, never {@code null}
+     * @param visiting the models whose maps are being built, never {@code null}
+     */
+    void appendRelations(Map<String, Object> result, Set<Model> visiting) {
+    }
+
+    private Map<String, Object> attributesToMap() {
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : getAttributes().entrySet()) {
             if (isShown(entry.getKey())) {
@@ -207,7 +257,7 @@ abstract class ModelSerialization extends ModelAccessors {
         return self();
     }
 
-    private boolean isShown(String key) {
+    final boolean isShown(String key) {
         List<String> visible = visibleKeys();
         return (visible.isEmpty() || visible.contains(key)) && !hiddenKeys().contains(key);
     }

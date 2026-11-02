@@ -18,6 +18,10 @@ import org.junit.jupiter.api.Test;
  */
 class ForwarderDriftTest {
 
+    /** Eloquent-only where methods: the relation existence family and the Eloquent group. */
+    private static final Set<String> ELOQUENT_ONLY = new HashSet<>(Arrays.asList("whereHas", "orWhereHas",
+            "whereDoesntHave", "orWhereDoesntHave", "whereRelation", "orWhereRelation", "whereGroup"));
+
     private static final Set<String> OMITTED = new HashSet<>(Arrays.asList(OmittedForwarders.LIST));
 
     private static Set<String> signatures(Class<?> type) {
@@ -44,7 +48,8 @@ class ForwarderDriftTest {
     void everyBuilderClauseIsForwardedOrListedAsOmitted() {
         Set<String> builder = signatures(Builder.class);
         Set<String> eloquent = signatures(EloquentBuilder.class);
-        eloquent.removeIf(s -> s.startsWith("whereKey"));
+        eloquent.removeIf(s -> s.startsWith("whereKey")
+                || ELOQUENT_ONLY.contains(s.substring(0, s.indexOf('('))));
 
         Set<String> missing = new TreeSet<>(builder);
         missing.removeAll(eloquent);

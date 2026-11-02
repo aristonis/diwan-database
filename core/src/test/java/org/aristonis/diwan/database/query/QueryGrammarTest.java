@@ -374,4 +374,10 @@ class QueryGrammarTest {
         assertEquals("select \"a?b\" from \"t\" where \"x\" = 1",
                 db().table("t").select("a?b").where("x", 1).toRawSql());
     }
+
+    @Test
+    void eagerChunkDefaults() {
+        assertEquals(900, grammar.eagerKeyChunkSize());
+        assertEquals(20_000, grammar.inlineKeyChunkSize());
+    }
 }

@@ -12,14 +12,29 @@
  *     protected List<String> fillable() {
  *         return Arrays.asList("name", "email");
  *     }
+ *
+ *     protected RelationMap<?> relations() {
+ *         return RelationMap.of(User.class).add("posts", User::posts);
+ *     }
+ *
+ *     public HasMany<Post> posts() {
+ *         return hasMany(Post.class);
+ *     }
  * }
  *
  * User user = User.query.on(db).create(attributes);
+ * ModelCollection<User> users = User.query.on(db).with("posts").get();
  * }</pre>
  *
  * <p>This package holds the model, its builder, collection and page types, and their exceptions.
  * It does not hold SQL: every statement goes through the core query builder, so the SQL is the
- * builder's. Casts, relations, scopes, soft deletes and event dispatchers are not here yet; the
- * protected hook methods on the model are the place they will attach.
+ * builder's. Casts live in {@code eloquent.casts}, the JSON codec in {@code eloquent.json} and the
+ * relation types in {@code eloquent.relations}; {@code eloquent.internal} bridges the packages and
+ * is not API. Scopes, soft deletes and event dispatchers are not here yet; the protected hook
+ * methods on the model are the place they will attach.
+ *
+ * <p>A related model's class must have run its static initialiser before a relation names it,
+ * because a class literal such as {@code Post.class} does not run it. Touch each model's
+ * {@code query} entry at startup.
  */
 package org.aristonis.diwan.database.eloquent;

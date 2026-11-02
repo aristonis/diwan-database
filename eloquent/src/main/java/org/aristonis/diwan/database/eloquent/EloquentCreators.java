@@ -205,8 +205,11 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
         return merged;
     }
 
+    // Laravel's clone keeps the eager loads; the alias counter is copied, not shared.
     final EloquentBuilder<T> copy() {
-        return new EloquentBuilder<>(source, model, query.clone());
+        EloquentBuilder<T> copied = new EloquentBuilder<>(source, model, query.clone());
+        self().copyRelationStateTo(copied);
+        return copied;
     }
 
     // ---- bulk writes ----

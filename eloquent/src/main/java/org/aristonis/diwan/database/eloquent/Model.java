@@ -1,6 +1,5 @@
 package org.aristonis.diwan.database.eloquent;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -12,7 +11,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.eloquent.casts.CastValues;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 
@@ -148,6 +146,10 @@ public abstract class Model extends ModelGuards {
 
     final void markExisting() {
         exists = true;
+    }
+
+    final boolean isBound() {
+        return factory != null || resolver != null;
     }
 
     final void hydrateFrom(Map<String, Object> row) {
@@ -476,7 +478,7 @@ public abstract class Model extends ModelGuards {
         if (usesTimestamps() && getUpdatedAtColumn() != null && !written.containsKey(getUpdatedAtColumn())) {
             written.put(getUpdatedAtColumn(), freshTimestampValue());
         }
-        putRawAttribute(column, NumberMath.add(getRawAttribute(column), amount, up));
+        putRawAttribute(column, ModelNumbers.add(getRawAttribute(column), amount, up));
         forceFill(written);
         if (!updating()) {
             setRawAttributes(before);
@@ -495,10 +497,13 @@ public abstract class Model extends ModelGuards {
     // ---- reloading and copying ----
 
     /**
-     * Reloads every attribute from the database, by the key as last read.
+     * Reloads every attribute from the database, by the key as last read, then the relations
+     * that are loaded.
      *
      * @return this model; unchanged when it does not exist
      * @throws ModelNotFoundException if the row is gone
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a loaded
+     *     relation was set under a name the model's relation map does not have
      */
     public Model refresh() {
         if (!exists) {
@@ -509,7 +514,7 @@ public abstract class Model extends ModelGuards {
             throw new ModelNotFoundException(getClass(), Collections.<Object>emptyList());
         }
         setRawAttributes(row.get(), true);
-        return this;
+        return reloadLoadedRelations();
     }
 
     /**
@@ -761,32 +766,5 @@ public abstract class Model extends ModelGuards {
      * propagates.
      */
     protected void retrieved() {
-    }
-
-    /** Whole-number and decimal addition for increment, keeping whole numbers as {@code Long}. */
-    private static final class NumberMath {
-
-        private NumberMath() {
-        }
-
-        static Object add(Object current, Number amount, boolean up) {
-            Object base = current == null ? 0L : current;
-            if (isWhole(base) && isWhole(amount)) {
-                long delta = amount.longValue();
-                long value = CastValues.toLong(base);
-                return up ? Math.addExact(value, delta) : Math.subtractExact(value, delta);
-            }
-            BigDecimal value = CastValues.toBigDecimal(base);
-            BigDecimal delta = CastValues.toBigDecimal(amount);
-            BigDecimal result = up ? value.add(delta) : value.subtract(delta);
-            boolean floating = base instanceof Double || base instanceof Float || amount instanceof Double
-                    || amount instanceof Float;
-            return floating ? (Object) result.doubleValue() : result;
-        }
-
-        private static boolean isWhole(Object value) {
-            return value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte
-                    || value instanceof String && ((String) value).matches("[+-]?\\d{1,18}");
-        }
     }
 }

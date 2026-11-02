@@ -64,4 +64,16 @@ class ModelCollectionTest {
         assertTrue(users.hydrate(Collections.emptyList()).fresh().isEmpty());
         assertSame(fresh, fresh);
     }
+
+    @Test
+    void loadReturnsThisWithoutAQueryWhenThereIsNothingToLoad() {
+        ModelCollection<User> none = users.hydrate(Collections.emptyList());
+        ModelCollection<User> models = two();
+
+        assertSame(none, none.load("posts"));
+        assertSame(none, none.load("posts", q -> q.where("id", 1)));
+        assertSame(none, none.loadMissing("posts"));
+        assertSame(models, models.load(Collections.emptyMap()));
+        assertTrue(fake.calls.isEmpty());
+    }
 }

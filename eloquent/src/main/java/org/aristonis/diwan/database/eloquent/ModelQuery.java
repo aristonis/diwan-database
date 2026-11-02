@@ -8,8 +8,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
@@ -41,24 +44,52 @@ public final class ModelQuery<T extends Model> {
      */
     private static final ConcurrentMap<Class<?>, ModelQuery<?>> REGISTRY = new ConcurrentHashMap<>();
 
+    /**
+     * Whether lazy loading is prevented: a process-wide boot setting, read on every
+     * lazy relation read. It is the only static mutable state the relation feature adds.
+     */
+    private static volatile boolean preventLazyLoading;
+
+    // Registers the model package's bridge for the relation package: every model has an
+    // entry, so this class is initialised before any relation code asks for the bridge.
+    static {
+        Access.setEloquent(new EloquentAccessImpl());
+    }
+
     private final Class<T> type;
     private final Supplier<T> constructor;
     private final QueryFactory factory;
     private final ConnectionResolver resolver;
     private final ModelClock clock;
 
+    /**
+     * The checked relation registry of the model class: {@code null} until the
+     * relation package checks the class's {@code relations()} map, then written once by
+     * {@code compareAndSet} and read without a lock. Typed {@code Object} because the registry
+     * type is package-private in the relation package, the only code that reads or writes it.
+     * Entries derived by {@link #on}, {@link #using} and {@link #withClock} share their origin's
+     * slot, but the cache is read only through {@link #registered(Class)}, so a class has one.
+     */
+    private final AtomicReference<Object> relations;
+
     private ModelQuery(Class<T> type, Supplier<T> constructor, QueryFactory factory, ConnectionResolver resolver,
-            ModelClock clock) {
+            ModelClock clock, AtomicReference<Object> relations) {
         this.type = type;
         this.constructor = constructor;
         this.factory = factory;
         this.resolver = resolver;
         this.clock = clock;
+        this.relations = relations;
     }
 
     /**
      * Returns the entry of a model class, not bound to any connection, and registers the class's
      * constructor. A class registers once; later calls for it keep the first constructor.
+     *
+     * <p>A model's relations need its entry: {@code relation(name)}, eager loading and existence
+     * queries find the class's checked relation map through the entry registered here, and a
+     * relation to a class without one fails. The class's static initialiser registers it, so a
+     * relation to a class whose entry no code has touched yet fails the same way.
      *
      * @param <T> the model class
      * @param type the model class, never {@code null}
@@ -68,13 +99,45 @@ public final class ModelQuery<T extends Model> {
      */
     public static <T extends Model> ModelQuery<T> of(Class<T> type, Supplier<T> constructor) {
         ModelQuery<T> query = new ModelQuery<>(Objects.requireNonNull(type, "type"),
-                Objects.requireNonNull(constructor, "constructor"), null, null, null);
+                Objects.requireNonNull(constructor, "constructor"), null, null, null, new AtomicReference<>());
         REGISTRY.putIfAbsent(type, query);
         return query;
     }
 
     static ModelQuery<?> registered(Class<?> type) {
         return REGISTRY.get(type);
+    }
+
+    /**
+     * Turns lazy-loading prevention on or off for the whole process, a port of Laravel's
+     * {@code Model::preventLazyLoading}.
+     *
+     * <p>While on, reading a relation that is not loaded from a model that came in a result of more
+     * than one row throws {@link org.aristonis.diwan.database.eloquent.relations.LazyLoadingViolationException}
+     * before any query runs. Models from single-row results, new models, loaded relations and typed
+     * relation queries such as {@code user.posts().get()} are never blocked. Only models hydrated
+     * while the switch is on are marked, and a marked model is blocked only while it stays on.
+     *
+     * <p>This is a boot-time setting for every entry and every thread, not a per-request one: set it
+     * once at start-up (for example in development and tests) rather than toggling it around a call.
+     *
+     * @param prevent whether to prevent lazy loading
+     */
+    public static void preventLazyLoading(boolean prevent) {
+        preventLazyLoading = prevent;
+    }
+
+    /**
+     * Returns whether lazy loading is prevented, as set by {@link #preventLazyLoading(boolean)}.
+     *
+     * @return whether lazy loading is prevented; {@code false} until it is turned on
+     */
+    public static boolean preventsLazyLoading() {
+        return preventLazyLoading;
+    }
+
+    AtomicReference<Object> relationRegistry() {
+        return relations;
     }
 
     /**
@@ -85,7 +148,8 @@ public final class ModelQuery<T extends Model> {
      * @throws NullPointerException if {@code queryFactory} is {@code null}
      */
     public ModelQuery<T> on(QueryFactory queryFactory) {
-        return new ModelQuery<>(type, constructor, Objects.requireNonNull(queryFactory, "queryFactory"), null, clock);
+        return new ModelQuery<>(type, constructor, Objects.requireNonNull(queryFactory, "queryFactory"), null, clock,
+                relations);
     }
 
     /**
@@ -117,7 +181,8 @@ public final class ModelQuery<T extends Model> {
      * @throws NullPointerException if {@code connections} is {@code null}
      */
     public ModelQuery<T> using(ConnectionResolver connections) {
-        return new ModelQuery<>(type, constructor, null, Objects.requireNonNull(connections, "connections"), clock);
+        return new ModelQuery<>(type, constructor, null, Objects.requireNonNull(connections, "connections"), clock,
+                relations);
     }
 
     /**
@@ -128,7 +193,8 @@ public final class ModelQuery<T extends Model> {
      * @throws NullPointerException if {@code modelClock} is {@code null}
      */
     public ModelQuery<T> withClock(ModelClock modelClock) {
-        return new ModelQuery<>(type, constructor, factory, resolver, Objects.requireNonNull(modelClock, "modelClock"));
+        return new ModelQuery<>(type, constructor, factory, resolver, Objects.requireNonNull(modelClock, "modelClock"),
+                relations);
     }
 
     /**
@@ -266,6 +332,43 @@ public final class ModelQuery<T extends Model> {
      */
     public EloquentBuilder<T> where(String column, String operator, Object value) {
         return query().where(column, operator, value);
+    }
+
+    /**
+     * Starts a query that eager loads relations, as {@link EloquentBuilder#with(String...)}.
+     *
+     * @param relations the relation paths, none {@code null}
+     * @return the builder, never {@code null}
+     * @throws NullPointerException if a path is {@code null}
+     * @throws IllegalArgumentException if a {@code name:columns} path lists an empty column
+     */
+    public EloquentBuilder<T> with(String... relations) {
+        return query().with(relations);
+    }
+
+    /**
+     * Starts a query that eager loads one constrained relation, as
+     * {@link EloquentBuilder#with(String, Consumer)}.
+     *
+     * @param relation the relation path, never {@code null}
+     * @param constraint the constraint on the relation's query, never {@code null}
+     * @return the builder, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    public EloquentBuilder<T> with(String relation, Consumer<EloquentBuilder<?>> constraint) {
+        return query().with(relation, constraint);
+    }
+
+    /**
+     * Starts a query that eager loads constrained relations, as
+     * {@link EloquentBuilder#with(Map)}.
+     *
+     * @param relations the constraints by relation path, no key or value {@code null}
+     * @return the builder, never {@code null}
+     * @throws NullPointerException if the map, a path or a constraint is {@code null}
+     */
+    public EloquentBuilder<T> with(Map<String, Consumer<EloquentBuilder<?>>> relations) {
+        return query().with(relations);
     }
 
     /**

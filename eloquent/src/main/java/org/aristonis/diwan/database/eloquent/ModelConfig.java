@@ -8,6 +8,7 @@ import java.util.Objects;
 import org.aristonis.diwan.database.eloquent.casts.Attribute;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
+import org.aristonis.diwan.database.eloquent.relations.RelationMap;
 import org.aristonis.diwan.database.support.Inflector;
 
 /**
@@ -23,6 +24,9 @@ abstract class ModelConfig {
     private static final String DEFAULT_KEY = "id";
     private static final String STRING_KEY = "string";
     private static final int DEFAULT_PER_PAGE = 15;
+
+    // Set only on the related instance of a self-relation existence query (alias of its table).
+    private String tableAlias;
 
     ModelConfig() {
     }
@@ -223,11 +227,49 @@ abstract class ModelConfig {
     }
 
     /**
-     * Returns the table the model reads and writes.
+     * Returns the relations the model declares, by name; none by default.
      *
-     * @return the table name, never {@code null}
+     * <p>Each entry builds one relation from a model, usually a reference to the model's typed
+     * relation method:
+     *
+     * <pre>{@code
+     * protected RelationMap<?> relations() {
+     *     return RelationMap.of(Post.class).add("author", Post::author).add("comments", Post::comments);
+     * }
+     * }</pre>
+     *
+     * <p>The map names the relations that {@code relation(name)}, eager loading and existence
+     * queries reach. It is read and checked once per model class, on first use, so it must not
+     * depend on instance state; a subclass inherits its parent's map. A bad map throws
+     * {@link org.aristonis.diwan.database.eloquent.relations.InvalidRelationException} on that
+     * first use.
+     *
+     * @return the relation map, never {@code null}
+     */
+    protected RelationMap<?> relations() {
+        return RelationMap.empty();
+    }
+
+    /**
+     * Returns whether loaded relations appear in the model's map and JSON forms under snake case
+     * keys, {@code blogPosts} giving {@code blog_posts}; {@code true} by default, as Laravel.
+     *
+     * @return whether relation keys are snake case
+     */
+    protected boolean snakeRelationKeys() {
+        return true;
+    }
+
+    /**
+     * Returns the table the model reads and writes, or the alias it was given as the related
+     * model of a self-relation existence query.
+     *
+     * @return the table name or alias, never {@code null}
      */
     public String getTable() {
+        if (tableAlias != null) {
+            return tableAlias;
+        }
         String table = table();
         return table != null ? table : Inflector.plural(Inflector.snake(getClass().getSimpleName()));
     }
@@ -378,5 +420,9 @@ abstract class ModelConfig {
      */
     public String qualifyColumn(String column) {
         return column.indexOf('.') >= 0 ? column : getTable() + "." + column;
+    }
+
+    final void useTableAlias(String alias) {
+        tableAlias = Objects.requireNonNull(alias, "alias");
     }
 }

@@ -28,6 +28,12 @@ abstract class WhereGrammar extends GrammarQuoting {
     /** The keyword and space that open a join's compiled conditions, cut off when they are nested. */
     static final int ON_LENGTH = "on ".length();
 
+    /** Bound keys per eager query by default: SQLite's oldest limit of 999 bindings, less a margin. */
+    static final int DEFAULT_EAGER_KEY_CHUNK_SIZE = 900;
+
+    /** Inlined integer keys per eager query by default: well under a 1,000,000-byte statement. */
+    static final int DEFAULT_INLINE_KEY_CHUNK_SIZE = 20_000;
+
     /** Creates the where layer for a prefix already checked for {@code null}. */
     WhereGrammar(String tablePrefix) {
         super(tablePrefix);
@@ -41,6 +47,35 @@ abstract class WhereGrammar extends GrammarQuoting {
      * @throws UnsupportedOperationException if the grammar does not support a clause
      */
     public abstract String compileSelect(Builder query);
+
+    // ---- eager key chunks ----
+
+    /**
+     * Returns how many keys an eager load binds in one query; a longer key list runs in chunks.
+     *
+     * <p>The default of 900 keeps a query under the 999 bindings of older SQLite builds, such as
+     * Android's, with room for the bindings of an eager constraint. A grammar overrides it for a
+     * database that allows more.
+     *
+     * @return the number of bound keys per query, at least 1
+     */
+    public int eagerKeyChunkSize() {
+        return DEFAULT_EAGER_KEY_CHUNK_SIZE;
+    }
+
+    /**
+     * Returns how many integer keys an eager load writes into one query's SQL; a longer key list
+     * runs in chunks.
+     *
+     * <p>Inlined keys take no binding, so this limit guards the length of the statement instead:
+     * 20,000 keys of at most 20 characters each, with their separators, stay well under
+     * SQLite's default maximum of 1,000,000 bytes.
+     *
+     * @return the number of inlined keys per query, at least 1
+     */
+    public int inlineKeyChunkSize() {
+        return DEFAULT_INLINE_KEY_CHUNK_SIZE;
+    }
 
     // ---- where ----
 

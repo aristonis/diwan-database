@@ -233,4 +233,12 @@ class PostgresQueryGrammarTest {
         assertEquals("(select \"x\" from \"a\" where \"x\" = ?) union (select \"x\" from \"b\")"
                 + " order by \"x\" asc limit 2", query.toSql());
     }
+
+    @Test
+    void eagerChunkSizes() {
+        PostgresQueryGrammar grammar = new PostgresQueryGrammar("");
+
+        assertEquals(10_000, grammar.eagerKeyChunkSize());
+        assertEquals(50_000, grammar.inlineKeyChunkSize());
+    }
 }

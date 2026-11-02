@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.query;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -13,6 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import org.aristonis.diwan.database.Connection;
 
 
@@ -20,6 +23,9 @@ import org.aristonis.diwan.database.Connection;
  * The in, null and between where layer of {@link Builder}.
  */
 abstract class RangeWheres extends BasicWheres {
+
+    /** Canonical decimal integer text: no sign on zero, no leading zero, at most 19 digits. */
+    private static final Pattern INTEGER_TEXT = Pattern.compile("0|-?[1-9][0-9]{0,18}");
 
     RangeWheres(Connection connection, QueryGrammar grammar, Processor processor) {
         super(connection, grammar, processor);
@@ -74,6 +80,65 @@ abstract class RangeWheres extends BasicWheres {
      */
     public final Builder orWhereNotIn(String column, Collection<?> values) {
         return addWhereIn(column, values, OR, true);
+    }
+
+    /**
+     * Adds a condition that a column is in a list of integers written into the SQL, not bound; an
+     * empty list matches no row.
+     *
+     * <p>A port of Laravel's {@code whereIntegerInRaw}, used by eager loading to keep a long list
+     * of integer keys out of the binding limit. Laravel casts each value with {@code (int)}, which
+     * turns any text into a number; here every value must be an exact integer, so nothing but
+     * digits can reach the SQL. Accepted: {@code Byte}, {@code Short}, {@code Integer},
+     * {@code Long}, a {@code BigInteger} or a whole {@code BigDecimal} in the {@code long} range,
+     * and canonical decimal text such as {@code "42"} or {@code "-7"} (not {@code "01"},
+     * {@code " 1"}, {@code "1.0"} or {@code "-0"}).
+     *
+     * @param column the column name, never {@code null}
+     * @param values the integer values, never {@code null}, copied
+     * @return this builder
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if a value is not an exact integer; the message names the
+     *     value's position and type, never the value
+     */
+    public final Builder whereIntegerInRaw(String column, Collection<?> values) {
+        Objects.requireNonNull(column, "column");
+        Objects.requireNonNull(values, "values");
+        List<Object> inlined = new ArrayList<>(values.size());
+        int index = 0;
+        for (Object value : values) {
+            inlined.add(Expression.raw(Long.toString(exactLong(value, index))));
+            index++;
+        }
+        wheres.add(new Where.In(AND, column, inlined));
+        return self();
+    }
+
+    private static long exactLong(Object value, int index) {
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
+            return ((Number) value).longValue();
+        }
+        // bitLength, not BigInteger.longValueExact: the latter needs Android API 31.
+        if (value instanceof BigInteger && ((BigInteger) value).bitLength() < Long.SIZE) {
+            return ((BigInteger) value).longValue();
+        }
+        try {
+            if (value instanceof BigDecimal) {
+                return ((BigDecimal) value).longValueExact();
+            }
+            if (value instanceof String && INTEGER_TEXT.matcher((String) value).matches()) {
+                return Long.parseLong((String) value);
+            }
+        } catch (ArithmeticException | NumberFormatException e) {
+            // Out of the long range. The cause is dropped on purpose: its message can hold the value.
+            return notAnInteger(value, index);
+        }
+        return notAnInteger(value, index);
+    }
+
+    private static long notAnInteger(Object value, int index) {
+        String type = value == null ? "null" : value.getClass().getName();
+        throw new IllegalArgumentException("value " + index + " of type " + type + " is not an integer");
     }
 
     /**

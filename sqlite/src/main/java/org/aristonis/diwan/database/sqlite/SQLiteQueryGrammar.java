@@ -47,6 +47,12 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     private static final Pattern ALIAS = Pattern.compile("\\s+as\\s+", Pattern.CASE_INSENSITIVE);
     private static final String ROWID = "rowid";
 
+    /** Bound eager keys per query: under the 999 bindings of SQLite before 3.32, as on Android 9. */
+    private static final int EAGER_KEY_CHUNK_SIZE = 900;
+
+    /** Inlined eager keys per query: under SQLite's default 1,000,000-byte statement limit. */
+    private static final int INLINE_KEY_CHUNK_SIZE = 20_000;
+
     /**
      * Translates a {@code like} pattern into a {@code glob} pattern inside SQL, as Laravel's
      * {@code prepareWhereLikeBinding} does in PHP: {@code [}, {@code *} and {@code ?} become literal
@@ -66,6 +72,28 @@ public class SQLiteQueryGrammar extends QueryGrammar {
      */
     public SQLiteQueryGrammar(String tablePrefix) {
         super(tablePrefix);
+    }
+
+    /**
+     * Returns 900: SQLite before 3.32, which Android 9 ships, allows 999 bindings per statement, and
+     * the margin leaves room for the bindings of an eager constraint.
+     *
+     * @return the number of bound keys per eager query
+     */
+    @Override
+    public int eagerKeyChunkSize() {
+        return EAGER_KEY_CHUNK_SIZE;
+    }
+
+    /**
+     * Returns 20,000: at most 20 characters per key plus a separator keep the statement well under
+     * SQLite's default {@code SQLITE_MAX_SQL_LENGTH} of 1,000,000 bytes.
+     *
+     * @return the number of inlined keys per eager query
+     */
+    @Override
+    public int inlineKeyChunkSize() {
+        return INLINE_KEY_CHUNK_SIZE;
     }
 
     /**

@@ -75,7 +75,14 @@ class LayerGuardTest {
 
         assertTrue(model.contains("hasOriginal(key) ? getRawOriginal(key) : getKey()"));
         assertTrue(model.contains("return hasRawOriginal(key);"));
-        assertTrue(model.contains("putRawAttribute(column, NumberMath.add(getRawAttribute(column), amount, up));"));
+        assertTrue(model.contains("putRawAttribute(column, ModelNumbers.add(getRawAttribute(column), amount, up));"));
+    }
+
+    @Test
+    void relationLayerSitsBetweenSerializationAndGuards() {
+        assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
+        assertSame(ModelRelations.class, ModelGuards.class.getSuperclass());
+        assertSame(ModelGuards.class, Model.class.getSuperclass());
     }
 
     @Test
