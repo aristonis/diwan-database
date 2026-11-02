@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.aristonis.diwan.database.eloquent.casts.CastValues;
 
 /**
  * The attribute layer of {@link Model}: current values, the originals last read or saved, the
@@ -21,7 +22,8 @@ import java.util.Objects;
  */
 abstract class ModelAttributes extends ModelConfig {
 
-    private Map<String, Object> attributes = new LinkedHashMap<>();
+    private final Map<String, Object> attributes = new LinkedHashMap<>();
+    private final Map<String, Object> attributesView = Collections.unmodifiableMap(attributes);
     private Map<String, Object> original = new LinkedHashMap<>();
     private Map<String, Object> changes = new LinkedHashMap<>();
     private Map<String, Object> previous = new LinkedHashMap<>();
@@ -54,7 +56,7 @@ abstract class ModelAttributes extends ModelConfig {
      * @throws NullPointerException if {@code key} is {@code null}
      */
     public Model setAttribute(String key, Object value) {
-        attributes.put(Objects.requireNonNull(key, "key"), value);
+        putRawAttribute(Objects.requireNonNull(key, "key"), value);
         return self();
     }
 
@@ -72,8 +74,11 @@ abstract class ModelAttributes extends ModelConfig {
      * Returns every attribute.
      *
      * @return a read-only copy, in insertion order, never {@code null}
+     * @implNote Cached cast objects such as decoded JSON are encoded again on every call, so the
+     *     cost grows with the size of those documents.
      */
     public Map<String, Object> getAttributes() {
+        mergeObjectCasts();
         return copy(attributes);
     }
 
@@ -97,7 +102,8 @@ abstract class ModelAttributes extends ModelConfig {
      * @throws NullPointerException if {@code values} is {@code null}
      */
     public Model setRawAttributes(Map<String, ?> values, boolean sync) {
-        attributes = new LinkedHashMap<>(Objects.requireNonNull(values, "values"));
+        replaceAttributes(Objects.requireNonNull(values, "values"));
+        rawReplaced();
         if (sync) {
             syncOriginal();
         }
@@ -124,7 +130,7 @@ abstract class ModelAttributes extends ModelConfig {
      */
     public Long getLong(String key) {
         Object value = getAttribute(key);
-        return value == null ? null : AttributeValues.toLong(value);
+        return value == null ? null : CastValues.toLong(value);
     }
 
     /**
@@ -160,7 +166,7 @@ abstract class ModelAttributes extends ModelConfig {
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
-        return AttributeValues.toBigDecimal(value).doubleValue();
+        return CastValues.toBigDecimal(value).doubleValue();
     }
 
     /**
@@ -173,7 +179,7 @@ abstract class ModelAttributes extends ModelConfig {
      */
     public BigDecimal getBigDecimal(String key) {
         Object value = getAttribute(key);
-        return value == null ? null : AttributeValues.toBigDecimal(value);
+        return value == null ? null : CastValues.toBigDecimal(value);
     }
 
     /**
@@ -186,7 +192,7 @@ abstract class ModelAttributes extends ModelConfig {
      */
     public Boolean getBoolean(String key) {
         Object value = getAttribute(key);
-        return value == null ? null : AttributeValues.toBoolean(value);
+        return value == null ? null : CastValues.toBoolean(value);
     }
 
     /**
@@ -200,7 +206,7 @@ abstract class ModelAttributes extends ModelConfig {
      */
     public Instant getInstant(String key) {
         Object value = getAttribute(key);
-        return value == null ? null : AttributeValues.toInstant(value, getDateFormat());
+        return value == null ? null : CastValues.toInstant(value, getDateFormat());
     }
 
     /**
@@ -223,8 +229,7 @@ abstract class ModelAttributes extends ModelConfig {
     }
 
     /**
-     * Returns an attribute's original value as stored; the same as {@code getOriginal(String)}
-     * until casts exist.
+     * Returns an attribute's original value as stored, with no cast applied.
      *
      * @param key the attribute, never {@code null}
      * @return the value, or {@code null} when absent or {@code null}
@@ -239,6 +244,7 @@ abstract class ModelAttributes extends ModelConfig {
      * @return this model
      */
     public Model syncOriginal() {
+        mergeObjectCasts();
         original = new LinkedHashMap<>(attributes);
         return self();
     }
@@ -261,6 +267,7 @@ abstract class ModelAttributes extends ModelConfig {
      * @return this model
      */
     public Model syncOriginalAttributes(String... keys) {
+        mergeObjectCasts();
         for (String key : keys) {
             if (attributes.containsKey(key)) {
                 original.put(key, attributes.get(key));
@@ -295,9 +302,10 @@ abstract class ModelAttributes extends ModelConfig {
      * @return this model
      */
     public Model discardChanges() {
-        attributes = new LinkedHashMap<>(original);
+        replaceAttributes(original);
         changes = new LinkedHashMap<>();
         previous = new LinkedHashMap<>();
+        rawReplaced();
         return self();
     }
 
@@ -307,6 +315,8 @@ abstract class ModelAttributes extends ModelConfig {
      *
      * @param keys the attributes, or none for every attribute
      * @return whether the model is dirty
+     * @implNote Cached cast objects such as decoded JSON are encoded again on every call, so the
+     *     cost grows with the size of those documents.
      */
     public boolean isDirty(String... keys) {
         return anyIn(dirty(), keys);
@@ -376,6 +386,7 @@ abstract class ModelAttributes extends ModelConfig {
     }
 
     private Map<String, Object> dirty() {
+        mergeObjectCasts();
         Map<String, Object> dirty = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : attributes.entrySet()) {
             if (!originalIsEquivalent(entry.getKey())) {
@@ -403,8 +414,10 @@ abstract class ModelAttributes extends ModelConfig {
         private final Map<String, Object> original;
         private final Map<String, Object> changes;
         private final Map<String, Object> previous;
+        private final Map<String, Object> castObjects;
 
         private Snapshot(ModelAttributes model) {
+            castObjects = model.castObjects();
             attributes = new LinkedHashMap<>(model.attributes);
             original = new LinkedHashMap<>(model.original);
             changes = new LinkedHashMap<>(model.changes);
@@ -413,14 +426,101 @@ abstract class ModelAttributes extends ModelConfig {
     }
 
     final Snapshot snapshotAttributes() {
+        mergeObjectCasts();
         return new Snapshot(this);
     }
 
     final void restoreAttributes(Snapshot snapshot) {
-        attributes = new LinkedHashMap<>(snapshot.attributes);
+        replaceAttributes(snapshot.attributes);
         original = new LinkedHashMap<>(snapshot.original);
         changes = new LinkedHashMap<>(snapshot.changes);
         previous = new LinkedHashMap<>(snapshot.previous);
+        rawReplaced();
+        // The caller may still hold these objects; tracking them again keeps later mutations saved.
+        restoreCastObjects(snapshot.castObjects);
+    }
+
+    /**
+     * Returns an attribute's stored value, with no cast or accessor applied.
+     *
+     * @param key the attribute
+     * @return the stored value, or {@code null} when absent or {@code null}
+     */
+    final Object getRawAttribute(String key) {
+        return attributes.get(key);
+    }
+
+    /**
+     * Stores a value as is, with no cast or accessor, and reports the write to
+     * {@link #rawWritten(String)}.
+     *
+     * @param key the attribute, never {@code null}
+     * @param value the stored value, may be {@code null}
+     */
+    final void putRawAttribute(String key, Object value) {
+        attributes.put(key, value);
+        rawWritten(key);
+    }
+
+    /**
+     * Returns the stored attributes as a live read-only view; later writes show through it.
+     *
+     * @return the view, never {@code null}
+     */
+    final Map<String, Object> rawAttributesView() {
+        return attributesView;
+    }
+
+    /**
+     * Returns whether an attribute has an original value, even a {@code null} one.
+     *
+     * @param key the attribute
+     * @return whether an original is present
+     */
+    final boolean hasRawOriginal(String key) {
+        return original.containsKey(key);
+    }
+
+    /**
+     * Writes cached cast objects back to their stored values before the attributes are read as a
+     * whole; does nothing in this layer.
+     */
+    void mergeObjectCasts() {
+    }
+
+    /**
+     * Called after one stored value is written; does nothing in this layer.
+     *
+     * @param key the attribute written
+     */
+    void rawWritten(String key) {
+    }
+
+    /** Called after the stored values are replaced as a whole; does nothing in this layer. */
+    void rawReplaced() {
+    }
+
+    /**
+     * Returns the cached cast objects for a snapshot; none in this layer.
+     *
+     * @return a copy holding the same object references, never {@code null}
+     */
+    Map<String, Object> castObjects() {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Tracks the cast objects of a snapshot again after a restore; does nothing in this layer.
+     *
+     * @param objects the objects taken by {@link #castObjects()}
+     */
+    void restoreCastObjects(Map<String, Object> objects) {
+    }
+
+    private void replaceAttributes(Map<String, ?> values) {
+        Map<String, Object> fresh = new LinkedHashMap<>(values);
+        attributes.clear();
+        attributes.putAll(fresh);
     }
 
     private static Map<String, Object> copy(Map<String, Object> map) {

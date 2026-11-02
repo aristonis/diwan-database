@@ -18,7 +18,7 @@ import java.util.function.Supplier;
  * needs a schema lookup; this layer does not, so a model that guards by list should prefer a
  * fillable list.
  */
-abstract class ModelGuards extends ModelAttributes {
+abstract class ModelGuards extends ModelSerialization {
 
     private static final String EVERY_KEY = "*";
 

@@ -3,6 +3,11 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.aristonis.diwan.database.eloquent.casts.Attribute;
+import org.aristonis.diwan.database.eloquent.casts.Cast;
+import org.aristonis.diwan.database.eloquent.json.JsonCodec;
 import org.aristonis.diwan.database.support.Inflector;
 
 /**
@@ -10,7 +15,8 @@ import org.aristonis.diwan.database.support.Inflector;
  * getters that read them.
  *
  * <p>Configuration is read through methods, not annotations, so it survives code shrinkers on
- * Android without keep rules. Each method is read on every use and should return a constant.
+ * Android without keep rules. Each method is read on every use and should return a constant;
+ * {@link #casts()} and {@link #accessors()} are read once per model class.
  */
 abstract class ModelConfig {
 
@@ -155,6 +161,68 @@ abstract class ModelConfig {
     }
 
     /**
+     * Returns the casts, by attribute name; none by default.
+     *
+     * <p>Read once per model class and kept, so the map must not depend on instance state. A cast
+     * string from {@link org.aristonis.diwan.database.eloquent.casts.Casts#of(String)} is parsed
+     * then; an invalid one throws on the first attribute access of the class.
+     *
+     * @return the casts, never {@code null}
+     */
+    protected Map<String, Cast<?>> casts() {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Returns the accessors and mutators, by attribute name; none by default.
+     *
+     * <p>Read once per model class and kept, so the map must not depend on instance state.
+     *
+     * @return the accessors, never {@code null}
+     */
+    protected Map<String, Attribute<?>> accessors() {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Returns the attributes left out of the model's map and JSON forms; none by default.
+     *
+     * @return the hidden attributes, never {@code null}
+     */
+    protected List<String> hidden() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * Returns the only attributes kept in the model's map and JSON forms; empty, meaning every
+     * attribute, by default.
+     *
+     * @return the visible attributes, never {@code null}
+     */
+    protected List<String> visible() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * Returns the computed attributes added to the model's map and JSON forms; none by default.
+     *
+     * @return the appended attributes, never {@code null}
+     */
+    protected List<String> appends() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * Returns the codec the JSON casts and the JSON form use; {@link JsonCodec#standard()} by
+     * default.
+     *
+     * @return the codec, never {@code null}
+     */
+    protected JsonCodec jsonCodec() {
+        return JsonCodec.standard();
+    }
+
+    /**
      * Returns the table the model reads and writes.
      *
      * @return the table name, never {@code null}
@@ -279,6 +347,16 @@ abstract class ModelConfig {
      */
     public UniqueIdKind getUniqueIdKind() {
         return uniqueIdKind();
+    }
+
+    /**
+     * Returns the codec the JSON casts and the JSON form use.
+     *
+     * @return the codec, never {@code null}
+     * @throws NullPointerException if {@link #jsonCodec()} returns {@code null}
+     */
+    public JsonCodec getJsonCodec() {
+        return Objects.requireNonNull(jsonCodec(), "jsonCodec");
     }
 
     /**

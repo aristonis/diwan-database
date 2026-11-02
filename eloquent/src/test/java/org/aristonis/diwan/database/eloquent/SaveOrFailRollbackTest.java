@@ -14,6 +14,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.eloquent.casts.Cast;
+import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.sqlite.SQLiteSchema;
@@ -81,6 +83,34 @@ class SaveOrFailRollbackTest {
         }
     }
 
+    /** A profile with a json column whose saved hook can be told to fail. */
+    static final class Profile extends Model {
+        static final ModelQuery<Profile> QUERY = ModelQuery.of(Profile.class, Profile::new);
+        boolean failSaved;
+
+        @Override
+        protected Map<String, Cast<?>> casts() {
+            return Map.of("meta", Casts.json());
+        }
+
+        @Override
+        protected List<String> guarded() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        protected boolean timestamps() {
+            return false;
+        }
+
+        @Override
+        protected void saved() {
+            if (failSaved) {
+                throw new IllegalStateException("saved failed");
+            }
+        }
+    }
+
     private java.sql.Connection jdbc;
     private QueryFactory db;
     private ModelQuery<Account> accounts;
@@ -99,6 +129,10 @@ class SaveOrFailRollbackTest {
         SQLiteSchema.of(connection).create("tickets", t -> {
             t.uuid("id").primary();
             t.string("title");
+        });
+        SQLiteSchema.of(connection).create("profiles", t -> {
+            t.id();
+            t.text("meta");
         });
         accounts = Account.QUERY.on(db).withClock(ModelClock.fixed(NOW));
     }
@@ -198,5 +232,39 @@ class SaveOrFailRollbackTest {
         // Only the model whose saveOrFail failed is restored; the inner save succeeded, so its
         // model still reports the row the outer rollback discarded.
         assertTrue(inner[0].exists());
+    }
+
+    // the snapshot merges cached cast objects first, so the rollback keeps the mutation.
+    @Test
+    @SuppressWarnings("unchecked")
+    void failedSaveKeepsJsonMutation() {
+        ModelQuery<Profile> profiles = Profile.QUERY.on(db);
+        Profile profile = profiles.create(row("meta", new java.util.LinkedHashMap<>(Map.of("a", 1L))));
+        ((Map<String, Object>) profile.getAttribute("meta")).put("b", 2L);
+        profile.failSaved = true;
+
+        assertThrows(IllegalStateException.class, profile::saveOrFail);
+
+        assertEquals(Map.of("a", 1L, "b", 2L), profile.getAttribute("meta"));
+        assertTrue(profile.isDirty("meta"));
+        assertEquals(Map.of("a", 1L), profiles.findOrFail(profile.getKey()).getAttribute("meta"));
+    }
+
+    // Review fix 3: the rollback keeps tracking a cast object the caller already holds.
+    @Test
+    @SuppressWarnings("unchecked")
+    void aHeldJsonMapStaysTrackedAfterAFailedSave() {
+        ModelQuery<Profile> profiles = Profile.QUERY.on(db);
+        Profile profile = profiles.create(row("meta", new java.util.LinkedHashMap<>(Map.of("a", 1L))));
+        Map<String, Object> held = (Map<String, Object>) profile.getAttribute("meta");
+        profile.failSaved = true;
+        assertThrows(IllegalStateException.class, profile::saveOrFail);
+
+        held.put("b", 2L);
+        profile.failSaved = false;
+        profile.save();
+
+        assertTrue(profile.isClean("meta"));
+        assertEquals(Map.of("a", 1L, "b", 2L), profiles.findOrFail(profile.getKey()).getAttribute("meta"));
     }
 }

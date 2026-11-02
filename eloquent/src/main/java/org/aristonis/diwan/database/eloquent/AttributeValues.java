@@ -1,18 +1,12 @@
 package org.aristonis.diwan.database.eloquent;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.regex.Pattern;
-import org.aristonis.diwan.database.values.Instants;
+import org.aristonis.diwan.database.eloquent.casts.CastValues;
 
 /** Conversions and comparisons of raw attribute values, shared by the model layers. */
 final class AttributeValues {
@@ -67,8 +61,8 @@ final class AttributeValues {
         if (a == null || b == null || !isNumeric(a) || !isNumeric(b)) {
             return false;
         }
-        BigDecimal x = decimal(a);
-        BigDecimal y = decimal(b);
+        BigDecimal x = CastValues.decimal(a);
+        BigDecimal y = CastValues.decimal(b);
         return x != null && y != null && x.compareTo(y) == 0;
     }
 
@@ -88,129 +82,16 @@ final class AttributeValues {
         if (value instanceof String) {
             return (String) value;
         }
-        BigDecimal decimal = decimal(value);
+        BigDecimal decimal = CastValues.decimal(value);
         return decimal == null ? value.toString() : decimal.stripTrailingZeros().toPlainString();
-    }
-
-    /** The exact decimal of a number or numeric text, or null for NaN and infinities. */
-    private static BigDecimal decimal(Object value) {
-        if (value instanceof BigDecimal) {
-            return (BigDecimal) value;
-        }
-        if (value instanceof BigInteger) {
-            return new BigDecimal((BigInteger) value);
-        }
-        if (value instanceof Double || value instanceof Float) {
-            double d = ((Number) value).doubleValue();
-            if (Double.isNaN(d) || Double.isInfinite(d)) {
-                return null;
-            }
-            return value instanceof Float ? new BigDecimal(value.toString()) : BigDecimal.valueOf(d);
-        }
-        if (value instanceof Number) {
-            return BigDecimal.valueOf(((Number) value).longValue());
-        }
-        try {
-            return new BigDecimal(value.toString());
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     private static Instant tryInstant(Object value, String dateFormat) {
         try {
-            return toInstant(value, dateFormat);
+            return CastValues.toInstant(value, dateFormat);
         } catch (IllegalArgumentException | DateTimeParseException e) {
             // A value that is not a moment never equals one: the attribute counts as dirty.
             return null;
         }
-    }
-
-    static Instant toInstant(Object value, String dateFormat) {
-        if (value instanceof LocalDateTime) {
-            return ((LocalDateTime) value).toInstant(ZoneOffset.UTC);
-        }
-        if (value instanceof Instant || value instanceof OffsetDateTime || value instanceof Long
-                || value instanceof Integer) {
-            return Instants.read(value);
-        }
-        if (value instanceof String) {
-            return parseInstant((String) value, dateFormat);
-        }
-        throw new IllegalArgumentException("Not a moment: " + value.getClass().getSimpleName());
-    }
-
-    private static Instant parseInstant(String text, String dateFormat) {
-        try {
-            return LocalDateTime.parse(text, DateTimeFormatter.ofPattern(dateFormat, Locale.ROOT))
-                    .toInstant(ZoneOffset.UTC);
-        } catch (DateTimeParseException | IllegalArgumentException e) {
-            // Not in the model's format; fall through to the ISO forms.
-        }
-        try {
-            return OffsetDateTime.parse(text).toInstant();
-        } catch (DateTimeParseException e) {
-            // No offset; a plain ISO local date-time is read as UTC below.
-        }
-        try {
-            return LocalDateTime.parse(text).toInstant(ZoneOffset.UTC);
-        } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Not a moment in the format " + dateFormat + " or ISO-8601", e);
-        }
-    }
-
-    static Long toLong(Object value) {
-        if (value instanceof BigDecimal || value instanceof Double || value instanceof Float || value instanceof String) {
-            BigDecimal decimal = decimal(value);
-            if (decimal == null) {
-                throw new IllegalArgumentException("Not a whole number: " + describe(value));
-            }
-            try {
-                return decimal.longValueExact();
-            } catch (ArithmeticException e) {
-                throw new IllegalArgumentException("Not a whole number in the long range: " + describe(value), e);
-            }
-        }
-        if (value instanceof BigInteger) {
-            // bitLength, not longValueExact: the latter needs Android API 31.
-            if (((BigInteger) value).bitLength() > Long.SIZE - 1) {
-                throw new IllegalArgumentException("Not in the long range: " + describe(value));
-            }
-            return ((BigInteger) value).longValue();
-        }
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-        throw new IllegalArgumentException("Not a whole number: " + describe(value));
-    }
-
-    static BigDecimal toBigDecimal(Object value) {
-        BigDecimal decimal = value instanceof Number || value instanceof String ? decimal(value) : null;
-        if (decimal == null) {
-            throw new IllegalArgumentException("Not a decimal number: " + describe(value));
-        }
-        return decimal;
-    }
-
-    static Boolean toBoolean(Object value) {
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        if (value instanceof Number) {
-            return toBigDecimal(value).signum() != 0;
-        }
-        String text = value.toString();
-        if ("1".equals(text) || "true".equalsIgnoreCase(text)) {
-            return Boolean.TRUE;
-        }
-        if ("0".equals(text) || "false".equalsIgnoreCase(text) || text.isEmpty()) {
-            return Boolean.FALSE;
-        }
-        throw new IllegalArgumentException("Not a boolean: " + describe(value));
-    }
-
-    // Only the type: attribute values can be personal data and must not reach logs.
-    private static String describe(Object value) {
-        return "a " + value.getClass().getSimpleName();
     }
 }

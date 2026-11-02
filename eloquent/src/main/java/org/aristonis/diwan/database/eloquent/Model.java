@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.eloquent.casts.CastValues;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 
@@ -167,11 +168,11 @@ public abstract class Model extends ModelGuards {
 
     private Object getKeyForSaveQuery() {
         String key = getKeyName();
-        return hasOriginal(key) ? getOriginal(key) : getKey();
+        return hasOriginal(key) ? getRawOriginal(key) : getKey();
     }
 
     private boolean hasOriginal(String key) {
-        return getOriginal().containsKey(key);
+        return hasRawOriginal(key);
     }
 
     private Builder setKeysForSaveQuery(Builder query) {
@@ -410,7 +411,7 @@ public abstract class Model extends ModelGuards {
      * <p>Differs from Laravel on a model that does not exist: Laravel runs the update with no key
      * clause, changing every row of the table; this refuses with an exception and runs no SQL.
      *
-     * @param column the column, never {@code null}
+     * @param column the column, never {@code null}; its stored value is added to, not its cast
      * @param amount the amount, never {@code null}
      * @param extra other columns to set, never {@code null}
      * @return the affected rows, 0 when the {@link #updating()} hook vetoed it, in which case the
@@ -475,7 +476,7 @@ public abstract class Model extends ModelGuards {
         if (usesTimestamps() && getUpdatedAtColumn() != null && !written.containsKey(getUpdatedAtColumn())) {
             written.put(getUpdatedAtColumn(), freshTimestampValue());
         }
-        setAttribute(column, NumberMath.add(getAttribute(column), amount, up));
+        putRawAttribute(column, NumberMath.add(getRawAttribute(column), amount, up));
         forceFill(written);
         if (!updating()) {
             setRawAttributes(before);
@@ -772,11 +773,11 @@ public abstract class Model extends ModelGuards {
             Object base = current == null ? 0L : current;
             if (isWhole(base) && isWhole(amount)) {
                 long delta = amount.longValue();
-                long value = AttributeValues.toLong(base);
+                long value = CastValues.toLong(base);
                 return up ? Math.addExact(value, delta) : Math.subtractExact(value, delta);
             }
-            BigDecimal value = AttributeValues.toBigDecimal(base);
-            BigDecimal delta = AttributeValues.toBigDecimal(amount);
+            BigDecimal value = CastValues.toBigDecimal(base);
+            BigDecimal delta = CastValues.toBigDecimal(amount);
             BigDecimal result = up ? value.add(delta) : value.subtract(delta);
             boolean floating = base instanceof Double || base instanceof Float || amount instanceof Double
                     || amount instanceof Float;
