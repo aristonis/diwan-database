@@ -264,6 +264,57 @@ A subquery is copied when attached, so changing it later does not change the out
 join needs SQLite 3.39 or later (older Android SQLite reports its own error). An update or delete
 with a join needs a table with a rowid on SQLite. Writes need a table, not a subquery.
 
+Large reads and pages:
+
+```java
+// Batches of 500 by offset; return false to stop. Needs an order.
+query.table("orders").orderBy("id").chunk(500, rows -> {
+    rows.forEach(this::recalculate);
+    return true;
+});
+
+// Batches by key: safe when rows change during the loop.
+query.table("orders").where("status", "open").chunkById(500, rows -> {
+    rows.forEach(row -> query.table("orders").where("id", row.get("id"))
+            .update(Map.of("status", "checked")));
+    return true;
+});
+
+// One page per step, no connection held between pages.
+for (Map<String, Object> row : query.table("orders").orderBy("id").lazy(1000)) {
+    export(row);
+}
+
+// Streams rows; close it, best with try-with-resources.
+try (RowCursor rows = query.table("orders").orderBy("id").cursor()) {
+    for (Map<String, Object> row : rows) {
+        export(row);
+    }
+}
+
+LengthAwarePage page = query.table("orders").orderBy("id").paginate(20, 3);
+long total = page.total();
+SimplePage simple = query.table("orders").orderBy("id").simplePaginate(20, 3);
+boolean more = simple.hasMorePages();
+
+CursorPage first = query.table("orders").orderByDesc("created_at").orderBy("id").cursorPaginate(20);
+String token = first.nextCursor().map(Cursor::encode).orElse(null); // send to the client
+CursorPage next = query.table("orders").orderByDesc("created_at").orderBy("id")
+        .cursorPaginate(20, Cursor.decode(token));
+```
+
+`chunk` pages by offset, so use `chunkById` when rows change during the loop.
+
+Always open a cursor in try-with-resources. A cursor outside a transaction that is neither read
+to the end nor closed keeps its connection for good, and nothing closes it for you. Each one
+left open takes a pool slot, so a few of them can starve the app. On PostgreSQL it also leaves
+the server session idle in a transaction, which blocks vacuum on the tables it read. Inside a
+transaction no other statement runs on the connection until the cursor is closed. On Android,
+use a cursor only from the thread that opened it.
+Cursor tokens are not signed: a forged one cannot inject SQL but can ask for other allowed rows.
+Choices and differences from Laravel are in
+[ADR 0014](docs/adr/0014-cursors-and-pagination.md).
+
 ### Migrations
 
 ```java

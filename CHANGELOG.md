@@ -9,6 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Query builder chunking, streaming and pagination: `chunk`, `each`, `chunkMap`, `chunkById`,
+  `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`; `cursor()` returning a
+  `RowCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`
+  (`LengthAwarePage`), `simplePaginate` (`SimplePage`), `cursorPaginate` (`CursorPage` with a
+  `Cursor` token) and `getCountForPagination`. Chunking runs on copies, so the builder is
+  unchanged. `DriverSession.cursor`, `Connection.cursor` and
+  `DriverCapability.STREAMS_IN_TRANSACTION` for drivers that stream only inside a transaction.
+- While a cursor is open in a session or transaction, any other statement there is refused with
+  `IllegalStateException` until it is closed.
+- The pagination count of a `distinct` query counts distinct rows (Laravel counts every row).
 - Query builder joins, subqueries and unions: `join`, `leftJoin`, `rightJoin`, `crossJoin`, their
   `Where` and `Sub` forms and `JoinClause`; `fromSub`, `fromRaw`, `selectSub`, subqueries in
   `where`, `whereIn`, `whereExists` and `orderBy`, and `whereRowValues`; `union` and `unionAll`

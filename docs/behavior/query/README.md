@@ -40,6 +40,8 @@ List<Object> names = query.table("customers")
 | Read | `get`, `first`, `find`, `value`, `pluck`, `exists`, `doesntExist` |
 | Count and sum | `count`, `min`, `max`, `sum`, `avg` |
 | Write | `insert`, `insertGetId`, `insertUsing`, `insertOrIgnoreUsing`, `update`, `increment`, `decrement`, `delete`, `truncate` |
+| Read in batches or stream | `chunk`, `each`, `chunkMap`, `chunkById`, `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`, `cursor` |
+| Page a list | `paginate`, `simplePaginate`, `cursorPaginate`, `getCountForPagination` |
 | See the SQL | `toSql`, `getBindings`, `toRawSql` |
 | Copy | `clone`, `newQuery` |
 
@@ -54,3 +56,19 @@ with `MoneyAmount.read`. An `Instant` is stored as `Blueprint.instant` stores it
 - Neither database lets a whole union be ordered by a subquery.
 - A write needs a table: insert, update, delete and truncate are refused on a query that reads
   from a subquery or raw SQL.
+- `chunk` pages by offset. If rows are inserted or deleted while it runs, rows can be skipped or
+  read twice; use `chunkById` for a table that changes.
+- A null in a `cursorPaginate` order column can make rows be skipped, as in Laravel. Order by
+  columns that are never null.
+- On SQLite an open cursor holds a read lock, so another connection's write waits or fails as
+  busy until the cursor is closed.
+- A cursor outside a transaction that is neither read to the end nor closed keeps its pooled
+  connection for good; nothing closes it for you. A few of them can use up the pool, and on
+  PostgreSQL each one also leaves the server session idle in a transaction, which blocks vacuum.
+  Always use try-with-resources.
+- On Android the cursor reads through a window that is refilled by running the query again, so
+  rows changed during the loop can be skipped or repeated. Use `lazyById` or `chunkById` for a
+  large or changing table.
+- On Android a cursor is used only from the thread that opened it; another thread is refused.
+- Cursor tokens are not signed. A client can forge one; its values are bound as parameters, so it
+  cannot inject SQL, but it can ask for any rows the query already allows.

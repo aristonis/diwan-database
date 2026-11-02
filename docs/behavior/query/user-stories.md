@@ -58,3 +58,19 @@ database can be added without changing the core.
 
 Done when: the SQLite and PostgreSQL grammars live in their modules and the core does not depend on
 them.
+
+### Read a large table without loading it all
+
+As an application developer, I want to process rows in batches or stream them, so that an export
+or a recalculation over a big table does not run out of memory.
+
+Done when: `chunk`, `chunkById`, `lazy` and `cursor` visit every row once on SQLite, PostgreSQL
+and Android, and a closed cursor gives its connection back.
+
+### Show a list one page at a time
+
+As an application developer, I want numbered pages with a total, or pages that follow a cursor
+token, so that a list screen shows a page and links to the next one.
+
+Done when: `paginate`, `simplePaginate` and `cursorPaginate` return the right rows and totals,
+and a cursor token walks forward and back through every row.

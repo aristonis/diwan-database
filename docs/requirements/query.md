@@ -1,7 +1,9 @@
 # Query builder requirements
 
 What the query builder must do, observed from outside. The reasons behind the choices are in
-[ADR 0013](../adr/0013-query-grammar.md); the detailed contract of each type is its Javadoc.
+[ADR 0013](../adr/0013-query-grammar.md) and, for chunking, cursors and pagination,
+[ADR 0014](../adr/0014-cursors-and-pagination.md);
+the detailed contract of each type is its Javadoc.
 
 ## 1. Problem
 
@@ -104,6 +106,28 @@ Write
 - A write on a query that reads from a subquery or raw SQL, or has no table, is refused before
   anything runs.
 
+Chunking, cursors and pagination
+
+- `chunk(count, callback)` reads pages of `count` rows and stops when the callback returns
+  `false`; `each` does the same per row; `chunkMap` collects the mapped rows. They need an order
+  (refused with Laravel's message otherwise), honor the query's limit and offset, and leave the
+  builder unchanged. A count below 1 is refused.
+- `chunkById`, `chunkByIdDesc` and `eachById` page by key (default `id`, optionally a qualified
+  column and the alias read from the rows); a page whose last row lacks the key is refused. The
+  query's limit is honored and its offset applies to the first page only.
+- `lazy`, `lazyById` and `lazyByIdDesc` return an iterable that loads one page per step and holds
+  no connection between pages.
+- `cursor()` streams rows on SQLite, PostgreSQL and Android, inside or outside a transaction. It
+  is iterated once, closes itself when exhausted and gives its connection back when closed. While
+  it is open in a session or transaction, any other statement there is refused.
+- `paginate(perPage, page)` returns the page's rows, the total and the last page; a total of 0
+  runs no select. The total counts groups for a grouped query, combined rows for a union and
+  distinct rows for a distinct query. `simplePaginate` reads one extra row to know whether more
+  follow. `getCountForPagination()` is public.
+- `cursorPaginate(perPage, cursor)` pages by the query's order columns (one or more, aliases
+  resolved) forward and back; the next and previous cursors encode to a text token and decode
+  back. A malformed token, or one for other columns, is refused.
+
 SQL output and copies
 
 - `toSql()`, `getBindings()` in clause order, `toRawSql()` with values inlined and escaped (for
@@ -124,11 +148,12 @@ Values
   in ADR 0013.
 - Every user value goes through a bound parameter; names are always quoted by the grammar.
 - No new runtime dependency; Java 17 bytecode and Android 9 (API 28).
-- The builder is mutable and not thread-safe.
+- The builder is mutable and not thread-safe. A cursor is used from one thread.
+- A cursor keeps memory flat: rows arrive while the query is still running.
 
 ## 5. Non-goals
 
-Lateral joins, `straightJoin`, `updateFrom` and cross-database name prefixes; chunking, cursors
-and pagination; JSON and full-text wheres; upsert and `insertOrIgnore`; dynamic wheres and macros;
+Lateral joins, `straightJoin`, `updateFrom` and cross-database name prefixes; URL and HTML
+paginators; JSON and full-text wheres; upsert and `insertOrIgnore`; dynamic wheres and macros;
 `dump` and `dd`; locks; bitwise operators; `distinct on`; a typed row object; Eloquent models;
 MySQL and SQL Server.
