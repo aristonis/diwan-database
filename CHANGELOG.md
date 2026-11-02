@@ -18,6 +18,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resolution by name and `ModelQuery.on(Connection)` for transactions. Unlike Laravel, `delete()`
   on a model not in the database returns `false`, `increment` on such a model is refused, and
   `saveOrFail()` throws when there is nothing to insert.
+- Attribute casts for models, declared in `casts()` by Laravel's string form (`decimal:2`,
+  `datetime:yyyy-MM-dd`), by the `Casts` factories or `CastMap`, or by a user `Cast` with optional
+  `CastSerializer` and `CastComparator`: `int`, `float`, `decimal:N`, `string`, `bool`, `date`,
+  `datetime`, `timestamp`, `json`, `array`, `json:unicode`, enums and the `immutable_*` aliases.
+  `getRawAttribute`, `getRawOriginal`, `getCasts` and `hasCast`. Bad stored data throws
+  `InvalidCastException` naming the model, key and cast, where Laravel reads `null`, `0` or `true`.
+  Date formats are Java `DateTimeFormatter` patterns, not PHP letters.
+- A dirty check that knows the cast. Unlike Laravel, JSON compares by structure, floats treat NaN
+  as equal to NaN and allow 4 ULP, moments compare as instants, `date` compares as a date, every
+  cast stores its storage form, reading a cast object never dirties the model, and a cast name
+  keeps the case of its format. Decimals still compare after rounding, as in Laravel.
+- Accessors and mutators registered in `accessors()` with `Attribute`, without reflection; the
+  accessor cache is cleared on any write.
+- `toMap()` and `toJson()` with `hidden`, `visible` and `appends`, and per-instance `makeHidden`,
+  `makeVisible` and `append`. Moments serialize as ISO-8601 UTC with microseconds.
+- `JsonCodec` with a strict built-in RFC 8259 codec that keeps numbers exact; a model can plug in
+  Jackson or Gson through `jsonCodec()` without a library dependency.
 - Query builder chunking, streaming and pagination: `chunk`, `each`, `chunkMap`, `chunkById`,
   `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`; `cursor()` returning a
   `RowCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`

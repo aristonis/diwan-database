@@ -44,3 +44,35 @@ Done when: the Android tests pass with the same model classes as the JDBC tests.
 As a Laravel developer, I want Eloquent's names and behavior, so that I do not relearn the API.
 
 Done when: the SQL of each model call equals the query builder's SQL for the same Laravel call.
+
+### Typed values from casts
+
+As an application developer, I want to declare a cast per column, so that a decimal reads as a
+`BigDecimal`, a JSON column as a map and a datetime as an `Instant`.
+
+Done when: every built-in cast reads and writes typed values on SQLite, PostgreSQL and Android, and
+bad stored data throws an exception naming the model, the key and the cast.
+
+### A dirty check that knows the cast
+
+As an application developer, I want a column marked dirty only when its meaning changed, so that
+re-ordered JSON keys, the last bit of a float or the same instant in another zone cause no update.
+
+Done when: reading a cast value never dirties a model, and each difference from Laravel's dirty
+check has a test.
+
+### Accessors and mutators without reflection
+
+As an application developer, I want computed and normalised attributes registered by lambdas, so
+that they work after R8.
+
+Done when: an accessor wins over the cast, a mutator can write several columns, and a cached
+accessor value is cleared by any write.
+
+### Control over what leaves the model
+
+As an API developer, I want `hidden`, `visible` and `appends` with `toMap` and `toJson`, so that a
+password never reaches a response.
+
+Done when: visible filters first, hidden then removes, appended accessors are added, and a model
+can plug in its own JSON library.

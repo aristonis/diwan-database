@@ -397,11 +397,121 @@ try (ModelCursor<User> cursor = users.query().orderBy("id").cursor()) {
 }
 ```
 
+Casts turn stored values into Java types. Declare them in `casts()`, in Laravel's string form or
+with the typed factories in `Casts`; `CastMap` keeps the order:
+
+```java
+import org.aristonis.diwan.database.eloquent.casts.Cast;
+import org.aristonis.diwan.database.eloquent.casts.CastMap;
+import org.aristonis.diwan.database.eloquent.casts.Casts;
+
+@Override
+protected Map<String, Cast<?>> casts() {
+    return CastMap.create()
+            .put("price", "decimal:2")                      // BigDecimal, scale 2, half up
+            .put("is_admin", "bool")                        // Boolean
+            .put("options", "json")                         // Map or List
+            .put("born_on", "date")                         // LocalDate, stored yyyy-MM-dd
+            .put("paid_at", Casts.datetime("dd/MM/yyyy"))   // Instant; the pattern only shapes toMap
+            .put("status", Casts.enumOf(Status.class))      // the constant; name() or BackedValue.value()
+            .build();
+}
+```
+
+```java
+Order order = orders.findOrFail(1);
+BigDecimal price = (BigDecimal) order.getAttribute("price");
+Map<String, Object> options = (Map<String, Object>) order.getAttribute("options");
+options.put("gift", true);
+order.isDirty("options");   // true: the changed map is written on save
+order.getRawAttribute("price");   // the stored form, "12.50"
+```
+
+`int` reads `Long`, `float` reads `Double`, `datetime` reads `Instant` and `timestamp` reads epoch
+seconds. Bad stored data, such as broken JSON or `"abc"` under `int`, throws
+`InvalidCastException` naming the model, the key and the cast; Laravel would read `null` or `0`.
+The dirty check compares by meaning: JSON by structure, floats within 4 ULP, moments as instants
+and dates as dates, so re-ordered keys or the same instant in another offset write nothing.
+Reading a cast value never makes a model dirty. A cast of your own implements `Cast<T>` (`get` and
+`set`), and optionally `CastSerializer` and `CastComparator`.
+
+Date formats are Java `DateTimeFormatter` patterns, not PHP letters. Write `yyyy-MM-dd`, not
+`Y-m-d`: the PHP form compiles in Java and means week-based year and minute.
+
+Accessors and mutators are registered, not discovered by name. The lambdas receive the model, so
+they hold no instance; an accessor wins over the cast:
+
+```java
+@Override
+protected Map<String, Attribute<?>> accessors() {
+    Map<String, Attribute<?>> map = new LinkedHashMap<>();
+    map.put("display_name", Attribute.get((model, value, attrs) ->
+            attrs.get("first_name") + " " + attrs.get("last_name")));
+    map.put("email", Attribute.set((model, value, attrs) -> value.toString().toLowerCase(Locale.ROOT)));
+    return map;
+}
+```
+
+`toMap()` and `toJson()` apply `visible()`, then `hidden()`, then `appends()`; moments come out as
+ISO-8601 UTC with microseconds, a `date:F` or `datetime:F` cast in its pattern, decimals as plain
+text and enums as their stored value. `makeHidden`, `makeVisible` and `append` change one instance.
+
+```java
+@Override
+protected List<String> hidden() {
+    return List.of("password");
+}
+
+@Override
+protected List<String> appends() {
+    return List.of("display_name");
+}
+
+String json = user.toJson();   // {"id":1,"first_name":"Ada",...,"display_name":"Ada Lovelace"}
+```
+
+JSON goes through a `JsonCodec`. The built-in one is strict RFC 8259 and keeps numbers exact (no
+`Double`); the library adds no JSON dependency. To use Jackson or Gson, implement the interface and
+return it from `jsonCodec()`:
+
+```java
+final class JacksonCodec implements JsonCodec {
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Override
+    public String encode(Object value) {
+        try {
+            return mapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new JsonException("cannot encode " + value.getClass().getName());
+        }
+    }
+
+    @Override
+    public Object decode(String text) {
+        try {
+            return mapper.readValue(text, Object.class);
+        } catch (JsonProcessingException e) {
+            throw new JsonException("invalid JSON");
+        }
+    }
+}
+
+// in the model: one shared instance
+private static final JsonCodec CODEC = new JacksonCodec();
+
+@Override
+protected JsonCodec jsonCodec() {
+    return CODEC;
+}
+```
+
 Timestamps are written as Laravel writes them, UTC text `yyyy-MM-dd HH:mm:ss`, which fits
 `timestamps()` columns; return `TimestampFormat.INSTANT` from `timestampFormat()` for tables built
 with instant columns. Models are not thread-safe. Behavior and limits:
 [docs/behavior/eloquent](docs/behavior/eloquent/README.md); decisions:
-[ADR 0015](docs/adr/0015-eloquent-models.md).
+[ADR 0015](docs/adr/0015-eloquent-models.md) and, for casts,
+[ADR 0016](docs/adr/0016-attributes-casts-and-the-json-codec.md).
 
 ### Migrations
 
