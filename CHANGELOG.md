@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Eloquent models in a new module, `diwan-database-eloquent`: `Model` configured by overridable
+  methods, a static `ModelQuery` entry per model built from a constructor reference (no
+  reflection, works on Android), `EloquentBuilder` with Laravel's finders, creators, chunking,
+  cursors and pages returning models, `ModelCollection`, `ModelNotFoundException` and
+  `MassAssignmentException` with Laravel's messages. Dirty tracking, fillable and guarded lists,
+  timestamps as Laravel's UTC text or as instants, UUID version 7 and ULID keys, connection
+  resolution by name and `ModelQuery.on(Connection)` for transactions. Unlike Laravel, `delete()`
+  on a model not in the database returns `false`, `increment` on such a model is refused, and
+  `saveOrFail()` throws when there is nothing to insert.
 - Query builder chunking, streaming and pagination: `chunk`, `each`, `chunkMap`, `chunkById`,
   `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`; `cursor()` returning a
   `RowCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`

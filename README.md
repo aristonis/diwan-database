@@ -13,7 +13,8 @@ data out of logs. It runs over a small driver interface; a JDBC adapter ships in
 migration where the database allows. The schema builder creates and changes tables through a grammar per database;
 the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar in
 `diwan-database-pgsql`. The query builder reads and writes rows with Laravel's method names,
-through a query grammar from the same modules.
+through a query grammar from the same modules. Models in `diwan-database-eloquent` add
+Eloquent's class-per-table API on top of the query builder.
 
 | Layer | State |
 |---|---|
@@ -21,7 +22,7 @@ through a query grammar from the same modules.
 | Schema builder: SQLite and PostgreSQL grammars | available |
 | Migrations: contract, migrations table and migrator | available |
 | Query builder: SQLite and PostgreSQL grammars | available |
-| Models | planned |
+| Models: Eloquent-style, in `diwan-database-eloquent` | available |
 
 ## Requirements
 
@@ -314,6 +315,93 @@ use a cursor only from the thread that opened it.
 Cursor tokens are not signed: a forged one cannot inject SQL but can ask for other allowed rows.
 Choices and differences from Laravel are in
 [ADR 0014](docs/adr/0014-cursors-and-pagination.md).
+
+### Models
+
+Models live in `diwan-database-eloquent`. A model is a class per table with one static entry; it
+needs no reflection, annotations or build plugin, so the same class runs on Android.
+
+```java
+import org.aristonis.diwan.database.eloquent.Model;
+import org.aristonis.diwan.database.eloquent.ModelQuery;
+
+public final class User extends Model {
+    public static final ModelQuery<User> query = ModelQuery.of(User.class, User::new);
+
+    @Override
+    protected List<String> fillable() {
+        return List.of("name", "email");   // nothing is mass assignable until listed
+    }
+}
+```
+
+The table is `users`, the snake-case plural of the class name; override `table()` for an
+irregular plural. Bind the entry to a query factory once:
+
+```java
+ModelQuery<User> users = User.query.on(SQLiteQuery.of(db));
+
+User ada = users.create(Map.of("name", "Ada", "email", "ada@example.com"));  // id, timestamps set
+User found = users.findOrFail(ada.getKey());
+Optional<User> maybe = users.find(42);
+
+found.setAttribute("name", "Ada L.");
+found.isDirty("name");   // true
+found.save();            // writes name and updated_at only
+found.save();            // clean: runs nothing
+found.delete();          // false when the model is not in the database
+```
+
+`fill` sets only the keys in `fillable` and drops the rest. With the default guards (`guarded` is
+`*` and `fillable` is empty) it throws `MassAssignmentException`; `forceFill` bypasses the guards.
+
+```java
+User user = users.make(request);   // fills; "is_admin" in request is dropped
+user.save();
+
+User sam = users.firstOrCreate(Map.of("email", "sam@example.com"), Map.of("name", "Sam"));
+users.updateOrCreate(Map.of("email", "sam@example.com"), Map.of("name", "Samuel"));
+```
+
+Inside a transaction, bind the models to the transaction's connection with `on(c)`, so every
+statement runs in it:
+
+```java
+db.transaction(c -> {
+    User u = users.on(c).findOrFail(1);
+    u.setAttribute("name", "Grace");
+    return u.save();
+});
+```
+
+`saveOrFail()` saves inside its own transaction and throws `IllegalStateException` when a model
+with a non-incrementing key has nothing to insert; `save()` returns `true` in that case, as in
+Laravel.
+
+```java
+User grace = users.make(Map.of("name", "Grace", "email", "grace@example.com"));
+grace.saveOrFail();
+```
+
+Pages, chunks and cursors hold models:
+
+```java
+ModelPage<User> page = users.query().orderBy("name").paginate(20, 2);
+page.items();   // ModelCollection<User>
+page.total();
+
+try (ModelCursor<User> cursor = users.query().orderBy("id").cursor()) {
+    for (User u : cursor) {
+        // ...
+    }
+}
+```
+
+Timestamps are written as Laravel writes them, UTC text `yyyy-MM-dd HH:mm:ss`, which fits
+`timestamps()` columns; return `TimestampFormat.INSTANT` from `timestampFormat()` for tables built
+with instant columns. Models are not thread-safe. Behavior and limits:
+[docs/behavior/eloquent](docs/behavior/eloquent/README.md); decisions:
+[ADR 0015](docs/adr/0015-eloquent-models.md).
 
 ### Migrations
 
