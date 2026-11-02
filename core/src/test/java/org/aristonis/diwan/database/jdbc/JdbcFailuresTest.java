@@ -106,6 +106,10 @@ class JdbcFailuresTest {
                 && !mysql.contains(DriverCapability.TRANSACTIONAL_DDL));
         assertTrue(!sqlServer.contains(DriverCapability.SAVEPOINT_RELEASE)
                 && sqlServer.contains(DriverCapability.TRANSACTIONAL_DDL));
+        assertTrue(postgres.contains(DriverCapability.STREAMS_IN_TRANSACTION));
+        assertFalse(mysql.contains(DriverCapability.STREAMS_IN_TRANSACTION)
+                || sqlServer.contains(DriverCapability.STREAMS_IN_TRANSACTION)
+                || JdbcDriver.capabilities("SQLite").contains(DriverCapability.STREAMS_IN_TRANSACTION));
         assertTrue(oracle.isEmpty());
         assertTrue(JdbcDriver.capabilities("SomethingElse").isEmpty());
     }

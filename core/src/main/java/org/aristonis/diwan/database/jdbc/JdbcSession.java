@@ -7,9 +7,7 @@ import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Types;
@@ -29,12 +27,14 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
+import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.SqliteScripts;
 import org.aristonis.diwan.database.driver.SqliteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * A driver session over one JDBC connection; used by one thread at a time.
@@ -55,6 +55,10 @@ final class JdbcSession implements DriverSession {
     // The name goes to the database verbatim, so it must not be able to carry SQL.
     private static final Pattern SAVEPOINT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,29}");
 
+    // Rows a cursor asks the database for per round trip: enough to keep the round trips few, few
+    // enough that a wide row cannot fill memory.
+    private static final int CURSOR_FETCH_SIZE = 500;
+
     private final JdbcConnectionProvider provider;
     private final Connection connection;
     private final boolean isExternal;
@@ -65,6 +69,8 @@ final class JdbcSession implements DriverSession {
 
     /** Whether auto-commit was off at open and was switched on for the session's life. */
     private final boolean shouldRestoreManualCommit;
+    /** Whether the database streams a cursor only inside a transaction. */
+    private final boolean streamsInTransaction;
 
     private boolean isTransactionOpen;
     /** Whether {@link #begin()} switched auto-commit off for the current transaction. */
@@ -72,8 +78,9 @@ final class JdbcSession implements DriverSession {
     private boolean isClosed;
 
     private JdbcSession(JdbcConnectionProvider provider, Connection connection, boolean isExternal,
-            String productName, boolean shouldRestoreManualCommit) {
+            String productName, boolean shouldRestoreManualCommit, boolean streamsInTransaction) {
         this.provider = provider;
+        this.streamsInTransaction = streamsInTransaction;
         this.connection = connection;
         this.isExternal = isExternal;
         this.productName = productName;
@@ -93,13 +100,15 @@ final class JdbcSession implements DriverSession {
             AtomicReference<DriverInfo> info) {
         try {
             boolean isExternal = provider.inExternalTransaction(connection);
-            String productName = productName(connection, info);
+            DriverInfo described = describe(connection, info);
+            String productName = described.databaseName();
             boolean shouldRestoreManualCommit = false;
             if (!isExternal && !connection.getAutoCommit()) {
                 connection.setAutoCommit(true);
                 shouldRestoreManualCommit = true;
             }
-            return new JdbcSession(provider, connection, isExternal, productName, shouldRestoreManualCommit);
+            return new JdbcSession(provider, connection, isExternal, productName, shouldRestoreManualCommit,
+                    described.supports(DriverCapability.STREAMS_IN_TRANSACTION));
         } catch (SQLException | RuntimeException e) {
             try {
                 provider.release(connection);
@@ -113,14 +122,14 @@ final class JdbcSession implements DriverSession {
         }
     }
 
-    private static String productName(Connection connection, AtomicReference<DriverInfo> info)
+    private static DriverInfo describe(Connection connection, AtomicReference<DriverInfo> info)
             throws SQLException {
         DriverInfo cached = info.get();
         if (cached == null) {
             info.compareAndSet(null, JdbcDriver.describe(connection.getMetaData()));
             cached = info.get();
         }
-        return cached.databaseName();
+        return cached;
     }
 
     @Override
@@ -132,6 +141,122 @@ final class JdbcSession implements DriverSession {
         } catch (SQLException e) {
             throw failure(e);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote The statement is forward-only and read-only with a fetch size of 500. On a database
+     *     that reports {@link DriverCapability#STREAMS_IN_TRANSACTION}, a cursor opened outside any
+     *     transaction switches auto-commit off for its life and commits when it closes (rolls back
+     *     after a failure), then switches auto-commit back on.
+     */
+    @Override
+    public RowCursor cursor(String sql, List<Object> bindings) {
+        ensureOpen();
+        boolean ownsTransaction = streamsInTransaction && !isExternal && !isTransactionOpen;
+        if (ownsTransaction) {
+            begin();
+        }
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+        try {
+            statement = prepare(sql, bindings, true);
+            statement.setFetchSize(CURSOR_FETCH_SIZE);
+            resultSet = statement.executeQuery();
+            JdbcColumns columns = JdbcColumns.of(resultSet.getMetaData(), productName);
+            return new JdbcRowCursor(this, statement, resultSet, columns, ownsTransaction);
+        } catch (SQLException | RuntimeException e) {
+            throw cursorOpenFailure(e, statement, resultSet, ownsTransaction);
+        }
+    }
+
+    // Everything the cursor opened is released before the failure is reported; each step runs even
+    // when an earlier one threw an Error, which is then reported in place of the open failure.
+    private RuntimeException cursorOpenFailure(Exception e, PreparedStatement statement, ResultSet resultSet,
+            boolean ownsTransaction) {
+        List<Throwable> failures = new ArrayList<>();
+        try {
+            if (resultSet != null) {
+                resultSet.close();
+            }
+        } catch (Throwable closeFailure) {
+            failures.add(closeFailure);
+        }
+        try {
+            if (statement != null) {
+                statement.close();
+            }
+        } catch (Throwable closeFailure) {
+            failures.add(closeFailure);
+        }
+        if (ownsTransaction) {
+            List<Exception> transactionFailures = new ArrayList<>();
+            try {
+                endCursorTransaction(false, transactionFailures);
+            } catch (Throwable endFailure) {
+                failures.add(endFailure);
+            }
+            failures.addAll(transactionFailures);
+        }
+        RuntimeException error = e instanceof SQLException ? failure((SQLException) e) : (RuntimeException) e;
+        Error fatal = null;
+        for (Throwable secondary : failures) {
+            if (fatal == null && secondary instanceof Error) {
+                fatal = (Error) secondary;
+            } else {
+                error.addSuppressed(secondary);
+            }
+        }
+        if (fatal != null) {
+            fatal.addSuppressed(error);
+            throw fatal;
+        }
+        return error;
+    }
+
+    /**
+     * Throws the first of a cursor's release failures with the rest suppressed: an Error as it is,
+     * any other failure as a {@link DriverException}. Returns when there are none.
+     */
+    void throwFirst(List<Throwable> failures) {
+        if (failures.isEmpty()) {
+            return;
+        }
+        Throwable first = failures.get(0);
+        Throwable thrown = first instanceof Error ? first : toDriverException((Exception) first);
+        for (int i = 1; i < failures.size(); i++) {
+            thrown.addSuppressed(failures.get(i));
+        }
+        if (thrown instanceof Error) {
+            throw (Error) thrown;
+        }
+        throw (RuntimeException) thrown;
+    }
+
+    /**
+     * Ends the transaction a cursor opened: commits after a clean read, rolls back otherwise or when
+     * the commit fails. Both turn auto-commit back on. Failures are added to {@code failures}.
+     */
+    void endCursorTransaction(boolean isClean, List<Exception> failures) {
+        if (isClean) {
+            try {
+                commit();
+                return;
+            } catch (RuntimeException e) {
+                failures.add(e);
+            }
+        }
+        try {
+            rollback();
+        } catch (RuntimeException e) {
+            failures.add(e);
+        }
+    }
+
+    /** Translates a JDBC failure with this session's vendor codes. */
+    DriverException translate(SQLException e) {
+        return failure(e);
     }
 
     @Override
@@ -352,7 +477,7 @@ final class JdbcSession implements DriverSession {
         }
     }
 
-    private DriverException toDriverException(Exception e) {
+    DriverException toDriverException(Exception e) {
         if (e instanceof DriverException) {
             return (DriverException) e;
         }
@@ -412,9 +537,15 @@ final class JdbcSession implements DriverSession {
     }
 
     private PreparedStatement prepare(String sql, List<Object> bindings) throws SQLException {
+        return prepare(sql, bindings, false);
+    }
+
+    private PreparedStatement prepare(String sql, List<Object> bindings, boolean isCursor) throws SQLException {
         Objects.requireNonNull(sql, "sql");
         Objects.requireNonNull(bindings, "bindings");
-        PreparedStatement statement = connection.prepareStatement(sql);
+        PreparedStatement statement = isCursor
+                ? connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+                : connection.prepareStatement(sql);
         try {
             int index = 1;
             for (Object value : bindings) {
@@ -491,87 +622,12 @@ final class JdbcSession implements DriverSession {
     }
 
     private List<Map<String, Object>> readRows(ResultSet resultSet) throws SQLException {
-        ResultSetMetaData metaData = resultSet.getMetaData();
-        int columnCount = metaData.getColumnCount();
-        String[] labels = new String[columnCount];
-        Map<String, Boolean> seen = new LinkedHashMap<>();
-        for (int i = 0; i < columnCount; i++) {
-            String label = metaData.getColumnLabel(i + 1);
-            if (seen.put(label, Boolean.TRUE) != null) {
-                throw duplicateLabel(label);
-            }
-            labels[i] = label;
-        }
-        // Worked out once per result, not once per cell.
-        Class<?>[] wanted = new Class<?>[columnCount];
-        if (DatabaseFamily.of(productName) != DatabaseFamily.SQLITE) {
-            for (int i = 0; i < columnCount; i++) {
-                wanted[i] = temporalType(metaData.getColumnType(i + 1), metaData.getColumnTypeName(i + 1));
-            }
-        }
+        JdbcColumns columns = JdbcColumns.of(resultSet.getMetaData(), productName);
         List<Map<String, Object>> rows = new ArrayList<>();
         while (resultSet.next()) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            for (int i = 0; i < columnCount; i++) {
-                row.put(labels[i], JdbcValues.read(readValue(resultSet, i + 1, wanted[i])));
-            }
-            rows.add(Collections.unmodifiableMap(row));
+            rows.add(Collections.unmodifiableMap(columns.read(resultSet)));
         }
         return Collections.unmodifiableList(rows);
-    }
-
-    // java.time getters avoid Timestamp.toString(), which shifts dates before 1582 and times in a
-    // daylight-saving gap and drops a timestamptz's offset. SQLite keeps dates as text, read as is.
-    private static Object readValue(ResultSet resultSet, int column, Class<?> wanted) throws SQLException {
-        if (wanted == null) {
-            return resultSet.getObject(column);
-        }
-        if (TYPED_GET_OBJECT == null) {
-            return resultSet.getObject(column);
-        }
-        try {
-            return TYPED_GET_OBJECT.invoke(resultSet, column, wanted);
-        } catch (InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof SQLFeatureNotSupportedException || cause instanceof AbstractMethodError) {
-                return resultSet.getObject(column);
-            }
-            if (cause instanceof SQLException) {
-                throw (SQLException) cause;
-            }
-            throw new SQLException("Reading a date or time failed", cause);
-        } catch (IllegalAccessException e) {
-            return resultSet.getObject(column);
-        }
-    }
-
-    // ResultSet.getObject(int, Class) is JDBC 4.1, missing from Android 28's java.sql; looked up once.
-    private static final Method TYPED_GET_OBJECT = typedGetObject();
-
-    private static Method typedGetObject() {
-        try {
-            return ResultSet.class.getMethod("getObject", int.class, Class.class);
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
-    }
-
-    private static Class<?> temporalType(int type, String typeName) {
-        String name = typeName == null ? "" : typeName.toLowerCase(java.util.Locale.ROOT);
-        switch (type) {
-            case Types.TIMESTAMP_WITH_TIMEZONE:
-                return OffsetDateTime.class;
-            case Types.TIMESTAMP:
-                return name.equals("timestamptz") ? OffsetDateTime.class : java.time.LocalDateTime.class;
-            case Types.DATE:
-                return java.time.LocalDate.class;
-            case Types.TIME_WITH_TIMEZONE:
-                return java.time.OffsetTime.class;
-            case Types.TIME:
-                return name.equals("timetz") ? java.time.OffsetTime.class : java.time.LocalTime.class;
-            default:
-                return null;
-        }
     }
 
     // A commit that lost its connection may have landed; the kind says so, apart from a plain loss.
@@ -583,12 +639,6 @@ final class JdbcSession implements DriverSession {
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
         return new DriverException(failure.getMessage(), failure.sqlState().orElse(null), failure.vendorCode(),
                 failure.databaseMessage().orElse(null), failure.getCause(), kinds);
-    }
-
-    private static DriverException duplicateLabel(String label) {
-        // A label is part of the statement text, not a bound value, so naming it is safe.
-        return new DriverException("Result has two columns labelled '" + label + "'; give them distinct aliases",
-                EnumSet.noneOf(DriverFailureKind.class), null);
     }
 
     private DriverException failure(SQLException e) {

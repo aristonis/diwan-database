@@ -9,6 +9,7 @@ import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * Runs each statement on a session borrowed from the driver for that one call, and opens
@@ -47,6 +48,33 @@ final class RootConnection extends AbstractConnection {
         }
         Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
         return result;
+    }
+
+    // The cursor owns a session of its own, given back when the cursor closes, by the caller or by
+    // reaching the end.
+    @Override
+    RowCursor openCursor(String sql, List<Object> bindings) {
+        refuseInsideOwnTransaction();
+        DriverSession session = open(sql, bindings);
+        RowCursor driverCursor;
+        try {
+            driverCursor = session.cursor(sql, bindings);
+        } catch (DriverException failure) {
+            QueryException error = queryFailure(sql, bindings, failure);
+            Sessions.closeAfterFailure(session, error);
+            throw error;
+        } catch (RuntimeException | Error failure) {
+            Sessions.closeAfterFailure(session, failure);
+            throw failure;
+        }
+        return new TranslatingCursor(getName(), driverCursor, failure -> queryFailure(sql, bindings, failure),
+                failure -> {
+                    if (failure == null) {
+                        Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
+                    } else {
+                        Sessions.endAfterFailure(session, failure, false);
+                    }
+                });
     }
 
     private DriverSession open(String sql, List<Object> bindings) {
@@ -214,8 +242,9 @@ final class RootConnection extends AbstractConnection {
         T result;
         try {
             result = callback.run(held);
-        } catch (RuntimeException | Error failure) {
             held.end();
+        } catch (RuntimeException | Error failure) {
+            held.endAfterFailure(failure);
             try {
                 session.discard();
             } catch (Throwable discardFailure) {
@@ -223,7 +252,6 @@ final class RootConnection extends AbstractConnection {
             }
             throw failure;
         }
-        held.end();
         Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
         return result;
     }

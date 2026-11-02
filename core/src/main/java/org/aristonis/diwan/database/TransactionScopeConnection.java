@@ -38,6 +38,11 @@ final class TransactionScopeConnection extends TransactionalConnection implement
         }
     }
 
+    @Override
+    int cursorLevel() {
+        return level;
+    }
+
     private boolean isOutermost() {
         return parent == null;
     }
@@ -56,6 +61,7 @@ final class TransactionScopeConnection extends TransactionalConnection implement
             }
             return;
         }
+        closeCursorsFrom(level);
         if (state().isRollbackOnly()) {
             throw rollbackOnlyFailure();
         }
@@ -73,6 +79,10 @@ final class TransactionScopeConnection extends TransactionalConnection implement
             closeOpenChild();
         } catch (Throwable childFailure) {
             failure = childFailure;
+        }
+        Throwable cursorFailure = closeCursorsQuietlyFrom(level);
+        if (cursorFailure != null) {
+            failure = combine(failure, cursorFailure);
         }
         try {
             failure = rollBack(failure);

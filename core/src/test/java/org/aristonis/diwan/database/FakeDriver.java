@@ -14,6 +14,7 @@ import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /** Scriptable driver for core tests: records every call and counts sessions still open. */
 final class FakeDriver implements Driver {
@@ -35,6 +36,12 @@ final class FakeDriver implements Driver {
     private Error rollbackError;
     private int concurrencyFailuresLeft;
     private String concurrencyFailureSql;
+    private int maxOpen = Integer.MAX_VALUE;
+    private int cursorFailureRow = -1;
+    private DriverException cursorFailure;
+    private DriverException cursorCloseFailure;
+    private volatile boolean isCursorThreadOwned;
+    private final AtomicInteger openCursors = new AtomicInteger();
 
     static Map<String, Object> row(Object... labelsAndValues) {
         Map<String, Object> row = new LinkedHashMap<>();
@@ -117,6 +124,34 @@ final class FakeDriver implements Driver {
         return this;
     }
 
+    /** Behaves like a pool of {@code size} connections: one more open fails at once. */
+    FakeDriver poolOf(int size) {
+        maxOpen = size;
+        return this;
+    }
+
+    /** Makes every cursor fail when it reaches the given zero-based row. */
+    FakeDriver cursorFailsAtRow(int row, DriverException failure) {
+        cursorFailureRow = row;
+        cursorFailure = failure;
+        return this;
+    }
+
+    /** Makes every cursor refuse use from any thread but the one that opened it, as Android's does. */
+    FakeDriver cursorsOwnedByTheirThread() {
+        isCursorThreadOwned = true;
+        return this;
+    }
+
+    FakeDriver cursorFailsToClose(DriverException failure) {
+        cursorCloseFailure = failure;
+        return this;
+    }
+
+    int openCursors() {
+        return openCursors.get();
+    }
+
     List<String> calls() {
         synchronized (calls) {
             return new ArrayList<>(calls);
@@ -136,6 +171,9 @@ final class FakeDriver implements Driver {
         calls.add("open");
         if (openFailure != null) {
             throw openFailure;
+        }
+        if (open.get() >= maxOpen) {
+            throw failure("08004-pool-exhausted", DriverFailureKind.CONNECTION_LOST);
         }
         open.incrementAndGet();
         opened.incrementAndGet();
@@ -178,6 +216,14 @@ final class FakeDriver implements Driver {
                 }
             }
             return copy;
+        }
+
+        @Override
+        public RowCursor cursor(String sql, List<Object> bindings) {
+            run("cursor", sql, bindings);
+            List<Map<String, Object>> result = rows.get(sql);
+            openCursors.incrementAndGet();
+            return new FakeCursor(result == null ? new ArrayList<Map<String, Object>>() : result);
         }
 
         @Override
@@ -273,6 +319,82 @@ final class FakeDriver implements Driver {
             closed = true;
             open.decrementAndGet();
             calls.add("discard");
+        }
+    }
+
+    /** A driver cursor over scripted rows, honoring the driver contract. */
+    private final class FakeCursor implements RowCursor {
+
+        private final List<Map<String, Object>> rows;
+        private int index;
+        private boolean isIterated;
+        private boolean isClosed;
+        private final Thread owner = Thread.currentThread();
+
+        FakeCursor(List<Map<String, Object>> rows) {
+            this.rows = rows;
+        }
+
+        private void checkOwner() {
+            if (isCursorThreadOwned && Thread.currentThread() != owner) {
+                throw new IllegalStateException("cursor used off its owner thread");
+            }
+        }
+
+        @Override
+        public java.util.Iterator<Map<String, Object>> iterator() {
+            if (isIterated) {
+                throw new IllegalStateException("iterated twice");
+            }
+            isIterated = true;
+            return this;
+        }
+
+        @Override
+        public boolean hasNext() {
+            checkOwner();
+            if (isClosed) {
+                return false;
+            }
+            if (index == cursorFailureRow) {
+                throw cursorFailure;
+            }
+            if (index < rows.size()) {
+                return true;
+            }
+            close();
+            return false;
+        }
+
+        @Override
+        public Map<String, Object> next() {
+            checkOwner();
+            if (isClosed) {
+                throw new IllegalStateException("closed");
+            }
+            if (!hasNext()) {
+                throw new java.util.NoSuchElementException();
+            }
+            return new LinkedHashMap<>(rows.get(index++));
+        }
+
+        @Override
+        public void close() {
+            checkOwner();
+            if (isClosed) {
+                return;
+            }
+            isClosed = true;
+            openCursors.decrementAndGet();
+            calls.add("cursorClose");
+            if (cursorCloseFailure != null) {
+                throw cursorCloseFailure;
+            }
+        }
+
+        @Override
+        public boolean isClosed() {
+            return isClosed;
         }
     }
 }

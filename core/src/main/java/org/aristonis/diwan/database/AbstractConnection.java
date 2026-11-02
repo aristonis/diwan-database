@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverInfo;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * Holds the SQL methods every connection shares: argument checks, the mapping of each method to a
@@ -32,6 +33,12 @@ abstract class AbstractConnection implements Connection {
 
     /** Runs a statement whose SQL and bindings were already checked. */
     abstract <T> T run(PendingStatement<T> statement);
+
+    /**
+     * Opens a cursor for a read whose SQL and bindings were already checked, on the session this
+     * connection runs on.
+     */
+    abstract RowCursor openCursor(String sql, List<Object> bindings);
 
     /** Translates a driver failure into the exception callers see, keeping the driver failure as cause. */
     final QueryException queryFailure(String sql, List<Object> bindings, DriverException failure) {
@@ -124,6 +131,16 @@ abstract class AbstractConnection implements Connection {
     @Override
     public final Optional<Object> scalar(String sql, List<?> bindings) {
         return onlyValue(sql, query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
+    }
+
+    @Override
+    public final RowCursor cursor(String sql, Object... bindings) {
+        return openCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+    }
+
+    @Override
+    public final RowCursor cursor(String sql, List<?> bindings) {
+        return openCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
     }
 
     @Override

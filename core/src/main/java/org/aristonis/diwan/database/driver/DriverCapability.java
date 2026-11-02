@@ -12,5 +12,12 @@ public enum DriverCapability {
     SAVEPOINT_RELEASE,
 
     /** Indicates schema changes (DDL) take part in transactions and roll back with them. */
-    TRANSACTIONAL_DDL
+    TRANSACTIONAL_DDL,
+
+    /**
+     * Indicates a cursor streams only inside a transaction, as PostgreSQL's JDBC driver fetches
+     * rows in batches only with auto-commit off. A session that reports it opens a transaction of
+     * its own for a cursor read outside any transaction, and ends it when the cursor closes.
+     */
+    STREAMS_IN_TRANSACTION
 }

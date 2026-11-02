@@ -139,6 +139,9 @@ public final class JdbcDriver implements Driver {
         if (isPostgres || isSqlite || isSqlServer) {
             result.add(DriverCapability.TRANSACTIONAL_DDL);
         }
+        if (isPostgres) {
+            result.add(DriverCapability.STREAMS_IN_TRANSACTION);
+        }
         return result;
     }
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * A connection held to one driver session for the life of a {@link Connection#session} callback.
@@ -18,6 +19,7 @@ final class SessionConnection extends AbstractConnection {
 
     private final DriverSession session;
     private final boolean canReleaseSavepoints;
+    private final CursorGuard cursorGuard = new CursorGuard();
     private volatile boolean ended;
 
     SessionConnection(ConnectionSettings settings, DriverSession session, boolean canReleaseSavepoints) {
@@ -26,7 +28,21 @@ final class SessionConnection extends AbstractConnection {
         this.canReleaseSavepoints = canReleaseSavepoints;
     }
 
+    /** Closes a cursor the callback left open, then refuses any further use. */
     void end() {
+        try {
+            cursorGuard.closeFrom(0);
+        } finally {
+            ended = true;
+        }
+    }
+
+    /** Ends as {@link #end()} does after the callback failed, attaching a close failure to it. */
+    void endAfterFailure(Throwable failure) {
+        Throwable cursorFailure = cursorGuard.closeQuietlyFrom(0);
+        if (cursorFailure != null) {
+            Sessions.suppress(failure, cursorFailure);
+        }
         ended = true;
     }
 
@@ -39,11 +55,28 @@ final class SessionConnection extends AbstractConnection {
     @Override
     <T> T run(PendingStatement<T> statement) {
         ensureOpen();
+        cursorGuard.check();
         try {
             return statement.runOn(session);
         } catch (DriverException failure) {
             throw queryFailure(statement.sql(), statement.bindings(), failure);
         }
+    }
+
+    @Override
+    RowCursor openCursor(String sql, List<Object> bindings) {
+        ensureOpen();
+        cursorGuard.check();
+        RowCursor driverCursor;
+        try {
+            driverCursor = session.cursor(sql, bindings);
+        } catch (DriverException failure) {
+            throw queryFailure(sql, bindings, failure);
+        }
+        TranslatingCursor cursor = new TranslatingCursor(getName(), driverCursor,
+                failure -> queryFailure(sql, bindings, failure), failure -> cursorGuard.release());
+        cursorGuard.register(cursor, 0);
+        return cursor;
     }
 
     @Override
@@ -73,6 +106,7 @@ final class SessionConnection extends AbstractConnection {
     }
 
     private TransactionState begin() {
+        cursorGuard.check();
         try {
             boolean isExternal = session.inExternalTransaction();
             if (isExternal) {
@@ -80,7 +114,7 @@ final class SessionConnection extends AbstractConnection {
             } else {
                 session.begin();
             }
-            return new TransactionState(session, isExternal, canReleaseSavepoints);
+            return new TransactionState(session, isExternal, canReleaseSavepoints, cursorGuard);
         } catch (DriverException failure) {
             throw queryFailure("begin", Collections.<Object>emptyList(), failure);
         }

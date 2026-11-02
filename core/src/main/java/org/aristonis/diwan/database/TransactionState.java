@@ -6,9 +6,9 @@ import org.aristonis.diwan.database.driver.DriverSession;
 
 /**
  * Holds what every connection of one transaction shares: the session, the current depth, the
- * rollback-only flag and the first concurrency failure raised on the session. Confined to one thread
- * at a time; the mutable fields are volatile so a scope handed to another thread (for example to be
- * closed there) sees the latest values.
+ * rollback-only flag, the first concurrency failure raised on the session and the guard of its open
+ * cursor. Confined to one thread at a time; the mutable fields are volatile so a scope handed to
+ * another thread (for example to be closed there) sees the latest values.
  */
 final class TransactionState {
 
@@ -26,8 +26,16 @@ final class TransactionState {
     private volatile Throwable concurrencyFailure;
     private volatile boolean commitAttempted;
     private final Map<Integer, Integer> savepointsByLevel = new HashMap<>();
+    private final CursorGuard cursorGuard;
 
     TransactionState(DriverSession session, boolean external, boolean canReleaseSavepoints) {
+        this(session, external, canReleaseSavepoints, new CursorGuard());
+    }
+
+    /** Creates the state of a transaction on a session whose cursor guard already exists. */
+    TransactionState(DriverSession session, boolean external, boolean canReleaseSavepoints,
+            CursorGuard cursorGuard) {
+        this.cursorGuard = cursorGuard;
         this.session = session;
         this.external = external;
         this.canReleaseSavepoints = canReleaseSavepoints;
@@ -49,6 +57,11 @@ final class TransactionState {
         int used = savepointsByLevel.getOrDefault(level, 0);
         savepointsByLevel.put(level, used + 1);
         return used == 0 ? SAVEPOINT_PREFIX + level : SAVEPOINT_PREFIX + level + "_" + used;
+    }
+
+    /** Returns the guard of the session's one open cursor, shared with a session callback. */
+    CursorGuard cursorGuard() {
+        return cursorGuard;
     }
 
     DriverSession session() {

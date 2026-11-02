@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.diwan.database.driver.DriverInfo;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * Sends SQL to one database and manages transactions on it.
@@ -292,6 +293,67 @@ public interface Connection {
      * @throws QueryException if the database refuses the SQL or no session can be opened
      */
     boolean unprepared(String sql);
+
+    /**
+     * Runs a read and streams its rows through a cursor, one row at a time.
+     *
+     * <p>The cursor must be closed, best with try-with-resources; it also closes itself when its
+     * last row is read. On the root connection it holds a session of its own until then, so a cursor
+     * that is neither read to the end nor closed keeps a pooled connection out of the pool. Inside a
+     * transaction, a session callback or a transaction scope, it borrows that session: until it is
+     * closed, every other statement, cursor, savepoint, commit or rollback on that session is
+     * refused, and ending the transaction level or scope that opened it closes it first.
+     *
+     * <p>Rows are unmodifiable, with columns in select order. A failure while reading closes the
+     * cursor and is thrown as a {@link QueryException}. The cursor belongs to the calling thread.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}; every connection of this
+     *     library overrides it.
+     * @param sql the read to run, never {@code null}
+     * @param bindings the positional binding values, as for {@link #select(String, Object...)}
+     * @return the open cursor, never {@code null}
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code bindings} is a {@code null} array or holds a value
+     *     of an unsupported type
+     * @throws IllegalStateException if a cursor is already open on the borrowed session, or on the
+     *     root connection when this thread is inside a transaction it opened (strict mode)
+     * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
+     * @throws QueryException if the database refuses the read or no session can be opened
+     */
+    default RowCursor cursor(String sql, Object... bindings) {
+        throw new UnsupportedOperationException("cursor");
+    }
+
+    /**
+     * Runs a read and streams its rows through a cursor, one row at a time.
+     *
+     * <p>The cursor must be closed, best with try-with-resources; it also closes itself when its
+     * last row is read. On the root connection it holds a session of its own until then, so a cursor
+     * that is neither read to the end nor closed keeps a pooled connection out of the pool. Inside a
+     * transaction, a session callback or a transaction scope, it borrows that session: until it is
+     * closed, every other statement, cursor, savepoint, commit or rollback on that session is
+     * refused, and ending the transaction level or scope that opened it closes it first.
+     *
+     * <p>Rows are unmodifiable, with columns in select order. A failure while reading closes the
+     * cursor and is thrown as a {@link QueryException}. The cursor belongs to the calling thread.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}; every connection of this
+     *     library overrides it.
+     * @param sql the read to run, never {@code null}
+     * @param bindings the positional binding values, never {@code null}, elements may be
+     *     {@code null}; the list is copied
+     * @return the open cursor, never {@code null}
+     * @throws NullPointerException if {@code sql} is {@code null}
+     * @throws IllegalArgumentException if {@code bindings} is {@code null} or holds a value of an
+     *     unsupported type
+     * @throws IllegalStateException if a cursor is already open on the borrowed session, or on the
+     *     root connection when this thread is inside a transaction it opened (strict mode)
+     * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
+     * @throws QueryException if the database refuses the read or no session can be opened
+     */
+    default RowCursor cursor(String sql, List<?> bindings) {
+        throw new UnsupportedOperationException("cursor");
+    }
 
     /**
      * Runs a callback inside a transaction and returns its result.

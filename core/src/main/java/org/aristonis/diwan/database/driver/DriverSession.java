@@ -44,6 +44,30 @@ public interface DriverSession extends AutoCloseable {
     List<Map<String, Object>> query(String sql, List<Object> bindings);
 
     /**
+     * Runs a read and streams its rows through a cursor that keeps the statement open.
+     *
+     * <p>The session is busy until the cursor is closed: the core sends nothing else to it while
+     * the cursor is open.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}, for drivers written before
+     *     cursors. Rows follow the rules of {@link #query}. A driver whose database streams only inside
+     *     a transaction reports {@link DriverCapability#STREAMS_IN_TRANSACTION}; when no transaction
+     *     is open and {@link #inExternalTransaction()} is {@code false}, it opens one for the cursor
+     *     and ends it when the cursor closes (commit, or rollback after a failure), restoring the
+     *     session as it was. Inside a transaction the cursor reads in it and never ends it. If opening
+     *     fails, everything opened so far is released before the failure is thrown.
+     * @param sql the statement to run, never {@code null}
+     * @param bindings the positional parameter values, never {@code null}, elements may be
+     *     {@code null}; read-only to the driver and not retained
+     * @return the open cursor, never {@code null}
+     * @throws DriverException if the statement fails or a column label appears twice in the result
+     * @throws UnsupportedOperationException if the driver cannot stream
+     */
+    default RowCursor cursor(String sql, List<Object> bindings) {
+        throw new UnsupportedOperationException("this driver cannot stream rows through a cursor");
+    }
+
+    /**
      * Runs a write and returns the number of affected rows.
      *
      * @param sql the statement to run, never {@code null}

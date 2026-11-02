@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 import org.aristonis.diwan.database.driver.SqliteScripts;
 import org.aristonis.diwan.database.driver.SqliteText;
 
@@ -31,6 +32,11 @@ import org.aristonis.diwan.database.driver.SqliteText;
  * stays on the thread that began it; ending it from another thread fails and leaves it for its own
  * thread to end. Closing or discarding the session ends a transaction it began without committing
  * it, and leaves the database open.
+ *
+ * <p>A {@linkplain #cursor cursor} opens no transaction and keeps its {@link SQLiteCursor} open.
+ * When the loop passes the end of the cursor's window, Android refills it by running the query
+ * again, so rows changed during the loop can be skipped or read twice; use {@code lazyById} or
+ * {@code chunkById} for big or changing tables. A cursor is used on one thread only.
  */
 final class AndroidSqliteSession implements DriverSession {
 
@@ -59,16 +65,55 @@ final class AndroidSqliteSession implements DriverSession {
             refuseRepeated(labels);
             List<Map<String, Object>> rows = new ArrayList<>();
             while (cursor.moveToNext()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                for (int i = 0; i < labels.length; i++) {
-                    row.put(labels[i], read(cursor, i));
-                }
-                rows.add(row);
+                rows.add(readRow(cursor, labels));
             }
             return rows;
         } catch (RuntimeException e) {
             throw translate(e);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Opens no transaction: Android ties a transaction to the thread, so one opened for
+     *     the cursor would take in every write the loop makes and roll it back when the cursor
+     *     closes. Inside a transaction the cursor reads in it and leaves it open.
+     */
+    @Override
+    public RowCursor cursor(String sql, List<Object> bindings) {
+        ensureOpen();
+        Objects.requireNonNull(sql, "sql");
+        List<Object> values = convert(bindings);
+        Cursor cursor;
+        try {
+            cursor = database.rawQueryWithFactory((db, driver, editTable, query) -> {
+                bindAll(query, values);
+                return new SQLiteCursor(driver, editTable, query);
+            }, sql, null, null);
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+        try {
+            String[] labels = cursor.getColumnNames();
+            refuseRepeated(labels);
+            return new AndroidRowCursor(cursor, labels, Thread.currentThread());
+        } catch (RuntimeException e) {
+            try {
+                cursor.close();
+            } catch (RuntimeException closing) {
+                e.addSuppressed(closing);
+            }
+            throw translate(e);
+        }
+    }
+
+    static Map<String, Object> readRow(Cursor cursor, String[] labels) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (int i = 0; i < labels.length; i++) {
+            row.put(labels[i], read(cursor, i));
+        }
+        return row;
     }
 
     @Override
@@ -323,7 +368,7 @@ final class AndroidSqliteSession implements DriverSession {
         }
     }
 
-    private static DriverException translate(RuntimeException failure) {
+    static DriverException translate(RuntimeException failure) {
         if (failure instanceof DriverException) {
             return (DriverException) failure;
         }

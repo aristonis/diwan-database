@@ -74,6 +74,8 @@ final class RecordingConnection {
         switch (method) {
             case "select":
                 return rows.getOrDefault(sql, List.of());
+            case "cursor":
+                return new ListCursor(rows.getOrDefault(sql, List.of()));
             case "insert":
             case "statement":
                 return true;
@@ -115,5 +117,48 @@ final class RecordingConnection {
             row.put((String) pairs[i], pairs[i + 1]);
         }
         return row;
+    }
+
+    /** A cursor over scripted rows. */
+    static final class ListCursor implements org.aristonis.diwan.database.driver.RowCursor {
+
+        private final java.util.Iterator<Map<String, Object>> rows;
+        private boolean closed;
+
+        ListCursor(List<Map<String, Object>> rows) {
+            this.rows = rows.iterator();
+        }
+
+        @Override
+        public java.util.Iterator<Map<String, Object>> iterator() {
+            return this;
+        }
+
+        @Override
+        public boolean hasNext() {
+            boolean has = !closed && rows.hasNext();
+            if (!has) {
+                closed = true;
+            }
+            return has;
+        }
+
+        @Override
+        public Map<String, Object> next() {
+            if (!hasNext()) {
+                throw new java.util.NoSuchElementException();
+            }
+            return rows.next();
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+
+        @Override
+        public boolean isClosed() {
+            return closed;
+        }
     }
 }

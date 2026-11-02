@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * Records every statement as a {@link LoggedQuery} instead of sending it, and opens no session.
@@ -49,6 +50,13 @@ class PretendConnection extends AbstractConnection {
         ensureOpen();
         queries.add(new LoggedQuery(statement.sql(), statement.bindings()));
         return statement.pretendResult();
+    }
+
+    // A cursor needs rows to stream, and a recorder has none to give.
+    @Override
+    final RowCursor openCursor(String sql, List<Object> bindings) {
+        ensureOpen();
+        throw new UnsupportedOperationException("A cursor is not available in pretend mode");
     }
 
     @Override

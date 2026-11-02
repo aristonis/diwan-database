@@ -39,11 +39,16 @@ final class PostgresServer {
 
     /** Returns a connection to a new, empty database, or skips the test when PostgreSQL is not installed. */
     static Connection newDatabase() {
+        return get().connect(newDatabaseName());
+    }
+
+    /** Creates a new, empty database and returns its name, or skips the test as {@link #newDatabase()} does. */
+    static String newDatabaseName() {
         PostgresServer server = get();
         String name = "t" + DATABASES.incrementAndGet();
         Connection admin = server.connect("postgres");
         admin.statement("create database " + name);
-        return server.connect(name);
+        return name;
     }
 
     static PGSimpleDataSource dataSource(String database) {

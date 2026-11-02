@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * Runs every statement on the session of one transaction and nests further transactions through
@@ -58,6 +59,7 @@ class TransactionalConnection extends AbstractConnection {
     @Override
     final <T> T run(PendingStatement<T> statement) {
         ensureUsable();
+        state.cursorGuard().check();
         try {
             return statement.runOn(state.session());
         } catch (DriverException failure) {
@@ -65,8 +67,41 @@ class TransactionalConnection extends AbstractConnection {
         }
     }
 
+    @Override
+    final RowCursor openCursor(String sql, List<Object> bindings) {
+        ensureUsable();
+        CursorGuard guard = state.cursorGuard();
+        guard.check();
+        RowCursor driverCursor;
+        try {
+            driverCursor = state.session().cursor(sql, bindings);
+        } catch (DriverException failure) {
+            throw failed(sql, failure);
+        }
+        TranslatingCursor cursor = new TranslatingCursor(getName(), driverCursor, failure -> failed(sql, failure),
+                failure -> guard.release());
+        guard.register(cursor, cursorLevel());
+        return cursor;
+    }
+
+    /** Returns the transaction level whose end closes a cursor opened here now. */
+    int cursorLevel() {
+        return state.depth();
+    }
+
+    /** Closes the open cursor of the session when it was opened at {@code level} or deeper. */
+    final void closeCursorsFrom(int level) {
+        state.cursorGuard().closeFrom(level);
+    }
+
+    /** Closes as {@link #closeCursorsFrom(int)} does, returning a failure instead of throwing it. */
+    final Throwable closeCursorsQuietlyFrom(int level) {
+        return state.cursorGuard().closeQuietlyFrom(level);
+    }
+
     /** Runs a transaction command, translating its failure like a statement failure. */
     final void control(String description, Consumer<DriverSession> command) {
+        state.cursorGuard().check();
         try {
             command.accept(state.session());
         } catch (DriverException failure) {
@@ -89,9 +124,11 @@ class TransactionalConnection extends AbstractConnection {
      * commit may have landed.
      */
     final void commitOutermost() {
+        closeCursorsFrom(1);
         if (state.isRollbackOnly()) {
             throw rollbackOnlyFailure();
         }
+        state.cursorGuard().check();
         state.markCommitAttempted();
         if (state.isExternal()) {
             releaseSavepoint(TransactionState.OUTERMOST_SAVEPOINT);
@@ -106,11 +143,22 @@ class TransactionalConnection extends AbstractConnection {
 
     /** Undoes the outermost level; inside an external transaction only its own savepoint. */
     final void rollbackOutermost() {
-        if (state.isExternal()) {
-            String name = TransactionState.OUTERMOST_SAVEPOINT;
-            control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
-        } else {
-            control("rollback", DriverSession::rollback);
+        Throwable cursorFailure = closeCursorsQuietlyFrom(1);
+        try {
+            if (state.isExternal()) {
+                String name = TransactionState.OUTERMOST_SAVEPOINT;
+                control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
+            } else {
+                control("rollback", DriverSession::rollback);
+            }
+        } catch (RuntimeException | Error rollbackFailure) {
+            if (cursorFailure != null) {
+                Sessions.suppress(rollbackFailure, cursorFailure);
+            }
+            throw rollbackFailure;
+        }
+        if (cursorFailure != null) {
+            Sessions.rethrow(cursorFailure);
         }
     }
 
@@ -181,12 +229,17 @@ class TransactionalConnection extends AbstractConnection {
         try {
             T result = callback.run(this);
             closeOpenChildAbove(level);
+            closeCursorsFrom(level);
             if (!state.isRollbackOnly()) {
                 releaseSavepoint(savepoint);
             }
             return result;
         } catch (RuntimeException | Error failure) {
             closeChildAfterFailure(level, failure);
+            Throwable cursorFailure = closeCursorsQuietlyFrom(level);
+            if (cursorFailure != null) {
+                Sessions.suppress(failure, cursorFailure);
+            }
             rollbackToSavepoint(savepoint, failure);
             throw failure;
         } finally {
