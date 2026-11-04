@@ -111,7 +111,13 @@ final class RelationExistence {
         }
     }
 
-    private static String table(String from) {
+    /**
+     * Returns the table name of a {@code from} clause, without any alias.
+     *
+     * @param from the from clause text, never {@code null}
+     * @return the table name, never {@code null}
+     */
+    static String table(String from) {
         int alias = from.toLowerCase(Locale.ROOT).indexOf(TABLE_ALIAS);
         return alias < 0 ? from.trim() : from.substring(0, alias).trim();
     }

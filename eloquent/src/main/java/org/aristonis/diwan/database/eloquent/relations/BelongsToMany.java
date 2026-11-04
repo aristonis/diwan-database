@@ -311,7 +311,8 @@ public class BelongsToMany<R extends Model> extends PivotModelWrites<R> {
         return existenceWheres();
     }
 
-    private void performJoin(EloquentBuilder<R> target) {
+    @Override
+    void performJoin(EloquentBuilder<R> target) {
         String relatedColumn = getRelated().qualifyColumn(getRelatedKeyName());
         target.join(getTable(), relatedColumn, "=", getQualifiedRelatedPivotKeyName());
     }

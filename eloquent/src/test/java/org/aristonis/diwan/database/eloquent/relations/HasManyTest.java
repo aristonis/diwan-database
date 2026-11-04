@@ -120,4 +120,14 @@ class HasManyTest {
         assertNull(posts.getRelationName());
         assertEquals("posts", ann.relation("posts").getRelationName());
     }
+
+    @Test
+    void takeLimitsTheRows() {
+        User ann = user(1);
+
+        ModelCollection<Post> posts = ann.posts().orderBy("id").take(1).get();
+
+        assertEquals(Collections.singletonList(1), posts.modelKeys());
+        assertEquals(Collections.singletonList(LAZY + " order by \"id\" asc limit 1"), db.sql());
+    }
 }

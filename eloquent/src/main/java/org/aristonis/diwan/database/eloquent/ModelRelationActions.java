@@ -30,7 +30,7 @@ import org.aristonis.diwan.database.query.QueryFactory;
  * the current thread. {@link #push()} saves this model and then every model in its loaded
  * relations.
  */
-abstract class ModelRelationActions extends ModelManyRelations {
+abstract class ModelRelationActions extends ModelThroughRelations {
 
     private static final String ANY_COLUMN = "*";
 

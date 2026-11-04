@@ -288,4 +288,16 @@ abstract class RelationClauses<R extends Model, S extends RelationClauses<R, S>>
         applyClause(query -> query.limit(value));
         return self();
     }
+
+    /**
+     * Takes the given number of rows from the lazy query, with the same effect as
+     * {@code limit(int)}.
+     *
+     * @param value the maximum row count, zero or more
+     * @return this relation
+     * @throws IllegalArgumentException if the query builder refuses the value
+     */
+    public final S take(int value) {
+        return limit(value);
+    }
 }

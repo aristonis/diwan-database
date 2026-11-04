@@ -323,6 +323,17 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
     abstract void addConstraints();
 
     /**
+     * Joins another table to the relation's query. Called by the kinds that own a build order at
+     * their lazy, eager and existence build points, after any aliasing and before the key
+     * constraint. Does nothing by default; a relation that reads through a table overrides it.
+     *
+     * @param target the query to change, never {@code null}
+     */
+    void performJoin(EloquentBuilder<R> target) {
+        // Nothing by default: only relations that join a table override it.
+    }
+
+    /**
      * Returns whether the eager-load path walks into the related class at validation time.
      * Every current kind has one related class; a polymorphic relation returns {@code true}.
      *

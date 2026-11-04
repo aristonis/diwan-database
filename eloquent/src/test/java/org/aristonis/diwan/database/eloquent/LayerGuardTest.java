@@ -82,7 +82,8 @@ class LayerGuardTest {
     void relationLayerSitsBetweenSerializationAndGuards() {
         assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
         assertSame(ModelRelations.class, ModelManyRelations.class.getSuperclass());
-        assertSame(ModelManyRelations.class, ModelRelationActions.class.getSuperclass());
+        assertSame(ModelManyRelations.class, ModelThroughRelations.class.getSuperclass());
+        assertSame(ModelThroughRelations.class, ModelRelationActions.class.getSuperclass());
         assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
         assertSame(ModelGuards.class, Model.class.getSuperclass());
     }

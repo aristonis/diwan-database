@@ -326,6 +326,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
 
     @Override
     final void addConstraints() {
+        performJoin(baseQuery());
         baseQuery().where(foreignKey, "=", getParentKey());
         baseQuery().whereNotNull(foreignKey);
     }
@@ -337,6 +338,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
 
     @Override
     final void prepareEagerQuery(EloquentBuilder<R> eagerQuery, List<Object> chunk) {
+        performJoin(eagerQuery);
         whereEagerKeys(eagerQuery, foreignKey, chunk);
     }
 
@@ -357,9 +359,11 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
         String parentKey = parentKeyAgainst(parentQuery, localKey);
         if (RelationExistence.isSelfRelation(baseQuery(), parentQuery)) {
             String alias = aliasRelatedTable(aliases);
+            performJoin(baseQuery());
             baseQuery().whereColumn(parentKey, "=", alias + "." + foreignKeyName);
             return existenceBaseQuery();
         }
+        performJoin(baseQuery());
         baseQuery().whereColumn(parentKey, "=", foreignKey);
         return existenceBaseQuery();
     }
