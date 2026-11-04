@@ -14,7 +14,8 @@ migration where the database allows. The schema builder creates and changes tabl
 the SQLite grammar ships in `diwan-database-sqlite` and the PostgreSQL grammar in
 `diwan-database-pgsql`. The query builder reads and writes rows with Laravel's method names,
 through a query grammar from the same modules. Models in `diwan-database-eloquent` add
-Eloquent's class-per-table API, with relations and eager loading, on top of the query builder.
+Eloquent's class-per-table API, with relations, eager loading, relation aggregates, touches,
+`push` and inverse relations, on top of the query builder.
 
 | Layer | State |
 |---|---|
@@ -619,6 +620,131 @@ Two notes for relations:
   names it.
 - The default foreign key is the snake-case class name plus `_id`. On Android, R8 renames classes,
   so pass foreign keys explicitly, as above, or override `getForeignKey()`.
+
+Count, sum or check related rows without loading them. Each call adds one subselect to the main
+query, named `<relation>_<function>_<column>` in snake case, or by `as`:
+
+```java
+users.query()
+        .withCount("posts")                                        // posts_count
+        .withCount("posts as total_posts")                         // total_posts, as written
+        .withCount(Map.of("posts as published", q -> q.where("published", true)))
+        .withMax("posts", "votes")                                 // posts_max_votes
+        .withSum("orders", "total")                                // orders_sum_total
+        .withExists("posts")                                       // posts_exists, a Boolean
+        .withAggregate("posts", "title")                           // posts_title: one row's value
+        .get();
+// select "users".*, (select count(*) from "posts" where "users"."id" = "posts"."user_id") as "posts_count", ...
+```
+
+`withMin` and `withAvg` work like `withMax`; `withAggregate(relation, column, function)` takes
+`count`, `max`, `min`, `sum`, `avg` or `exists` in any case and refuses other text, because the
+function is written into the SQL. A core `Expression` can stand in for the column on the
+single-relation forms. `withExists` reads as `Boolean` on every database; the other results keep
+the type the driver returns (SQLite `Long` or `Double`, PostgreSQL `Long` or `BigDecimal`). An
+unknown relation or a dot path such as `posts.comments` throws `RelationNotFoundException` when
+the method is called. A constraint closure may add `where` clauses (kept inside one group, so an
+`orWhere` cannot widen the match), `limit`, `offset` and `groupBy`; `select` and `orderBy` in it
+are ignored, and `distinct`, `join`, `having` or `union` throw `IllegalStateException`. A self
+relation gets its own table alias, and an aliased `from("users as u")` correlates on `u`. As in
+Laravel, `select(...)` after `withCount` replaces the columns and drops the aggregate, while
+`addSelect` keeps it; `as` is an alias only between single spaces.
+
+The same aggregates fill models already read, with one query per key chunk:
+
+```java
+all.loadCount("posts");                     // select "id", (select count(*) ...) as "posts_count" from "users" where "users"."id" in (1, 2, 3)
+all.loadSum("orders", "total");
+user.loadExists(Map.of("posts", q -> q.where("published", true)));
+```
+
+Only the key and the aggregates are selected. The models stay clean, and other unsaved changes
+stay dirty. Keys are split like eager keys, so 2,000 string keys run three queries on SQLite and
+one on PostgreSQL. A model whose row was deleted in the meantime, or whose key is null, is skipped;
+Laravel fails there. An empty collection runs no query.
+
+`withExists` and `loadExists` read as booleans through a per-instance cast. You can add your own:
+`model.mergeCasts(Map.of("score", "int"))` changes that instance only, and
+`query.withCasts(Map.of("last_login", "datetime"))` gives the casts to every model the query
+returns. The class's `casts()` never changes.
+
+Name relations in `touches()` to keep a parent's `updated_at` current:
+
+```java
+public final class Comment extends Model {
+    @Override
+    protected Set<String> touches() {
+        return Collections.singleton("post");      // a belongsTo, hasOne or hasMany relation
+    }
+}
+
+comment.setAttribute("body", "Edited");
+comment.save();     // ...then: update "posts" set "updated_at" = ? where "posts"."id" = ?
+```
+
+A save that changed something, and a delete, touch each named relation: one raw `UPDATE` with no
+events and no `SELECT`. Owners already loaded on the model have their `saved()` hook run and
+touch their own owners in turn; an owner that is not loaded is never loaded, so
+`preventLazyLoading` does not fire. Each model is walked once per call, so many
+children sharing one loaded owner cost one `UPDATE`, and a cycle ends. The owner object in memory
+keeps its old `updated_at`; `refresh()` it when you need the new value. A bad name in `touches()`
+throws `InvalidRelationException` on first use. Call `touchOwners()` to touch without saving.
+
+Turn touching off for named classes, and their subclasses, for one call:
+
+```java
+Model.withoutTouching(Post.class, () -> importComments(rows));
+Model.withoutTouchingOn(List.of(Post.class, User.class), () -> importAll(rows));
+```
+
+The scope holds on the calling thread only and is restored when the call returns or throws, so
+another request, or a thread started inside the call, still touches. A model's own `updated_at`
+is still set on save.
+
+`push()` saves a model, then every loaded relation under it, depth first in load order:
+
+```java
+post.setAttribute("title", "New title");
+post.relatedMany("comments").get(0).setAttribute("body", "Fixed");
+boolean saved = post.push();      // the post, then the changed comment
+```
+
+It returns `false` at the first save that fails; rows saved before it stay, since there is no
+transaction (wrap it in one if you need all or nothing). It sets no foreign key, so a new child
+placed with `setRelation` is inserted with whatever it holds, and a `withDefault` placeholder among
+the loaded relations is inserted, as in Laravel. Each model is saved once per call, also on a cycle
+or a shared model. Every save runs its own touches.
+
+`chaperone()` on a `hasOne` or `hasMany` sets the parent on each child the relation returns or
+writes, as the same object and with no query:
+
+```java
+public HasMany<Comment> comments() {
+    return hasMany(Comment.class, "post_id").chaperone("post");
+}
+
+Comment first = post.relatedMany("comments").get(0);
+boolean same = first.related("post") == post;      // true, no query
+```
+
+The link is set on lazy reads, on eager loads (to each child's own parent), on `make`, `save`,
+`create`, `saveMany` and `createMany`, and on a `withDefault` model. `inverse` is an alias;
+`withoutChaperone()` turns it off for one relation. Without a name, `chaperone()` tries the foreign
+key without its key suffix (`post_id` gives `post`), the parent's foreign key, the parent's class
+name, `owner`, and `parent` for a self relation, and throws `RelationNotFoundException` when none
+is a relation of the child. On Android R8 renames classes, so pass the name. `toJson()` of a
+parent and its linked children ends: a model already being written is written again with its
+attributes only.
+
+`touchOwners()`, `push()` and `toMap()` recurse once per level of the loaded graph. A very deep
+self chain, such as thousands of nested categories loaded one under another, can overflow a small
+thread stack, such as the default on Android; load such chains in pieces.
+
+Cost at scale: index each child foreign key that relations, `has`/`whereHas`, `withCount`,
+`withExists` and `load*` use, since they run a correlated subquery per outer row. A `hasMany` or
+`hasOne` touch rewrites every child row of the parent, and many children touching one owner make
+it a hot row (lock waits on PostgreSQL, `SQLITE_BUSY` on SQLite and Android); `push()` sends one
+owner `UPDATE` per touching child. Wrap bulk imports in `withoutTouching`.
 
 ### Migrations
 

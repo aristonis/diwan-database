@@ -26,6 +26,19 @@ With relations:
 4. They create a post through `user.posts().create(...)`; its `user_id` is set for them.
 5. They send `toJson()` of a user with its posts loaded; the posts appear under `posts`.
 
+With aggregates, touches and push:
+
+1. They list users with `withCount("posts")` and read `posts_count` from each user; one query.
+2. They add `loadSum("orders", "total")` to users already in memory; one query, the users stay
+   clean.
+3. A comment lists `post` in `touches()`; saving a changed comment updates the post's
+   `updated_at` with one `UPDATE` and no `SELECT`.
+4. A bulk import runs inside `Model.withoutTouching(Post.class, ...)`; no post is touched, and a
+   request on another thread still touches.
+5. They change a post and one of its loaded comments and call `post.push()`; both rows are saved.
+6. They declare `comments()` with `chaperone("post")`; `comment.related("post")` on a loaded
+   comment runs no query and returns the same post object.
+
 ## Edge cases
 
 | # | Situation | What happens | Test |
@@ -102,3 +115,39 @@ With relations:
 | E70 | Lazy read with lazy loading prevented, on a model from a multi-row result | `LazyLoadingViolationException`, no query | `LazyLoadingPreventionTest#multiRowModelBlocked` |
 | E71 | The same read on a single-row result, a new model or an eager-loaded relation | Allowed | `LazyLoadingPreventionTest#singleRowAndNewAllowed`, `LazyLoadingPreventionTest#eagerLoadedNotBlocked` |
 | E72 | `refresh()` on a model with loaded relations | The relations are reloaded | `ModelRelationsTest#refreshReloadsRelations` |
+| E73 | `withCount("posts")` with no columns selected, or after `select` / `addSelect` | `users.*` then the subselect; `select` after it drops the subselect, `addSelect` keeps it | `WithAggregateTest#defaultsToTableStar`, `WithAggregateTest#selectAfterDropsAggregate`, `WithAggregateTest#addSelectAfterKeepsAggregate` |
+| E74 | Default and `as` aliases, a dotted column, the same relation under two aliases | `posts_count`, `blog_posts_count`, `posts_max_postsvotes`; the `as` alias as written; both columns | `AggregateAliasTest#camelCaseRelationIsSnaked`, `AggregateAliasTest#dottedColumnLosesTheDot`, `WithAggregateTest#explicitAliasKeepsCase`, `WithAggregateTest#sameRelationUnderTwoAliases` |
+| E75 | `posts  as  total` with extra spaces | Not an alias; unknown relation | `AggregateConstraintTest#extraSpacesAroundAsAreNotAnAlias` |
+| E76 | Unknown relation, `posts.comments`, or a function such as `median` | `RelationNotFoundException` or `IllegalArgumentException`; the query is unchanged | `WithAggregateTest#unknownRelation`, `WithAggregateTest#nestedPathRejected`, `WithAggregateTest#badFunctionRejected`, `AggregateConstraintTest#refusalLeavesTheOuterQueryUnchanged` |
+| E77 | A constraint closure with `orWhere`, `orderBy`, `select`, `limit`, `groupBy` | `or` stays inside the group; orders and select ignored; limit and groupBy kept | `AggregateConstraintTest#closureOrWhereCannotEscapeKey`, `AggregateConstraintTest#closureOrdersCleared`, `AggregateConstraintTest#closureSelectIgnored`, `AggregateConstraintTest#closureLimitKept`, `AggregateConstraintTest#closureGroupByKeptWithItsBindings` |
+| E78 | A constraint closure with `distinct`, `join`, `having` or `union` | `IllegalStateException` naming the relation | `AggregateConstraintTest#distinctRefused`, `AggregateConstraintTest#joinRefused`, `AggregateConstraintTest#havingRefused`, `AggregateConstraintTest#unionRefused` |
+| E79 | An aggregate on a self relation | An alias per subselect, the same SQL every build | `WithAggregateSelfRelationTest#countAlias`, `WithAggregateSelfRelationTest#counterIncrements`, `WithAggregateSelfRelationTest#deterministic` |
+| E80 | `withCount` or `whereHas` on `from("users as u")` | The subselect correlates on `u` | `AliasedFromTest#withCountCorrelatesOnTheAlias`, `AliasedFromTest#whereHasQualifiesTheParentKeyWithTheAlias` |
+| E81 | `withExists` on SQLite and PostgreSQL | `Boolean` on both; counts and sums keep the driver's type | `WithAggregateTest#existsIsBoolean`, `SQLiteAggregatesTest#existsBoolean`, `SQLiteAggregatesTest#sumKeepsDriverType`, `PostgresAggregatesTest#existsBoolean`, `PostgresAggregatesTest#countKeepsDriverType` |
+| E82 | `count()` or `paginate` total on a query with `withCount` | The aggregate is left out of the count | `WithAggregateTest#countIgnoresAggregates`, `WithAggregateTest#paginateTotalIgnoresAggregates` |
+| E83 | `loadCount` on a collection | One query selecting the key and the aggregate; the models are clean and an earlier change stays dirty | `LoadAggregateTest#oneQueryKeyOnlySelect`, `LoadAggregateTest#otherDirtyKept` |
+| E84 | `loadCount` when a row was deleted, a key is null, or no row comes back | The model is skipped; no exception | `LoadAggregateTest#deletedRowSkipped`, `LoadAggregateTest#nullKeySkipped`, `LoadAggregateTest#noRowsReturned` |
+| E85 | `loadCount` over 2,000 string keys | Three queries on SQLite, one on PostgreSQL | `LoadAggregateKeysTest#stringKeysChunkedOnSQLite`, `LoadAggregateKeysTest#stringKeysOneQueryOnPostgres` |
+| E86 | A `load*` constraint whose own values leave no room for a key | `IllegalArgumentException` before any query | `LoadAggregateKeysTest#exhaustedBudgetThrowsBeforeAnyQuery` |
+| E87 | `loadCount` on an empty collection or an unsaved model | No query | `LoadAggregateTest#emptyCollectionNoQuery`, `ModelLoadAggregateTest#unsavedModelRunsNoQuery` |
+| E88 | `mergeCasts` on one instance | Only that instance reads, writes and compares through the new cast | `ModelCastOverlayTest#onlyThisInstance`, `ModelCastOverlayTest#overlayAffectsDirtyChecks`, `ModelCastOverlayTest#notCopied` |
+| E89 | `withCasts` twice, and with `withExists` | All casts kept; the later call wins for the same key; eager children unaffected | `WithCastsTest#twoWithExistsAndWithCastsAllSurvive`, `WithCastsTest#laterCallWinsForSameKey`, `WithCastsTest#notOnEagerChildren` |
+| E90 | A `touches()` name that is unknown or not a touchable relation | `InvalidRelationException` at first use, the same on every later use | `TouchesConfigTest#unknownNameRejected`, `TouchesConfigTest#relationWithoutTouchSupportRejected`, `TouchesConfigTest#failureCachedAndRethrownAsNewException` |
+| E91 | A clean save, a vetoed save or a vetoed delete | No touch | `TouchOwnersTest#cleanSaveNoTouch`, `TouchOwnersTest#vetoedSaveNoTouch`, `TouchOwnersTest#vetoedDeleteNoTouch` |
+| E92 | Delete of a model with `touches()` | The owner is touched before the delete statement | `TouchOwnersTest#deleteTouchesBeforeDelete` |
+| E93 | A null foreign key, or an owner with no timestamps | No query | `RelationTouchTest#nullForeignKeyRunsNoQuery`, `RelationTouchTest#noTimestampsNoTouch` |
+| E94 | The touched owner is not loaded, or loaded, or lazy loading is prevented | Not loaded: one `UPDATE`, no `SELECT`; loaded: its `saved()` hook and its own touches run; prevention never fires | `TouchOwnersTest#noLazyLoad`, `TouchOwnersTest#recursesIntoLoadedOwner`, `TouchOwnersTest#worksWithLazyLoadingPrevented` |
+| E95 | Two models that touch each other, or a diamond | Ends; each model walked once | `TouchOwnersTest#cycleTerminates`, `TouchOwnersTest#diamondWalksSharedOwnerOnce` |
+| E96 | Many children with the same loaded owner touched in one call, or the owner not loaded | Loaded: one `UPDATE`; not loaded: one per child | `TouchOwnersTest#sharedOwnerTouchedOnce`, `TouchOwnersTest#unloadedSharedOwnerUpdatedPerChild` |
+| E97 | The owner object after a touch | Keeps its old `updated_at` | `TouchOwnersTest#inMemoryOwnerStale` |
+| E98 | `withoutTouching` on a class, a subclass, nested, and after an exception | Suppressed for the class and subclasses; scopes nest; restored after a throw; the model's own `updated_at` still set | `WithoutTouchingTest#subclassIgnored`, `WithoutTouchingTest#nestedScopes`, `WithoutTouchingTest#restoredAfterException`, `WithoutTouchingTest#ownTouchUnaffected` |
+| E99 | Another thread, a thread started inside the scope, a pooled thread after the scope | All touch normally | `TouchConcurrencyTest#otherThreadStillTouches`, `TouchConcurrencyTest#threadStartedInsideTheScopeTouches`, `TouchConcurrencyTest#noLeakToNextTask` |
+| E100 | `push()` with a save that returns `false` | Stops there; rows saved before it stay | `PushTest#selfFailureStopsEarly`, `PushTest#firstFailureStopsKeepsEarlier` |
+| E101 | `push()` on a new child placed with `setRelation` | Inserted without a foreign key | `PushTest#noForeignKeySet` |
+| E102 | `push()` with a cycle, a shared instance or a diamond | Ends; each model saved once | `PushTest#cycleTerminates`, `PushTest#sharedInstanceTwice`, `PushTest#diamondSavesEachOnce` |
+| E103 | `push()` with a loaded `withDefault` placeholder | The placeholder is inserted, as in Laravel | `PushTest#defaultPlaceholderIsInserted` |
+| E104 | `chaperone()` with no name, a good name, a bad name | Guessed in order; checked; `RelationNotFoundException` listing the tried names | `InverseGuessTest#orderRespected`, `ChaperoneTest#explicitName`, `ChaperoneTest#badNameRejected`, `InverseGuessTest#noneFound` |
+| E105 | Chaperoned children read lazily, eagerly or written | Each linked to its own parent instance, no extra query; an unmatched parent untouched | `ChaperoneTest#lazyHasManyLinksParent`, `ChaperoneTest#eagerMatchLinksRealParent`, `ChaperoneTest#writePaths`, `ChaperoneTest#noExtraQueries`, `ChaperoneTest#unmatchedParentUntouched` |
+| E106 | `withoutChaperone()`, then `chaperone()` again | Off, then on | `ChaperoneTest#withoutChaperone`, `ChaperoneTest#reenable` |
+| E107 | `toJson()` of a chaperoned parent and children | Ends; the repeated parent has attributes only | `RelationSerializationTest#chaperoneTwoWayTerminates`, `RecursionGuardTest#attributesOnlyOnReentry` |
+| E108 | An exception inside `toMap`, `touchOwners` or `push` | The path is released; the next call starts clean | `RecursionGuardTest#recoversAfterException`, `TouchOwnersTest#pathReleasedOnException`, `PushTest#guardReleasedOnException` |

@@ -170,6 +170,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pools that hand out connections with auto-commit off.
 - Build: one Java 17 JAR tested on JDK 17, 21 and 25, checked against the Android 28 API, with
   80% line coverage and Javadoc under `-Xdoclint:all` enforced.
+- Relation aggregates on builders: `withCount`, `withMax`, `withMin`, `withSum`, `withAvg`,
+  `withExists` and `withAggregate`, with constraints, `as` aliases and self relations; `exists`
+  aliases read as booleans. The same aggregates load onto models and collections that are already
+  fetched with `loadCount`, `loadMax`, `loadMin`, `loadSum`, `loadAvg`, `loadExists` and
+  `loadAggregate`, in one key-only query. Unlike Laravel, a model whose row is gone is skipped and
+  an empty result changes nothing, where Laravel fails on a null.
+- A per-model cast overlay with `mergeCasts`, and `withCasts` on the builder to cast selected
+  columns for one query.
+- Owner timestamps: `touches()` names the relations to touch after a save, `touchOwners()` touches
+  them on demand, and `withoutTouching` suspends touching for a model class within a block.
+- `push()` saves a model and every loaded relation, depth first, each model once even through a
+  cycle. As in Laravel, a loaded `withDefault` placeholder is inserted.
+- `chaperone()` (alias `inverse()`) on `hasOne` and `hasMany` sets the parent on each loaded child
+  without a query.
 
 ### Changed
 
@@ -180,6 +194,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `has`, `whereHas`, `doesntHave`, `withCount` and the other aggregates on a query whose table
+  has an alias (`from("users as u")`) correlate on the alias; Laravel names the table and the
+  query fails on SQLite and PostgreSQL.
 - PostgreSQL identifier limits are counted in UTF-8 bytes; catalog reads work in a mixed-case
   current schema; an empty comment removes a column comment.
 - SQLite: `unprepared` runs every statement of a script, on JDBC and Android; renaming a decimal

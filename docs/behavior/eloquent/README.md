@@ -46,6 +46,12 @@ found.delete();
 | Filter by related rows | `has`, `orHas`, `doesntHave`, `orDoesntHave`, `whereHas`, `orWhereHas`, `whereDoesntHave`, `orWhereDoesntHave`, `whereRelation`, `orWhereRelation`, `whereGroup` |
 | Write through a relation | `make`, `save`, `saveMany`, `create`, `createMany`, `associate`, `dissociate`, `withDefault` |
 | Refuse lazy loading | `ModelQuery.preventLazyLoading` |
+| Count or sum related rows in a query | `withCount`, `withMax`, `withMin`, `withSum`, `withAvg`, `withExists`, `withAggregate` |
+| Count or sum related rows of loaded models | `loadCount`, `loadMax`, `loadMin`, `loadSum`, `loadAvg`, `loadExists`, `loadAggregate` on a model or a `ModelCollection` |
+| Add casts to one instance or one query | `mergeCasts`, `withCasts` |
+| Bump a parent's `updated_at` | override `touches()`; `touchOwners`, `Relation.touch`, `Model.withoutTouching`, `Model.withoutTouchingOn` |
+| Save a model and its loaded relations | `push` |
+| Point children back to their parent | `chaperone`, `inverse`, `withoutChaperone`, `withoutInverse` on `hasOne` and `hasMany` |
 
 ## Casts, accessors and serialization
 
@@ -111,6 +117,50 @@ limits. `has` and
 `whereHas` compile to `exists` subqueries; a relation to the same table gets an alias per level.
 `toMap()` writes loaded relations after the attributes under snake-case keys and stops on cycles.
 
+## Aggregates, touches, push and chaperone
+
+```java
+ModelCollection<User> list = users.query()
+        .withCount("posts")                                       // posts_count
+        .withCount(Map.of("posts as published", q -> q.where("published", true)))
+        .withSum("orders", "total")                               // orders_sum_total
+        .withExists("posts")                                      // posts_exists, a Boolean
+        .get();
+
+list.loadMax("posts", "votes");                                   // one query per key chunk
+
+public final class Comment extends Model {
+    @Override
+    protected Set<String> touches() { return Collections.singleton("post"); }
+}
+comment.save();                       // update posts set updated_at = ? where posts.id = ?
+Model.withoutTouching(Post.class, () -> comment.save());          // this thread only
+
+post.push();                          // the post, then every loaded relation under it
+
+public HasMany<Comment> comments() { return hasMany(Comment.class).chaperone("post"); }
+```
+
+Each aggregate is a subselect in the main query, named `<relation>_<function>_<column>` in snake
+case unless the relation is written `posts as name`. The function is `count`, `max`, `min`, `sum`,
+`avg` or `exists`; `exists` reads as a boolean, the others as the driver returns them. A constraint
+closure may add `where`, `limit`, `offset` and `groupBy`; `select` and `orderBy` in it are
+ignored and other clauses throw. `load*` selects only the key and the aggregates, chunks the keys
+like eager loading, leaves the models clean and skips a model whose row is gone.
+
+A model listed in `touches()` updates each owner's `updated_at` after a save that changed
+something and before a delete: one raw `UPDATE`, no `SELECT`, no events. It then continues into
+owners already loaded on the model, never loading one. Each model is walked once per call. The
+owner object in memory keeps its old `updated_at`.
+
+`push()` saves the model, then each loaded relation in load order, depth first, and returns
+`false` at the first failed save. It sets no foreign key, runs no transaction, and inserts a
+`withDefault` placeholder it finds. Each save runs its own touches.
+
+`chaperone()` sets the parent on every child the relation returns or writes, as the same instance
+and with no query. Without a name it guesses: the foreign key without its key suffix, the parent's
+foreign key, the parent class name, `owner`, then `parent` for a self relation.
+
 ## Limits
 
 - Models are not thread-safe. Share the `ModelQuery`; give each thread its own model instances.
@@ -140,8 +190,27 @@ limits. `has` and
   sides.
 - The default foreign key comes from the class name, which R8 renames on Android; pass keys or
   override `getForeignKey()`.
+- `chaperone()` without a name guesses from class names, which R8 renames; on Android pass the
+  name, as in `chaperone("post")`.
+- `select` after `withCount` replaces the column list and drops the aggregate, as in Laravel; use
+  `addSelect`.
+- An `as` alias needs single spaces (`posts as total`); other spacing is read as a relation name
+  and fails.
+- A touched owner in memory keeps its old `updated_at`; call `refresh()` when you need it.
+- A one-to-many touch updates every child row of the parent, which can be many rows.
+- An owner's `saved()` hook that changes and saves the owner again starts a new touch walk; a hook
+  that does so in a cycle does not end, as in Laravel.
+- `save()` runs no transaction: if a touch `UPDATE` fails, the child row is already written, the
+  model stays dirty and the exception reaches the caller. Use `saveOrFail()` to make the save and
+  its touches one transaction.
+- `withoutTouching` applies to the calling thread only; a thread started inside it touches.
+- `push()` saves the same owner once per touching child that changed, because each save runs its
+  own touch walk.
+- `touchOwners()`, `push()` and `toMap()` recurse once per level of the loaded graph; a very deep
+  self chain can overflow a small thread stack, such as the default on Android.
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md). The decisions are in
 [ADR 0015](../../adr/0015-eloquent-models.md), for casts
-[ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md), and for relations
-[ADR 0017](../../adr/0017-relations.md).
+[ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md), for relations
+[ADR 0017](../../adr/0017-relations.md), and for aggregates, touches, push and chaperone
+[ADR 0018](../../adr/0018-relations-s2.md).

@@ -108,3 +108,54 @@ so that foreign keys are set for me.
 
 Done when: the foreign key is set on every write, and a write from a parent without a key is
 refused before any SQL.
+
+### Counting related rows
+
+As an application developer, I want `withCount("posts")` and the other aggregates, so that I can
+list users with their post totals without loading the posts.
+
+Done when: each aggregate is one subselect with Laravel's alias, an `as` alias and a constraint
+closure work, `withExists` reads as a boolean on every database, and a mistyped relation or
+function fails when the method is called.
+
+### Aggregates on models I already hold
+
+As an application developer, I want `loadCount` and the other `load*` methods, so that I can add a
+total to models already in memory with one query.
+
+Done when: the query selects only the key and the aggregates, the models stay clean, a deleted row
+is skipped, and thousands of string keys are split so SQLite accepts every statement.
+
+### Casts for one instance
+
+As an application developer, I want `mergeCasts` and `withCasts`, so that one model or one query
+can read a column as a type without changing the class for everyone.
+
+Done when: the cast affects only the instance or the query's models, and the class casts and other
+instances are unchanged.
+
+### Touching parents
+
+As an application developer, I want a comment's save to bump its post's `updated_at`, so that the
+post shows when its thread last changed.
+
+Done when: a changed save or a delete costs one `UPDATE` per touched relation and no `SELECT`,
+loaded owners are touched in turn and each once, a cycle ends, and `withoutTouching` on one thread
+never switches touching off on another.
+
+### Saving a loaded graph
+
+As an application developer, I want `post.push()`, so that the post and everything I loaded under
+it are saved in one call.
+
+Done when: the model is saved first, then the loaded relations in order, the first failure stops
+the walk, and a cycle or a shared model is saved once.
+
+### Children that know their parent
+
+As an application developer, I want `chaperone()`, so that a child read through its parent points
+back to it without a query.
+
+Done when: the inverse is guessed or checked at the call, every lazy, eager and write path links
+the same parent instance, and `toJson()` of the linked graph ends.
+

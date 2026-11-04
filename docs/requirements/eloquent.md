@@ -3,14 +3,17 @@
 What models must do, observed from outside. The reasons behind the choices are in
 [ADR 0015](../adr/0015-eloquent-models.md) and
 [ADR 0016](../adr/0016-attributes-casts-and-the-json-codec.md) and
-[ADR 0017](../adr/0017-relations.md); the detailed contract of each type is its Javadoc.
+[ADR 0017](../adr/0017-relations.md) and
+[ADR 0018](../adr/0018-relations-s2.md); the detailed contract of each type is its Javadoc.
 
 ## 1. Problem
 
 Applications read and write rows as maps. Laravel developers expect Eloquent models: a class per
 table with `find`, `save` and `delete`, dirty tracking and mass-assignment protection. They also
 expect casts that read typed values, accessors and mutators, control over what a model serializes,
-a dirty check that knows the cast, and relations between models that load lazily or eagerly.
+a dirty check that knows the cast, and relations between models that load lazily or eagerly,
+with counts and sums of related rows, parents touched when a child changes, a save that walks the
+loaded graph and children that point back to their parent.
 
 ## 2. Goal
 
@@ -91,6 +94,27 @@ builder, without reflection, annotations or build plugins.
 27. A one-to-one or inverse relation can return a default model when nothing is found.
 28. `toMap()` and `toJson()` include loaded relations and stop on cycles.
 29. Lazy loading can be refused for models that came from a multi-row result, process-wide.
+30. A query can add relation aggregates as columns: `withCount`, `withMax`, `withMin`, `withSum`,
+    `withAvg`, `withExists` and `withAggregate`, one subselect per relation, with Laravel's default
+    aliases, an `as` alias, a constraint closure and self relations. The function is one of
+    `count`, `max`, `min`, `sum`, `avg`, `exists`; a nested dot path or an unknown relation is
+    refused when the method is called.
+31. `exists` aggregates read as booleans on every database; the other aggregates keep the type the
+    driver returns.
+32. Models already loaded can get the same aggregates with `loadCount` and the other `load*`
+    methods, on a collection or one model: one query per key chunk, only the key and the aggregates
+    selected, models left clean, and a model whose row is gone or whose key is null skipped.
+33. A model instance can take extra casts (`mergeCasts`) and a query can give extra casts to every
+    model it returns (`withCasts`), without changing the class casts or other instances.
+34. A model can name relations in `touches()`; saving a changed model or deleting it updates the
+    owners' `updated_at` with one `UPDATE` per relation and no `SELECT`, and continues through
+    owners that are already loaded. Touching can be turned off for named classes for one call on
+    the calling thread.
+35. `push()` saves a model and then every loaded relation under it, depth first, and stops at the
+    first save that returns `false`.
+36. A one-to-one or one-to-many relation can set its parent on each child it returns or writes
+    (`chaperone`), guessing the inverse name or taking it, without a query.
+37. Serialization, touching and `push` all stop on cycles in the loaded graph.
 
 ## 4. Non-functional requirements
 
@@ -135,12 +159,33 @@ builder, without reflection, annotations or build plugins.
 | Bound eager key type | Keys passed as read | The parent's Java type is kept (first value seen per key); matching treats `123` and `"123"` alike | PostgreSQL refuses `varchar = bigint` |
 | Internal access holders | None; PHP has no package privacy | Public classes in an `internal` package, not API, must not be called | No reflection and no `module-info` to hide them |
 | `preventLazyLoading` | Per process | Per process, a volatile flag; set once at startup, not from parallel tests | Same scope, but Java tests share one JVM |
+| `touchOwners` | Reads each touched relation, lazy loading an unloaded owner | Updates the owner row always; continues only into owners already loaded | No hidden `SELECT` and no lazy-loading violation from a save |
+| `touchOwners` on a shared owner | Walked again for every child and path | Each model walked once per outermost call; a loaded `belongsTo` owner already walked gets no second `UPDATE` | Fan-out of many children to one owner costs one `UPDATE` |
+| `withoutTouching` | A process-wide static list | Per call, held per thread, restored when the call ends | Another request is never affected |
+| `touches()` names | Not checked | Checked once per class; a bad name or relation type throws `InvalidRelationException` | A typo is found at first use |
+| `loadAggregate` on a deleted row or an empty result | Fatal error | The model is skipped | A normal race must not crash |
+| `loadAggregate` key list | One `in` list of any size | Split as eager keys are | SQLite allows 999 parameters |
+| Aggregate over `posts.comments` | Adds `posts_count`, then fails | `RelationNotFoundException` before anything changes | Clear error, no half-built query |
+| `withAggregate` function | Any text, written into SQL | `count`, `max`, `min`, `sum`, `avg`, `exists` in any case | The text is not quoted |
+| Aggregate constraint closure | Any clause | `where`, `limit`, `offset` and `groupBy` apply; `select` and `orderBy` are ignored; `distinct`, `join`, `having`, `union` and other clauses throw | A clause the subselect cannot keep is not dropped silently |
+| Aggregate or existence query on an aliased `from` (`users as u`) | Correlates on the table name, which the alias hid | Correlates on the alias | Laravel's SQL fails or matches the wrong rows |
+| `push()` on a shared model | Saved again on every path | Saved once per call | Linear in the size of the graph |
+| Inverse on eager loads | Linked twice, first to a blank parent | Linked once, to the matched parent | No wasted work |
 | Clauses chained inside a relation factory | Applied after the constraints the constructor added | Recorded and replayed after the lazy constraints; eager loads apply them to the key query; `has` takes their wheres | Constraints are added by the lazy read paths only |
 
 Kept as Laravel does it, for relations: a one-to-one relation takes the first row in database
 order, a relation loaded as null is not retried by `loadMissing`, an `or` inside an eager
 constraint is not grouped, writes through a relation run without a transaction, and saving a child
 does not set the relation on the parent.
+
+Kept as Laravel does it, for aggregates, touches and `push`: `select` after `withCount` replaces
+the column list and drops the aggregate, while `addSelect` keeps it; a dot in the aggregated column
+is dropped from the default alias (`posts.votes` gives `posts_max_postsvotes`); `as` is an alias
+only between single spaces; `count`, `sum` and the others keep the driver's types; a touched owner
+held in memory keeps its old `updated_at`; touching raises no events on the touched rows; `push()`
+sets no foreign key, runs no transaction and inserts a `withDefault` placeholder it finds among the
+loaded relations; every `save()` inside `push()` runs its own touches, so pushing many touching
+children of one owner updates that owner once per child.
 
 Kept as Laravel does it: decimals compare after rounding to the scale, `int` and `bool` compare by
 cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a value makes
@@ -150,8 +195,9 @@ cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a 
 
 Not covered now, planned later: encrypted and hashed casts, collection and value-object cast
 classes, JSON path writes, cast-aware `increment`, many-to-many and through relations, polymorphic
-relations, relation counts and aggregates (`withCount`), per-parent limits in eager loads, `push`,
-query scopes, soft deletes, model events with a dispatcher and observers, factories.
+relations and their aggregates, touches and inverses, per-parent limits in eager loads,
+`pushQuietly` and `touchQuietly`, query scopes, soft deletes, model events with a dispatcher and
+observers, factories.
 Also out: upsert through a model, read and write connections, annotations.
 
 ## 7. Acceptance criteria
@@ -181,3 +227,13 @@ Also out: upsert through a model, read and write connections, annotations.
     relation; an unknown name lists the known ones.
 17. With lazy loading prevented, a lazy read on a model from a multi-row result throws, and one
     from a single-row result, a new model or an eager load does not.
+18. `withCount` and the other aggregates give Laravel's SQL and aliases on SQLite and PostgreSQL
+    for one-to-one, one-to-many and inverse relations, `withExists` reads as a boolean, and a self
+    relation gives the same SQL on every build.
+19. `loadCount` over 2,000 string keys runs three queries on SQLite and one on PostgreSQL, skips a
+    deleted row and leaves the models clean.
+20. Saving or deleting a child with `touches()` updates its owner with one `UPDATE` and no `SELECT`;
+    a clean or vetoed save touches nothing; `withoutTouching` on one thread does not affect another.
+21. `push()` saves self first, then loaded relations in order, and stops at the first failure.
+22. `chaperone()` links children to the same parent instance with no query, and `toJson()` of the
+    linked graph ends.
