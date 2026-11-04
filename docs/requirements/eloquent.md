@@ -226,7 +226,13 @@ builder, without reflection, annotations or build plugins.
 | Many-to-many default joining class table | The singular of the class name | The snake-case class name, not singular | No singulariser |
 | Many-to-many timestamp column off | `false` for a timestamp argument | An empty string | A string parameter cannot be false |
 | Many-to-many pivot key getters | `getForeignKey` and `getRelatedKey` on the pivot | `getForeignPivotKeyName` and `getRelatedPivotKeyName`; `getForeignKey` is unchanged | `getForeignKey` already gives the `_id` guess |
-| Many-to-many `find` with a model as id | Accepts models and collections of models | Ids and id collections only | Model-to-key parsing comes with pivot writes |
+| Many-to-many `detach` or `updateExistingPivot` after `or` pivot wheres | Replays the wheres flat, so an `or` can reach other parents' rows | Replays them in declared order in one nested group, then the parent key | A detach must not delete another parent's rows |
+| Many-to-many `updateExistingPivot` with a custom pivot class and several ids | Updates only the first pivot | Updates the pivot of every id and returns the count that changed | Silent partial update |
+| Many-to-many `toggle` result | `attached` holds the ids as given | A `SyncResult` with the ids cast to the related key type and an empty `updated` | Same key type as `sync` |
+| Many-to-many `sync` of new ids | One attach call per new id | One batched insert for all new ids | Fewer statements, same rows |
+| Many-to-many attach, detach, update and touch with long lists | Unbounded statements | At most 900 caller values per statement; several statements run in one transaction | SQLite on Android API 28 binds 999 values |
+| Many-to-many `save`, `create` and the find-or-create family | Saves the related row, then attaches, with no transaction | Both steps in one transaction | A failed attach must not leave an unlinked row |
+| Many-to-many `touches()` on a relation built by a direct method call | Matches the guessed relation name | Matches the entry that names the same join | A direct call has no relation name |
 | Many-to-many `cursorPaginate` by a joining column | Undefined | Refused with a clear error | The cursor reads values from the row |
 
 Kept as Laravel does it, for relations: a one-to-one relation takes the first row in database
@@ -257,8 +263,7 @@ cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a 
 ## 6. Scope and non-goals
 
 Not covered now, planned later: encrypted and hashed casts, collection and value-object cast
-classes, JSON path writes, cast-aware `increment`, many-to-many writes (`attach`, `detach`, `sync`,
-`toggle` and the find-or-create family through the relation), a closure form of `wherePivot`,
+classes, JSON path writes, cast-aware `increment`, a closure form of `wherePivot`,
 through relations, polymorphic relations and their aggregates, touches and inverses, per-parent
 limits in eager loads,
 `pushQuietly` and `touchQuietly`, query scopes, soft deletes, model events with a dispatcher and

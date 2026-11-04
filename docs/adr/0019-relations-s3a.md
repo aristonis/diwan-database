@@ -65,7 +65,8 @@ renames simple class names, which makes the default table and key names unstable
 7. A joining row with no primary key value refuses `update`, `delete`, `increment`, `decrement`,
    `refresh` and `fresh` with an `IllegalStateException` that names the class and the table. The
    refusal comes before any statement, because a statement would filter on a key the joining table
-   may not have. This holds until pivot writes are added.
+   may not have. [ADR 0020](0020-relations-s3b.md) adds the key-less save and delete, so the refusal
+   stays only for `increment`, `decrement`, `refresh` and `fresh`.
 
 8. On a registry miss, the one `Class.forName` in the module loads the class by its own name,
    through its own class loader, and the lookup runs once more. A class literal does not run the
@@ -100,7 +101,7 @@ renames simple class names, which makes the default table and key names unstable
   declares, so they cannot widen the parent match. A caller groups its own chain with the relation's
   `where(Consumer)` method. The behaviour page shows the form. - Writes through the relation
   (attach, detach, sync, the find-or-create family, and touches through a joining table) are not
-  part of this read side. - A related column whose name starts with `pivot_` moves into the joining
+  part of this read side; [ADR 0020](0020-relations-s3b.md) covers them. - A related column whose name starts with `pivot_` moves into the joining
   row, so such a column must be renamed. - Hydration does not cast values. A cast applies when a
   joining value is read. - A relation instance is single-use and single-threaded, as for the other
   kinds. The read side keeps no static mutable state.

@@ -742,9 +742,9 @@ owner `UPDATE` per touching child. Wrap bulk imports in `withoutTouching`.
 
 Many-to-many relations read through a joining table with `belongsToMany`; each related row carries
 its joining row as `pivot`. Index the joining table on a unique (`user_id`, `role_id`) and on
-`role_id`. Attach, detach and sync are not available yet. Behavior and limits:
+`role_id`. `attach`, `detach`, `sync` and `toggle` write it. Behavior and limits:
 [docs/behavior/eloquent](docs/behavior/eloquent/README.md); decisions:
-[ADR 0019](docs/adr/0019-relations-s3a.md).
+[ADR 0019](docs/adr/0019-relations-s3a.md), [ADR 0020](docs/adr/0020-relations-s3b.md).
 
 ### Migrations
 

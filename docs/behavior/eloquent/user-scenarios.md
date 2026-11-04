@@ -51,6 +51,10 @@ With many-to-many relations:
 5. They add `withCount("roles")` and `withSum("roles", "role_user.weight")` to the user list; one
    query.
 6. They send `toJson()` of a role; its joining row appears under `pivot`.
+7. They give a user roles with `attach(role)` or `sync(List.of(1, 2))`; `sync` returns what was
+   attached, detached and updated, in one transaction.
+8. They save a new role through `user.roles().save(role)`; the role row and its link are written
+   together, and a failed link leaves no role row behind.
 
 ## Edge cases
 
@@ -210,5 +214,17 @@ With many-to-many relations:
 | E152 | Chaperone that finds only one side, or neither | The side found is linked; the other stays quiet, with no error | `PivotChaperoneTest#oneSideOnly`, `PivotChaperoneTest#noneFoundQuiet` |
 | E153 | Chaperoned read, lazy or eager | Each joining row points at its own parent instance; no extra query | `PivotChaperoneTest#lazyLinks`, `PivotChaperoneTest#eagerLinksRealParent`, `PivotChaperoneTest#noExtraQueries` |
 | E154 | `toJson()` of a chaperoned graph | Ends; the repeated model has attributes only | `PivotChaperoneTest#serializationEnds`, `BelongsToManySerializationTest#chaperoneEnds` |
-| E155 | `update`, `delete`, `refresh` on a joining row with no key | `IllegalStateException` before any statement; a clean save of such a row runs no update | `PivotModelTest#updateWithoutKeyThrows`, `PivotModelTest#deleteWithoutKeyThrows`, `PivotModelTest#refreshWithoutKeyThrows`, `PivotModelTest#cleanKeylessSaveRunsNoUpdate` |
+| E155 | `update` or `delete` on a joining row with no key and no pivot keys; `increment`, `refresh` on one with no primary key | `IllegalStateException` before any statement; a clean save of such a row runs no update | `PivotModelTest#updateWithoutKeyThrows`, `PivotModelTest#deleteWithoutKeyThrows`, `PivotModelTest#refreshWithoutKeyThrows`, `PivotModelTest#cleanKeylessSaveRunsNoUpdate` |
 | E156 | `Pivot.of(role)` when no joining row is loaded, or `Pivot.of(null)` | `null`; a null argument throws `NullPointerException` | `PivotModelTest#ofNullWhenNonPivotLoadedUnderPivotName`, `PivotModelTest#ofNull` |
+| E157 | `update` or `delete` on a key-less joining row that has pivot keys | Writes or removes the row filtered by both keys, using their original values | `PivotModelTest#updateWithPivotKeysWritesCompositeRow`, `CustomPivotKeysTest#deleteUsesBothPivotKeys` |
+| E158 | `attach` of ids, a model or a map of id to attributes | One row per id with the keys, the shared attributes, the declared pivot values and the timestamps; no ids run no query | `BelongsToManyAttachTest#attachWritesKeysAttributesAndTimestamps`, `BelongsToManyAttachTest#attachWithNoIdsRunsNoQuery` |
+| E159 | `attach` of more rows than one statement may bind | Several inserts in one transaction; one failure rolls back all | `BelongsToManyAttachTest#attachSplitsInsertByBindingBudget`, `BelongsToManyAttachTest#attachRollsBackAllChunksWhenOneFails` |
+| E160 | `detach` after `wherePivot` calls joined with `or` | Only the parent's rows that match the nested group are removed | `BelongsToManyDetachTest#detachNestsOrPivotWheresBeforeParentKey` |
+| E161 | `sync` of a list with new, kept and missing ids | One read, one delete, one batched insert; ids `"1"` and `1` are the same link | `BelongsToManySyncTest#syncAttachesNewIdsInOneInsert`, `BelongsToManySyncTest#syncComparesStringAndIntegerKeysAsEqual` |
+| E162 | `sync` where the insert fails | The detaches roll back with it | `BelongsToManySyncTest#syncRollsBackWhenAttachFails` |
+| E163 | `toggle` of linked and unlinked ids | Linked ones detached, others attached; `updated` is empty and the ids are cast | `BelongsToManyToggleTest#toggleFlipsLinkedAndUnlinkedIds`, `BelongsToManyToggleTest#toggleResultKeysAreCast` |
+| E164 | `updateExistingPivot` with a custom pivot class and several ids | Each pivot is updated; only changed ones are counted | `BelongsToManyCustomPivotTest#updateWithSeveralIdsUpdatesEachPivot` |
+| E165 | `create` or `save` through the relation when the link cannot be written | The related row is rolled back too | `BelongsToManyRelatedWritesTest#createAttachFailureLeavesNoOrphanRelatedRow`, `BelongsToManyRelatedWritesTest#createManyRollsBackAllRecordsOnFailure` |
+| E166 | `firstOrCreate` where a racing attach hits the unique index | The violation is absorbed when the link exists, rethrown when it does not | `BelongsToManyRelatedWritesTest#firstOrCreateSwallowsRacingAttachViolation`, `BelongsToManyRelatedWritesTest#firstOrCreateRethrowsViolationWhenLinkIsAbsent` |
+| E167 | A write with `touch` off, a change of nothing, or a differently named inverse | No owner is touched | `BelongsToManyTouchTest#attachWithTouchOffTouchesNothing`, `BelongsToManyTouchTest#syncWithNoChangeDoesNotTouch`, `BelongsToManyTouchTest#differentlyNamedInverseDoesNotTouchParent` |
+| E168 | A touch that fails after a write | The link change stays committed | `BelongsToManyTouchTest#touchFailureLeavesLinkChangesCommitted` |

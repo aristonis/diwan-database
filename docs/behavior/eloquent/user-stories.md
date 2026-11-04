@@ -239,11 +239,21 @@ clients get the link data with the role.
 Done when: the joining row appears under `pivot` or its `as` name, `hidden` can remove it, and a
 cycle through the chaperone ends.
 
-### A joining row that cannot be written yet
+### Writing a many-to-many
 
-As an application developer, I want a joining row without a primary key to refuse updates and
-deletes, so that a save never reaches the wrong row.
+As an application developer, I want to link, unlink and sync related rows through the relation, so
+that I do not write the joining-table statements myself.
 
-Done when: `update`, `delete`, `increment`, `decrement`, `refresh` and `fresh` refuse before any
-statement runs. `attach`, `detach` and `sync` are not available yet.
+Done when: `attach`, `detach`, `updateExistingPivot`, `sync`, `toggle`, `save`, `create` and the
+find-or-create family write through the joining table, take ids or models, and return what Laravel
+returns (`sync` and `toggle` a `SyncResult`). A call that needs several statements applies fully or
+not at all. The owners' `updated_at` is touched after a change when `touches()` lists them.
 
+### A joining row that cannot be written without a key
+
+As an application developer, I want a joining row with neither a primary key nor pivot keys to
+refuse updates and deletes, so that a save never reaches the wrong row.
+
+Done when: such a row refuses `update` and `delete` before any statement runs. A row with pivot
+keys, which the relation sets, saves and deletes by them. `increment`, `decrement`, `refresh` and
+`fresh` refuse a row with no primary key.
