@@ -124,9 +124,20 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * @return the models, never {@code null}
      */
     public final ModelCollection<R> get() {
-        ModelCollection<R> results = constrainedQuery().get();
+        ModelCollection<R> results = readQuery().get();
         linkResults(results);
         return results;
+    }
+
+    /**
+     * The query {@code get()} runs; the constrained query itself by default. A relation kind such
+     * as {@code BelongsToMany} overrides this to add select columns and a per-row hydrator without
+     * touching the relation's own query instance.
+     *
+     * @return the query {@code get()} runs, never {@code null}
+     */
+    EloquentBuilder<R> readQuery() {
+        return constrainedQuery();
     }
 
     /**
@@ -425,7 +436,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
             // The probe captured these loads; running them inside get() would load them per chunk.
             eager = access.withoutEagerLoads(eager);
             refuseLimit(eager);
-            ensureMatchColumn(eager);
+            completeEagerQuery(eager);
             results.addAll(eager.get());
         }
         return results;
@@ -437,6 +448,17 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
                     + parent.getClass().getName() + "] sets a limit or an offset; that would cut the results of"
                     + " every parent together, not per parent");
         }
+    }
+
+    /**
+     * Completes an eager chunk query after the constraint ran; adds the match column by default.
+     * A relation kind such as {@code BelongsToMany} overrides this to add its pivot columns and
+     * its per-row hydrator instead of the plain match column.
+     *
+     * @param eager the eager chunk query, never {@code null}
+     */
+    void completeEagerQuery(EloquentBuilder<R> eager) {
+        ensureMatchColumn(eager);
     }
 
     private void ensureMatchColumn(EloquentBuilder<R> eager) {
@@ -550,7 +572,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
         Objects.requireNonNull(column, "column");
         String from = parentQuery.toBase().getFrom();
         if (from == null || column.indexOf('.') >= 0) {
-            // A subquery or raw outer from has no name to read; keep the model table, as before.
+            // A subquery or raw outer from has no name to read; keep the model table.
             return getParent().qualifyColumn(column);
         }
         int as = from.toLowerCase(Locale.ROOT).lastIndexOf(" as ");

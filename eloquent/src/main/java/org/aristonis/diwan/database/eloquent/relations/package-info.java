@@ -31,5 +31,11 @@
  * those stay in {@code org.aristonis.diwan.database.eloquent}. The cycle between the two packages
  * is accepted, as it is for casts. Neither package reaches the other's package-private members
  * except through {@code org.aristonis.diwan.database.eloquent.internal}, which is not API.
+ *
+ * <p>{@link org.aristonis.diwan.database.eloquent.relations.BelongsToMany} is the many-to-many
+ * kind, alongside {@code hasOne}, {@code hasMany} and {@code belongsTo}. Its read side covers
+ * lazy, eager and existence queries, relation aggregates, finders, iteration and pages, and the
+ * pivot configuration with the {@code wherePivot} family. Each related row carries its joining
+ * row as a {@link org.aristonis.diwan.database.eloquent.relations.Pivot}, a model of its own.
  */
 package org.aristonis.diwan.database.eloquent.relations;

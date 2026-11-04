@@ -14,6 +14,7 @@ import org.aristonis.diwan.database.eloquent.relations.BelongsTo;
 import org.aristonis.diwan.database.eloquent.relations.HasMany;
 import org.aristonis.diwan.database.eloquent.relations.HasOne;
 import org.aristonis.diwan.database.eloquent.relations.LazyLoadingViolationException;
+import org.aristonis.diwan.database.eloquent.relations.Pivot;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
 import org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException;
 import org.aristonis.diwan.database.support.Inflector;
@@ -209,12 +210,19 @@ abstract class ModelRelations extends ModelSerialization {
         return new BelongsTo<>(query, self(), foreignKey, owner, relation);
     }
 
-    private <R extends Model> EloquentBuilder<R> newRelatedQuery(Class<R> related) {
+    /**
+     * Builds an unconstrained query on a related class, loading its registry entry when the class
+     * has not been initialised yet.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @return a new query on the related class, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws UnregisteredModelException if the class has no entry after it is loaded
+     */
+    final <R extends Model> EloquentBuilder<R> newRelatedQuery(Class<R> related) {
         Objects.requireNonNull(related, "related");
-        ModelQuery<?> found = ModelQuery.registered(related);
-        if (found == null) {
-            throw new UnregisteredModelException(related);
-        }
+        ModelQuery<?> found = ModelQuery.registeredOrLoad(related);
         // Safe: the registry keys each entry by its own model class.
         @SuppressWarnings("unchecked")
         ModelQuery<R> entry = (ModelQuery<R>) found;
@@ -545,11 +553,18 @@ abstract class ModelRelations extends ModelSerialization {
     }
 
     final Model reloadLoadedRelations() {
-        if (loadedRelations.isEmpty()) {
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<String, Object> loaded : loadedRelations.entrySet()) {
+            // A pivot comes from its parent's join, not from the relation map, so a reload leaves it.
+            if (!(loaded.getValue() instanceof Pivot)) {
+                names.add(loaded.getKey());
+            }
+        }
+        if (names.isEmpty()) {
             return self();
         }
         // Laravel's refresh(): load(the loaded names), which replaces each loaded value.
-        return load(loadedRelations.keySet().toArray(new String[0]));
+        return load(names.toArray(new String[0]));
     }
 
     private void checkRelationValue(String name, Object value) {

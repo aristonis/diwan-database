@@ -63,7 +63,7 @@ final class RelationExistence {
         EloquentBuilder<?> sub = resolved.existenceQuery(outer, aliases);
         Access.eloquent().shareAliases(outer, sub);
         if (constraint != null) {
-            sub.whereGroup(constraint);
+            constrain(sub, relation, constraint);
         }
         if (isExistsCheck(operator, count)) {
             Builder exists = sub.toBase();
@@ -95,6 +95,20 @@ final class RelationExistence {
         String relatedFrom = related.toBase().getFrom();
         String parentFrom = parent.toBase().getFrom();
         return relatedFrom != null && parentFrom != null && table(relatedFrom).equals(table(parentFrom));
+    }
+
+    // The group only merges wheres back into the subquery, so a join added inside it would be
+    // dropped without a word; it is refused instead.
+    private static void constrain(EloquentBuilder<?> sub, String relation, Consumer<EloquentBuilder<?>> constraint) {
+        Builder[] group = new Builder[1];
+        sub.whereGroup(q -> {
+            constraint.accept(q);
+            group[0] = q.toBase();
+        });
+        if (group[0] != null && !group[0].getJoins().isEmpty()) {
+            throw new IllegalStateException("The constraint of relation [" + relation
+                    + "] adds a join; an existence constraint supports only where clauses");
+        }
     }
 
     private static String table(String from) {

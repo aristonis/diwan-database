@@ -22,7 +22,7 @@ import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.junit.jupiter.api.Test;
 
-/** Guards the layer chain: a model without casts behaves as before, and the files stay small. */
+/** Guards the layer chain: a model without casts keeps its plain attribute behaviour, and the files stay small. */
 class LayerGuardTest {
 
     private static final int MAX_LINES = 800;
@@ -81,7 +81,8 @@ class LayerGuardTest {
     @Test
     void relationLayerSitsBetweenSerializationAndGuards() {
         assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
-        assertSame(ModelRelations.class, ModelRelationActions.class.getSuperclass());
+        assertSame(ModelRelations.class, ModelManyRelations.class.getSuperclass());
+        assertSame(ModelManyRelations.class, ModelRelationActions.class.getSuperclass());
         assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
         assertSame(ModelGuards.class, Model.class.getSuperclass());
     }

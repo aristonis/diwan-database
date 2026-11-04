@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -494,6 +495,29 @@ abstract class ModelAttributes extends ModelConfig {
      * @param key the attribute written
      */
     void rawWritten(String key) {
+    }
+
+    /**
+     * Removes every attribute whose key starts with {@code prefix} from the current values only,
+     * leaving the originals untouched, and returns them with the prefix stripped from each key.
+     * A removed key is no longer dirty, written or serialised, and {@code discardChanges()}
+     * restores it.
+     *
+     * @param prefix the prefix to match, never {@code null}
+     * @return the removed attributes in stored order, prefix stripped, never {@code null}
+     */
+    final Map<String, Object> takeAttributesWithPrefix(String prefix) {
+        Map<String, Object> taken = new LinkedHashMap<>();
+        Iterator<Map.Entry<String, Object>> it = attributes.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, Object> entry = it.next();
+            if (entry.getKey().startsWith(prefix)) {
+                taken.put(entry.getKey().substring(prefix.length()), entry.getValue());
+                it.remove();
+                rawWritten(entry.getKey());
+            }
+        }
+        return taken;
     }
 
     /** Called after the stored values are replaced as a whole; does nothing in this layer. */

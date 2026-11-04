@@ -22,8 +22,18 @@ public final class UnregisteredModelException extends IllegalStateException {
      * @param modelClass the class with no entry, never {@code null}
      */
     public UnregisteredModelException(Class<?> modelClass) {
+        this(modelClass, null);
+    }
+
+    /**
+     * Creates the exception for a model class, with the class-load error as the cause.
+     *
+     * @param modelClass the class with no entry, never {@code null}
+     * @param cause the error that stopped the class from being found or linked, or {@code null}
+     */
+    public UnregisteredModelException(Class<?> modelClass, Throwable cause) {
         super("Model [" + Objects.requireNonNull(modelClass, "modelClass").getName()
-                + "] has no ModelQuery.of(...) entry to create instances with");
+                + "] has no ModelQuery.of(...) entry to create instances with", cause);
         this.modelClassName = modelClass.getName();
     }
 

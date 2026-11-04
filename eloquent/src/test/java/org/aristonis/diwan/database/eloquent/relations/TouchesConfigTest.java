@@ -285,12 +285,8 @@ class TouchesConfigTest {
 
     /** Registered only by {@link #register()}, so its entry is missing until then. */
     static final class Late extends Model {
-        static final ModelQuery<Late> QUERY = ModelQuery.of(Late.class, Late::new);
-
         static void register() {
-            if (QUERY == null) {
-                throw new IllegalStateException("Late entry not initialised");
-            }
+            ModelQuery.of(Late.class, Late::new);
         }
     }
 

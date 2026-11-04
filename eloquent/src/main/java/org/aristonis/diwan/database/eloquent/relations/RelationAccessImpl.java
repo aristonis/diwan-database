@@ -64,4 +64,12 @@ final class RelationAccessImpl implements RelationAccess {
         Objects.requireNonNull(name, "name");
         return RelationRegistry.of(model).resolve(name, model);
     }
+
+    @Override
+    public <R extends Model> BelongsToMany<R> newBelongsToMany(EloquentBuilder<R> query, Model parent,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey,
+            String relatedKey, String relation) {
+        return new BelongsToMany<>(query, parent, table, foreignPivotKey, relatedPivotKey,
+                parentKey, relatedKey, relation);
+    }
 }

@@ -1,7 +1,9 @@
 package org.aristonis.diwan.database.android;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
@@ -13,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
@@ -21,8 +24,10 @@ import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.relations.BelongsTo;
+import org.aristonis.diwan.database.eloquent.relations.BelongsToMany;
 import org.aristonis.diwan.database.eloquent.relations.HasMany;
 import org.aristonis.diwan.database.eloquent.relations.HasOne;
+import org.aristonis.diwan.database.eloquent.relations.Pivot;
 import org.aristonis.diwan.database.eloquent.relations.RelationMap;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
@@ -46,6 +51,7 @@ public class AndroidRelationsTest {
     private static final int COUNTRIES = 2_000;
     private static final int VARIABLE_LIMIT = 999;
     private static final List<String> SELECTS = Arrays.asList("select", "selectOne", "scalar", "cursor");
+    private static final int STUDENTS = 2_000;
 
     /** A country keyed by its text code; has many cities. */
     public static final class Country extends Model {
@@ -193,6 +199,61 @@ public class AndroidRelationsTest {
 
         public BelongsTo<Folder> folder() {
             return belongsTo(Folder.class, "folder_id");
+        }
+    }
+
+    /** A student keyed by a text code; has many courses through the student_course pivot. */
+    public static final class Student extends Model {
+        static final ModelQuery<Student> QUERY = ModelQuery.of(Student.class, Student::new);
+
+        @Override
+        protected String table() {
+            return "students";
+        }
+
+        @Override
+        protected String primaryKey() {
+            return "code";
+        }
+
+        @Override
+        protected String keyType() {
+            return "string";
+        }
+
+        @Override
+        protected boolean incrementing() {
+            return false;
+        }
+
+        @Override
+        protected boolean timestamps() {
+            return false;
+        }
+
+        @Override
+        protected RelationMap<?> relations() {
+            return RelationMap.of(Student.class).add("courses", Student::courses);
+        }
+
+        public BelongsToMany<Course> courses() {
+            return belongsToMany(Course.class, "student_course", "student_code", "course_id", "code", "id")
+                    .withPivot("status");
+        }
+    }
+
+    /** A course; reached from a student through the student_course pivot. */
+    public static final class Course extends Model {
+        static final ModelQuery<Course> QUERY = ModelQuery.of(Course.class, Course::new);
+
+        @Override
+        protected String table() {
+            return "courses";
+        }
+
+        @Override
+        protected boolean timestamps() {
+            return false;
         }
     }
 
@@ -467,5 +528,121 @@ public class AndroidRelationsTest {
         assertTrue(note.save());
 
         assertEquals(OLD, String.valueOf(Folder.QUERY.on(db).findOrFail(1).getAttribute("updated_at")));
+    }
+
+    private void createCourseSchema() {
+        Schema schema = SQLiteSchema.of(real);
+        schema.create("students", t -> {
+            t.string("code").primary();
+            t.string("name");
+        });
+        schema.create("courses", t -> {
+            t.id();
+            t.string("title");
+        });
+        schema.create("student_course", t -> {
+            t.string("student_code");
+            t.integer("course_id");
+            t.string("status");
+        });
+    }
+
+    /** Ann takes course 1 ("active") and course 2 ("pending"). */
+    private void seedAnnWithTwoCourses() {
+        real.statement("insert into students (code, name) values ('ann', 'Ann')");
+        real.statement("insert into courses (id, title) values (1, 'Math'), (2, 'Art')");
+        real.statement("insert into student_course (student_code, course_id, status) "
+                + "values ('ann', 1, 'active'), ('ann', 2, 'pending')");
+    }
+
+    /** Student "c1" to "c2000", each taking the course with the same number, status "active". */
+    private void seedStudentsWithOneCourseEach() {
+        real.statement("insert into students (code, name) with recursive s(n) as "
+                + "(select 1 union all select n + 1 from s where n < " + STUDENTS + ") "
+                + "select 'c' || n, 'name' from s");
+        real.statement("insert into courses (id, title) with recursive s(n) as "
+                + "(select 1 union all select n + 1 from s where n < " + STUDENTS + ") "
+                + "select n, 'title' from s");
+        real.statement("insert into student_course (student_code, course_id, status) with recursive s(n) as "
+                + "(select 1 union all select n + 1 from s where n < " + STUDENTS + ") "
+                + "select 'c' || n, n, 'active' from s");
+    }
+
+    /** On Android: a lazy belongsToMany read moves pivot_* into the pivot and leaves the course clean. */
+    @Test
+    public void belongsToManyLazyHydratesPivot() {
+        createCourseSchema();
+        real.statement("insert into students (code, name) values ('ann', 'Ann')");
+        real.statement("insert into courses (id, title) values (1, 'Math')");
+        real.statement("insert into student_course (student_code, course_id, status) values ('ann', 1, 'active')");
+        Student ann = Student.QUERY.on(db).findOrFail("ann");
+        clearLog();
+
+        ModelCollection<Course> courses = ann.relatedMany("courses");
+
+        assertEquals(1, sql.size());
+        assertEquals(1, courses.size());
+        Course math = courses.get(0);
+        Pivot pivot = Pivot.of(math);
+        assertNotNull(pivot);
+        assertEquals("student_course", pivot.getTable());
+        assertTrue(pivot.exists());
+        assertEquals("active", pivot.getAttribute("status"));
+        assertEquals("ann", pivot.getAttribute("student_code"));
+        assertEquals(1L, pivot.getAttribute("course_id"));
+        assertFalse(math.hasAttribute("pivot_status"));
+        assertFalse(math.isDirty());
+    }
+
+    /** On Android: 2,000 string parent keys eager-load in 900, 900 and 200 bound keys. */
+    @Test
+    public void belongsToManyEagerLoadsTwoThousandStringKeys() {
+        createCourseSchema();
+        seedStudentsWithOneCourseEach();
+        ModelCollection<Student> students = Student.QUERY.on(db).query().get();
+        clearLog();
+
+        students.load("courses");
+
+        assertEquals(3, sql.size());
+        assertEquals(Arrays.asList(900, 900, 200), bindingCounts);
+        assertEquals(STUDENTS, students.size());
+        for (Student student : students) {
+            ModelCollection<Course> courses = student.relatedMany("courses");
+            assertEquals(1, courses.size());
+            assertEquals(student.getKey(), Pivot.of(courses.get(0)).getAttribute("student_code"));
+        }
+    }
+
+    /** On Android: withCount over a belongsToMany runs as a correlated subselect on API 28 SQLite. */
+    @Test
+    public void belongsToManyWithCountOnApi28() {
+        createCourseSchema();
+        seedAnnWithTwoCourses();
+        clearLog();
+
+        Student ann = Student.QUERY.on(db).query().withCount("courses").findOrFail("ann");
+
+        assertEquals(2, ((Number) ann.getAttribute("courses_count")).intValue());
+        assertEquals(1, sql.size());
+        assertTrue(sql.get(0).contains("(select count(*) from \"courses\" inner join \"student_course\""));
+    }
+
+    /** On Android: find and first on a belongsToMany relation return courses that carry their pivot. */
+    @Test
+    public void belongsToManyFindAndFirstCarryPivot() {
+        createCourseSchema();
+        seedAnnWithTwoCourses();
+        Student ann = Student.QUERY.on(db).findOrFail("ann");
+
+        Optional<Course> art = ann.courses().find(2);
+        Optional<Course> earliest = ann.courses().orderByPivot("status").first();
+
+        assertTrue(art.isPresent());
+        assertEquals("pending", Pivot.of(art.get()).getAttribute("status"));
+        assertEquals("ann", Pivot.of(art.get()).getAttribute("student_code"));
+        assertTrue(earliest.isPresent());
+        assertEquals("active", Pivot.of(earliest.get()).getAttribute("status"));
+        assertEquals(1L, Pivot.of(earliest.get()).getAttribute("course_id"));
     }
 }

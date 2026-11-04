@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
+import org.aristonis.diwan.database.eloquent.relations.BelongsToMany;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
 
 /**
@@ -147,4 +148,22 @@ public interface RelationAccess {
      *     model class's relation map fails its check
      */
     Relation<?, ?> resolve(Model model, String name);
+
+    /**
+     * Builds a {@code BelongsToMany} for the model layer; called by {@code belongsToMany(...)}
+     * factories. All arguments are already resolved; none is {@code null} except {@code relation}.
+     *
+     * @param <R> the related model class
+     * @param query the relation's unconstrained query, never {@code null}
+     * @param parent the owning model, never {@code null}
+     * @param table the pivot table, never {@code null}
+     * @param foreignPivotKey the pivot's parent key column, never {@code null}
+     * @param relatedPivotKey the pivot's related key column, never {@code null}
+     * @param parentKey the parent's key column, never {@code null}
+     * @param relatedKey the related model's key column, never {@code null}
+     * @param relation the relation's name, or {@code null} to take it from the model's map
+     * @return the new relation, never {@code null}
+     */
+    <R extends Model> BelongsToMany<R> newBelongsToMany(EloquentBuilder<R> query, Model parent, String table,
+            String foreignPivotKey, String relatedPivotKey, String parentKey, String relatedKey, String relation);
 }

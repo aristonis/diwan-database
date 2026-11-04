@@ -77,6 +77,48 @@ final class InverseRelations {
     }
 
     /**
+     * Returns the given pivot relation name when the pivot class declares it.
+     *
+     * @param sample an instance of the pivot class, never {@code null}
+     * @param name the relation name, never {@code null}
+     * @return the name, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws RelationNotFoundException if the pivot class declares no relation of that name
+     */
+    static String checkPivot(Model sample, String name) {
+        Objects.requireNonNull(name, "name");
+        List<String> known = declaredNames(sample);
+        if (!known.contains(name)) {
+            throw new RelationNotFoundException(sample.getClass(), name, known);
+        }
+        return name;
+    }
+
+    /**
+     * Returns the first guessed relation name the pivot class declares, or {@code null} when none
+     * matches.
+     *
+     * <p>A miss is quiet: the caller decides whether a missing inverse is an error.
+     *
+     * @param sample an instance of the pivot class, never {@code null}
+     * @param key the pivot's key column, such as {@code user_id}, never {@code null}
+     * @param model the model the key points to, never {@code null}
+     * @return the name, or {@code null} when no candidate is declared
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    static String guessPivot(Model sample, String key, Model model) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(model, "model");
+        List<String> known = declaredNames(sample);
+        for (String candidate : pivotCandidates(key, model)) {
+            if (known.contains(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns the guessing candidates in order, Laravel's {@code getPossibleInverseRelations}.
      *
      * @param relation the relation the inverse is set on, never {@code null}
@@ -163,5 +205,21 @@ final class InverseRelations {
     // while it is still being built and never finish. Laravel's isRelation checks the name only.
     private static List<String> knownNames(HasOneOrMany<?, ?> relation) {
         return Access.eloquent().relationMap(relation.getRelated()).names();
+    }
+
+    // The pivot's declared names, read the same way as knownNames: no factory runs, so resolving
+    // a chaperone cannot re-enter the registry while a relation map is still being built.
+    private static List<String> declaredNames(Model sample) {
+        return Access.eloquent().relationMap(Objects.requireNonNull(sample, "sample")).names();
+    }
+
+    // Laravel's guess order for a pivot key: the key without its model's key name, then the
+    // model's class name; empty and repeated names are dropped.
+    private static List<String> pivotCandidates(String key, Model model) {
+        Set<String> names = new LinkedHashSet<>();
+        names.add(camel(beforeLast(key, model.getKeyName())));
+        names.add(camel(model.getClass().getSimpleName()));
+        names.remove("");
+        return new ArrayList<>(names);
     }
 }

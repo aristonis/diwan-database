@@ -239,6 +239,17 @@ class RelationExistenceTest {
     }
 
     @Test
+    void closureJoinRefusedOnHasMany() {
+        db.clearLog();
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> users().whereHas("posts", q -> q.join("comments", "comments.post_id", "=", "posts.id")));
+
+        assertTrue(e.getMessage().contains("posts"), e.getMessage());
+        assertEquals(Collections.emptyList(), db.sql());
+    }
+
+    @Test
     void whereRelationForms() {
         EloquentBuilder<User> query = users().whereRelation("posts", "title", "like", "%x%");
         String or = users().where("name", "Ann").orWhereRelation("posts", "title", "a").toSql();

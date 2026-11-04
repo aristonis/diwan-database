@@ -121,6 +121,34 @@ final class EloquentAccessImpl implements EloquentAccess {
         return Objects.requireNonNull(builder, "builder").castsToMerge();
     }
 
+    @Override
+    public <T extends Model> void useRowHook(EloquentBuilder<T> builder, Consumer<? super T> hook) {
+        Objects.requireNonNull(builder, "builder").useRowHook(hook);
+    }
+
+    @Override
+    public Map<String, Object> takeAttributes(Model model, String prefix) {
+        Objects.requireNonNull(prefix, "prefix");
+        return Objects.requireNonNull(model, "model").takeAttributesWithPrefix(prefix);
+    }
+
+    @Override
+    public void markExisting(Model model) {
+        Objects.requireNonNull(model, "model").markExisting();
+    }
+
+    @Override
+    public <M extends Model> M newRegistered(Class<M> type, Model connectionOf) {
+        ModelQuery<?> entry = ModelQuery.registeredOrLoad(Objects.requireNonNull(type, "type"));
+        Model model = entry.newModel();
+        // Laravel's newRelatedInstance: a model with no connection of its own runs on the parent's.
+        // A registered entry is never bound, so its connection name decides.
+        if (!model.isBound() && model.getConnectionName() == null && connectionOf != null && connectionOf.isBound()) {
+            model = entry.on(connectionOf.getQueryFactory()).newModel();
+        }
+        return type.cast(model);
+    }
+
     private static ModelQuery<?> entryOf(Model model) {
         Class<?> type = Objects.requireNonNull(model, "model").getClass();
         ModelQuery<?> entry = ModelQuery.registered(type);

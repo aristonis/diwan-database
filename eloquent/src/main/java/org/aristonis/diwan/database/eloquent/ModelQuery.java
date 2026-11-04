@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.internal.Access;
+import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
 import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
@@ -116,6 +117,38 @@ public final class ModelQuery<T extends Model> {
 
     static ModelQuery<?> registered(Class<?> type) {
         return REGISTRY.get(type);
+    }
+
+    /**
+     * Returns the entry of a model class, loading the class once when no entry is registered yet.
+     *
+     * <p>A class literal does not run the static initialiser that registers the entry, so a class
+     * named only by its literal can miss the registry until something initialises it. On a miss this
+     * initialises the class by its own name and reads the registry again. It is the only class
+     * loading in the module.
+     *
+     * @param type the model class, never {@code null}
+     * @return the entry, never {@code null}
+     * @throws NullPointerException if {@code type} is {@code null}
+     * @throws UnregisteredModelException if the class still has no entry after loading, or cannot be
+     *     loaded or linked; the load error is the cause
+     */
+    static ModelQuery<?> registeredOrLoad(Class<?> type) {
+        Objects.requireNonNull(type, "type");
+        ModelQuery<?> found = registered(type);
+        if (found != null) {
+            return found;
+        }
+        try {
+            Class.forName(type.getName(), true, type.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new UnregisteredModelException(type, e);
+        }
+        found = registered(type);
+        if (found == null) {
+            throw new UnregisteredModelException(type);
+        }
+        return found;
     }
 
     /**

@@ -77,6 +77,10 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
             loaded.mergeResolvedCasts(casts);
         }
         loaded.hydrateFrom(new LinkedHashMap<String, Object>(row));
+        Consumer<? super T> hook = rowHook();
+        if (hook != null) {
+            hook.accept(loaded);
+        }
         return loaded;
     }
 

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.query.Builder;
@@ -18,8 +19,30 @@ import org.aristonis.diwan.database.query.Builder;
  */
 abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
 
+    // Null for every builder a user gets; only relation code sets it, on a copy it owns.
+    private Consumer<? super T> rowHook;
+
     EloquentCreators(ModelQuery<T> source, T model, Builder query) {
         super(source, model, query);
+    }
+
+    /**
+     * Sets a hook that runs on every model this builder hydrates, replacing any existing hook.
+     * Pass {@code null} to clear the hook.
+     *
+     * @param hook the per-row hook, or {@code null} to clear
+     */
+    final void useRowHook(Consumer<? super T> hook) {
+        rowHook = hook;
+    }
+
+    /**
+     * Returns the per-row hook, or {@code null} when none is set.
+     *
+     * @return the hook, or {@code null}
+     */
+    final Consumer<? super T> rowHook() {
+        return rowHook;
     }
 
     // ---- key clauses ----
@@ -210,6 +233,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
         EloquentBuilder<T> copied = new EloquentBuilder<>(source, model, query.clone());
         self().copyRelationStateTo(copied);
         self().copyAggregateStateTo(copied);
+        copied.useRowHook(rowHook);
         return copied;
     }
 

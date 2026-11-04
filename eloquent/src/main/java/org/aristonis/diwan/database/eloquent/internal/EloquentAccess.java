@@ -168,6 +168,53 @@ public interface EloquentAccess {
     AtomicReference<Object> touchesSlot(Model model);
 
     /**
+     * Sets a per-row hook on a builder, replacing any hook it already has. The hook runs on every
+     * model the builder hydrates, and a copy of the builder keeps it. Passing {@code null} clears it.
+     *
+     * @param <T> the model class
+     * @param builder the builder, never {@code null}
+     * @param hook the hook to run on each hydrated model, or {@code null} to clear it
+     * @throws NullPointerException if {@code builder} is {@code null}
+     */
+    <T extends Model> void useRowHook(EloquentBuilder<T> builder, Consumer<? super T> hook);
+
+    /**
+     * Removes every attribute whose key starts with the prefix from the model's attributes, leaving
+     * its original values untouched, and returns them in their original order with the prefix
+     * stripped from each key.
+     *
+     * @param model the model, never {@code null}
+     * @param prefix the prefix to match, never {@code null}
+     * @return the removed attributes, in order, with the prefix stripped, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    Map<String, Object> takeAttributes(Model model, String prefix);
+
+    /**
+     * Marks a model as existing, without running its {@code retrieved()} hook.
+     *
+     * @param model the model, never {@code null}
+     * @throws NullPointerException if {@code model} is {@code null}
+     */
+    void markExisting(Model model);
+
+    /**
+     * Creates a new model from the registry entry of a class, loading the class first when its entry
+     * is missing. The new model is bound to {@code connectionOf}'s connection when it has no
+     * connection of its own and {@code connectionOf} is bound.
+     *
+     * @param <M> the model class
+     * @param type the model class, never {@code null}
+     * @param connectionOf a model whose connection the new model takes when it has none of its own,
+     *     or {@code null} for an unbound model
+     * @return a new, unsaved model of the given class, never {@code null}
+     * @throws NullPointerException if {@code type} is {@code null}
+     * @throws UnregisteredModelException if the class has no registry entry and cannot be loaded
+     *     into one
+     */
+    <M extends Model> M newRegistered(Class<M> type, Model connectionOf);
+
+    /**
      * Runs a model's protected {@code saved()} hook.
      *
      * @param model the model, never {@code null}

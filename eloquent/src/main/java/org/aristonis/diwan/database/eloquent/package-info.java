@@ -44,6 +44,12 @@
  * {@code toMap()} recurse once per level of the loaded graph, so a very deep chain can overflow a
  * small thread stack.
  *
+ * <p>A model declares a many-to-many relation with one of the protected {@code belongsToMany}
+ * factories, which return a {@link org.aristonis.diwan.database.eloquent.relations.BelongsToMany}.
+ * Each related model it returns holds the joining row as a
+ * {@link org.aristonis.diwan.database.eloquent.relations.Pivot}, read with
+ * {@code Pivot.of(model)}.
+ *
  * <p>A related model's class must have run its static initialiser before a relation names it,
  * because a class literal such as {@code Post.class} does not run it. Touch each model's
  * {@code query} entry at startup.
