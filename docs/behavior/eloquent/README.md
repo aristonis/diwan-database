@@ -316,4 +316,5 @@ See [user stories](user-stories.md) and [user scenarios](user-scenarios.md). The
 [ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md), for relations
 [ADR 0017](../../adr/0017-relations.md), and for aggregates, touches, push and chaperone
 [ADR 0018](../../adr/0018-relations-s2.md), and for many-to-many relations
-[ADR 0019](../../adr/0019-relations-s3a.md).
+[ADR 0019](../../adr/0019-relations-s3a.md). Through relations: [through-relations.md](through-relations.md) and
+[ADR 0021](../../adr/0021-relations-s4a.md).
