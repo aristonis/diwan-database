@@ -30,6 +30,10 @@ import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
  * <p>A {@code null} stored value reads as {@code null} and a {@code null} value stores
  * {@code null}, unless the cast's {@link Cast#handlesNull()} says otherwise. A failure inside a
  * cast is reported as an {@link InvalidCastException} naming the model, key and cast.
+ *
+ * <p>An instance can hold extra casts on top of its class casts through
+ * {@link #mergeCasts(Map)}. The overlay wins over a class cast of the same key, belongs to that
+ * instance only and is never copied to another one. Like the model, it is not thread-safe.
  */
 abstract class ModelCasts extends ModelAttributes {
 
@@ -45,6 +49,12 @@ abstract class ModelCasts extends ModelAttributes {
     private final Map<String, Object> objectCache = new HashMap<>();
 
     private boolean isMerging;
+
+    /** Extra casts of this instance: {@code null} until the first merge; replaced, not mutated. */
+    private Map<String, Cast<?>> castOverlay;
+
+    /** Class casts then overlay, built on the first {@link #getCasts()} after a merge. */
+    private Map<String, Cast<?>> mergedCasts;
 
     ModelCasts() {
     }
@@ -149,13 +159,84 @@ abstract class ModelCasts extends ModelAttributes {
     }
 
     /**
-     * Returns the resolved casts of this model class.
+     * Returns the resolved casts of this model: the class casts, then this instance's overlay
+     * from {@code mergeCasts(Map)}, which wins for a key in both.
      *
      * @return a read-only map by attribute name, never {@code null}
      * @throws InvalidCastException if a cast cannot be resolved
      */
     public Map<String, Cast<?>> getCasts() {
-        return resolvedCasts();
+        if (castOverlay == null) {
+            return resolvedCasts();
+        }
+        if (mergedCasts == null) {
+            Map<String, Cast<?>> merged = new LinkedHashMap<>(resolvedCasts());
+            merged.putAll(castOverlay);
+            mergedCasts = Collections.unmodifiableMap(merged);
+        }
+        return mergedCasts;
+    }
+
+    /**
+     * Adds casts to this instance only, on top of the class casts; a key already in the overlay
+     * or in {@code casts()} takes the new cast. Reads, writes, dirty checks and
+     * {@code toMap()} of this instance use it; the class casts and other instances are unchanged.
+     *
+     * <p>A value is a {@link Cast} or a cast string as {@link Casts#of(String)} takes. Every value
+     * is resolved before anything changes, so a bad entry leaves the overlay as it was. Cached
+     * cast values are written back first, and those of the merged keys are dropped, so a key
+     * whose cast changed is read again through the new cast.
+     *
+     * @param casts the casts by attribute name, never {@code null}
+     * @return this model
+     * @throws NullPointerException if {@code casts} or a key in it is {@code null}
+     * @throws IllegalArgumentException if a value is {@code null} or neither a cast nor a string
+     * @throws InvalidCastException if a cast string cannot be resolved
+     */
+    public Model mergeCasts(Map<String, ?> casts) {
+        Objects.requireNonNull(casts, "casts");
+        Map<String, Cast<?>> resolved = new LinkedHashMap<>();
+        for (Map.Entry<String, ?> entry : casts.entrySet()) {
+            String key = Objects.requireNonNull(entry.getKey(), "cast key");
+            resolved.put(key, resolveOverlay(key, entry.getValue()));
+        }
+        return mergeResolvedCasts(Collections.unmodifiableMap(resolved));
+    }
+
+    /**
+     * Adds casts that are already resolved to this instance's overlay. An instance with no
+     * overlay keeps {@code resolved} itself, so a builder can hand one map to every row; any
+     * later merge copies it first.
+     *
+     * @param resolved resolved casts by attribute name, unmodifiable, never {@code null}
+     * @return this model
+     * @throws NullPointerException if {@code resolved} is {@code null}
+     */
+    final Model mergeResolvedCasts(Map<String, Cast<?>> resolved) {
+        Objects.requireNonNull(resolved, "resolved");
+        if (resolved.isEmpty()) {
+            return self();
+        }
+        mergeObjectCasts();
+        objectCache.keySet().removeAll(resolved.keySet());
+        if (castOverlay == null) {
+            castOverlay = resolved;
+        } else {
+            Map<String, Cast<?>> next = new LinkedHashMap<>(castOverlay);
+            next.putAll(resolved);
+            castOverlay = Collections.unmodifiableMap(next);
+        }
+        mergedCasts = null;
+        return self();
+    }
+
+    /**
+     * Returns this instance's cast overlay.
+     *
+     * @return a read-only map by attribute name, empty when there is none, never {@code null}
+     */
+    final Map<String, Cast<?>> castOverlay() {
+        return castOverlay == null ? Collections.emptyMap() : castOverlay;
     }
 
     /**
@@ -292,7 +373,34 @@ abstract class ModelCasts extends ModelAttributes {
     }
 
     private Cast<?> castFor(String key) {
-        return key == null ? null : resolvedCasts().get(key);
+        if (key == null) {
+            return null;
+        }
+        if (castOverlay != null) {
+            Cast<?> cast = castOverlay.get(key);
+            if (cast != null) {
+                return cast;
+            }
+        }
+        return resolvedCasts().get(key);
+    }
+
+    private Cast<?> resolveOverlay(String key, Object value) {
+        Cast<?> cast;
+        if (value instanceof Cast) {
+            cast = (Cast<?>) value;
+        } else if (value instanceof String) {
+            cast = Casts.of((String) value);
+        } else {
+            String type = value == null ? "null" : value.getClass().getName();
+            throw new IllegalArgumentException("Cast for [" + key + "] must be a Cast or a String, got "
+                    + type);
+        }
+        try {
+            return Casts.resolve(cast);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidCastException(getClass(), key, specOf(cast), e);
+        }
     }
 
     private Map<String, Cast<?>> resolvedCasts() {

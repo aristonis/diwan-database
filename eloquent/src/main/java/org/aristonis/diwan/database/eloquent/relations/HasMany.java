@@ -64,6 +64,9 @@ public final class HasMany<R extends Model> extends HasOneOrMany<R, HasMany<R>> 
             List<R> matches = matchesOf(dictionary, parent);
             if (matches != null) {
                 parent.setRelation(name, collectionOf(matches));
+                for (R match : matches) {
+                    linkInverse(match, parent);
+                }
             }
         }
     }

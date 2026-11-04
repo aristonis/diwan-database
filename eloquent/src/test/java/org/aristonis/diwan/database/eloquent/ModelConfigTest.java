@@ -63,4 +63,10 @@ class ModelConfigTest {
         assertEquals(TimestampFormat.INSTANT, new Event().getTimestampFormat());
         assertNull(new Event().getUpdatedAtColumn());
     }
+
+    @Test
+    void touchesDefaultsToEmpty() {
+        assertTrue(new User().touches().isEmpty());
+        assertTrue(new Person().touches().isEmpty());
+    }
 }

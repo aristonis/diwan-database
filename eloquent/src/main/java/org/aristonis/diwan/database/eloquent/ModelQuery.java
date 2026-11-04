@@ -72,14 +72,23 @@ public final class ModelQuery<T extends Model> {
      */
     private final AtomicReference<Object> relations;
 
+    /**
+     * The checked {@code touches()} configuration of the model class: {@code null} until the
+     * relation package checks it on first save or delete, then written once by
+     * {@code compareAndSet} and read without a lock. Typed {@code Object} for the same reason as
+     * {@link #relations}, and shared by derived entries the same way.
+     */
+    private final AtomicReference<Object> touches;
+
     private ModelQuery(Class<T> type, Supplier<T> constructor, QueryFactory factory, ConnectionResolver resolver,
-            ModelClock clock, AtomicReference<Object> relations) {
+            ModelClock clock, AtomicReference<Object> relations, AtomicReference<Object> touches) {
         this.type = type;
         this.constructor = constructor;
         this.factory = factory;
         this.resolver = resolver;
         this.clock = clock;
         this.relations = relations;
+        this.touches = touches;
     }
 
     /**
@@ -99,7 +108,8 @@ public final class ModelQuery<T extends Model> {
      */
     public static <T extends Model> ModelQuery<T> of(Class<T> type, Supplier<T> constructor) {
         ModelQuery<T> query = new ModelQuery<>(Objects.requireNonNull(type, "type"),
-                Objects.requireNonNull(constructor, "constructor"), null, null, null, new AtomicReference<>());
+                Objects.requireNonNull(constructor, "constructor"), null, null, null, new AtomicReference<>(),
+                new AtomicReference<>());
         REGISTRY.putIfAbsent(type, query);
         return query;
     }
@@ -140,6 +150,10 @@ public final class ModelQuery<T extends Model> {
         return relations;
     }
 
+    AtomicReference<Object> touchesSlot() {
+        return touches;
+    }
+
     /**
      * Returns an entry whose models use the given query factory.
      *
@@ -149,7 +163,7 @@ public final class ModelQuery<T extends Model> {
      */
     public ModelQuery<T> on(QueryFactory queryFactory) {
         return new ModelQuery<>(type, constructor, Objects.requireNonNull(queryFactory, "queryFactory"), null, clock,
-                relations);
+                relations, touches);
     }
 
     /**
@@ -182,7 +196,7 @@ public final class ModelQuery<T extends Model> {
      */
     public ModelQuery<T> using(ConnectionResolver connections) {
         return new ModelQuery<>(type, constructor, null, Objects.requireNonNull(connections, "connections"), clock,
-                relations);
+                relations, touches);
     }
 
     /**
@@ -194,7 +208,7 @@ public final class ModelQuery<T extends Model> {
      */
     public ModelQuery<T> withClock(ModelClock modelClock) {
         return new ModelQuery<>(type, constructor, factory, resolver, Objects.requireNonNull(modelClock, "modelClock"),
-                relations);
+                relations, touches);
     }
 
     /**

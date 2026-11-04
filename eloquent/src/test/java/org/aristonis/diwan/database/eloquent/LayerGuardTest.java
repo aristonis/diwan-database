@@ -81,8 +81,15 @@ class LayerGuardTest {
     @Test
     void relationLayerSitsBetweenSerializationAndGuards() {
         assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
-        assertSame(ModelRelations.class, ModelGuards.class.getSuperclass());
+        assertSame(ModelRelations.class, ModelRelationActions.class.getSuperclass());
+        assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
         assertSame(ModelGuards.class, Model.class.getSuperclass());
+    }
+
+    @Test
+    void aggregateLayerSitsBetweenRelationQueriesAndBuilder() {
+        assertSame(EloquentRelationQueries.class, EloquentAggregates.class.getSuperclass());
+        assertSame(EloquentAggregates.class, EloquentBuilder.class.getSuperclass());
     }
 
     @Test

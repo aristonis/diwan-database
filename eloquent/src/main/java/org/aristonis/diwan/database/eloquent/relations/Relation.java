@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
@@ -12,6 +13,7 @@ import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
 import org.aristonis.diwan.database.eloquent.internal.EloquentAccess;
+import org.aristonis.diwan.database.eloquent.internal.TouchScope;
 import org.aristonis.diwan.database.query.QueryGrammar;
 
 /**
@@ -122,7 +124,74 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * @return the models, never {@code null}
      */
     public final ModelCollection<R> get() {
-        return constrainedQuery().get();
+        ModelCollection<R> results = constrainedQuery().get();
+        linkResults(results);
+        return results;
+    }
+
+    /**
+     * Lets a kind act on the lazy results of {@link #get()} before they are returned; does
+     * nothing by default. Eager results never pass through here, so the blank parent an eager
+     * relation is built on is never linked.
+     *
+     * @param results the models the lazy query found, never {@code null}
+     */
+    void linkResults(List<R> results) {
+        // Nothing by default: only kinds with an inverse link their results.
+    }
+
+    // ---- touch
+
+    /**
+     * Sets the update timestamp of every related row this relation reads to now, in one raw
+     * {@code UPDATE} over the lazy query: no select, no events, no casts. Laravel's
+     * {@code Relation::touch}.
+     *
+     * <p>Nothing runs when the related class keeps no timestamps (including inside
+     * {@link Model#withoutTimestamps}), has no update timestamp column, or has its touches
+     * switched off on this thread by {@code Model.withoutTouching}. The value is the related
+     * model's own {@link Model#freshTimestampValue()}: its clock and stored form, the same text or
+     * {@code Instant} an ordinary save of that model writes, whatever the parent's clock is.
+     *
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     */
+    public void touch() {
+        R related = getRelated();
+        String column = related.getUpdatedAtColumn();
+        if (!related.usesTimestamps() || column == null) {
+            return;
+        }
+        if (TouchScope.isIgnoring(related.getClass())) {
+            return;
+        }
+        rawUpdate(Collections.singletonMap(column, related.freshTimestampValue()));
+    }
+
+    /**
+     * Runs an {@code UPDATE} of the given columns over the lazy query, with the clauses added to
+     * this relation. No model is read or saved: no events, no casts, no timestamps.
+     *
+     * @param attributes the columns and their new values, never {@code null} or empty; values are
+     *     bound as given
+     * @return the number of rows changed
+     * @throws NullPointerException if {@code attributes} is {@code null}
+     * @throws IllegalArgumentException if {@code attributes} is empty or a value is a list, map or
+     *     array
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     */
+    public final int rawUpdate(Map<String, ?> attributes) {
+        Objects.requireNonNull(attributes, "attributes");
+        return getQuery().toBase().update(attributes);
+    }
+
+    /**
+     * Returns whether a model may list this relation in {@code touches()}. Kinds opt in, so
+     * a new kind is refused until it says it can be touched.
+     *
+     * @return {@code false} unless the kind overrides it
+     */
+    boolean supportsTouch() {
+        return false;
     }
 
     // ---- package-private: name, query access, lazy constraints
@@ -463,6 +532,30 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      */
     static String bare(String column) {
         return column.substring(column.lastIndexOf('.') + 1);
+    }
+
+    /**
+     * Qualifies a parent-side column against the outer query's {@code from}: the alias part of
+     * {@code "users as u"}, else the table. Laravel qualifies with the parent model's table, so an
+     * aliased outer {@code from} breaks the correlated subquery; without an alias the result
+     * equals {@code getParent().qualifyColumn(column)}.
+     *
+     * @param parentQuery the outer query the subquery correlates with, never {@code null}
+     * @param column the bare parent column, never {@code null}; a qualified one is returned as is
+     * @return the qualified column, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    final String parentKeyAgainst(EloquentBuilder<?> parentQuery, String column) {
+        Objects.requireNonNull(parentQuery, "parentQuery");
+        Objects.requireNonNull(column, "column");
+        String from = parentQuery.toBase().getFrom();
+        if (from == null || column.indexOf('.') >= 0) {
+            // A subquery or raw outer from has no name to read; keep the model table, as before.
+            return getParent().qualifyColumn(column);
+        }
+        int as = from.toLowerCase(Locale.ROOT).lastIndexOf(" as ");
+        String name = as < 0 ? from.trim() : from.substring(as + " as ".length()).trim();
+        return name + "." + column;
     }
 
     /**

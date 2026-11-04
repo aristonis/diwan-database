@@ -7,11 +7,12 @@ import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.RelationAccess;
+import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 
 /**
- * The relation package's side of the internal bridge: eager loading, existence queries and
- * name resolution for the model package. Registered once by {@code Relation}'s static
- * initialiser.
+ * The relation package's side of the internal bridge: eager loading, existence queries,
+ * aggregate subselects, aggregates on loaded models, owner touches and name resolution for the
+ * model package. Registered once by {@code Relation}'s static initialiser.
  *
  * <p>Keeps no state; safe to call from any thread.
  */
@@ -38,6 +39,23 @@ final class RelationAccessImpl implements RelationAccess {
             Consumer<EloquentBuilder<?>> constraint) {
         RelationExistence.add(Objects.requireNonNull(outer, "outer"), Objects.requireNonNull(relation, "relation"),
                 Objects.requireNonNull(operator, "operator"), count, or, constraint);
+    }
+
+    @Override
+    public void addAggregate(EloquentBuilder<?> outer, Map<String, Consumer<EloquentBuilder<?>>> relations,
+            Object column, String function) {
+        RelationAggregates.add(outer, relations, column, function);
+    }
+
+    @Override
+    public void loadAggregate(List<? extends Model> models, Map<String, Consumer<EloquentBuilder<?>>> relations,
+            Object column, String function) {
+        AggregateLoader.load(models, relations, column, function);
+    }
+
+    @Override
+    public void touchOwners(Model model, VisitPath path) {
+        RelationTouches.touchOwners(model, path);
     }
 
     @Override

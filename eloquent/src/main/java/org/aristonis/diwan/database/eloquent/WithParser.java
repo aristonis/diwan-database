@@ -20,8 +20,9 @@ import java.util.function.Consumer;
  *       Laravel keeps only the last one; running both loses no constraint.
  * </ul>
  *
- * <p>Names are not checked here: a path that names no relation fails when it is loaded, as in
- * Laravel. Stateless and safe to call from any thread.
+ * <p>{@link #parseAggregates(String...)} keys by the raw name, {@code as} alias included, and
+ * does not expand dot paths. Names are not checked here: a path that names no relation fails
+ * when it is loaded, as in Laravel. Stateless and safe to call from any thread.
  */
 final class WithParser {
 
@@ -74,6 +75,55 @@ final class WithParser {
     }
 
     /**
+     * Parses aggregate relation names given as text, such as {@code "posts"},
+     * {@code "posts as total"} and {@code "posts:id"}, without expanding dot paths.
+     *
+     * <p>The key is the raw name text before alias splitting, so {@code "posts"} and
+     * {@code "posts as p2"} give two entries. A dotted name stays one key and is refused later,
+     * where the model is known. The select constraint of a {@code name:} form is kept but has no
+     * effect inside an aggregate subselect.
+     *
+     * @param relations the names, none {@code null}; empty gives an empty map
+     * @return the constraints by raw name, in call order, modifiable
+     * @throws NullPointerException if {@code relations} or a name is {@code null}
+     * @throws IllegalArgumentException if a {@code name:} form lists no column or an empty one
+     */
+    static Map<String, Consumer<EloquentBuilder<?>>> parseAggregates(String... relations) {
+        Objects.requireNonNull(relations, "relations");
+        Map<String, Consumer<EloquentBuilder<?>>> results = new LinkedHashMap<>();
+        for (String relation : relations) {
+            String name = Objects.requireNonNull(relation, "relation");
+            int colon = name.indexOf(':');
+            if (colon < 0) {
+                combine(results, name, NO_OP);
+            } else {
+                combine(results, name.substring(0, colon), selectConstraint(name, name.substring(colon + 1)));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Parses aggregate relation names given with their constraints, without expanding dot paths;
+     * a colon in a name is part of it, as in Laravel's array form.
+     *
+     * @param relations the constraints by raw name, no key or value {@code null}; empty gives an
+     *     empty map
+     * @return the constraints by raw name, in the map's order, modifiable
+     * @throws NullPointerException if {@code relations}, a name or a constraint is {@code null}
+     */
+    static Map<String, Consumer<EloquentBuilder<?>>> parseAggregates(
+            Map<String, Consumer<EloquentBuilder<?>>> relations) {
+        Objects.requireNonNull(relations, "relations");
+        Map<String, Consumer<EloquentBuilder<?>>> results = new LinkedHashMap<>();
+        for (Map.Entry<String, Consumer<EloquentBuilder<?>>> entry : relations.entrySet()) {
+            combine(results, Objects.requireNonNull(entry.getKey(), "relation"),
+                    Objects.requireNonNull(entry.getValue(), "constraint"));
+        }
+        return results;
+    }
+
+    /**
      * Adds parsed paths to a map of eager loads; a path already present runs its old constraint,
      * then the new one.
      *
@@ -84,7 +134,8 @@ final class WithParser {
     static void merge(Map<String, Consumer<EloquentBuilder<?>>> target,
             Map<String, Consumer<EloquentBuilder<?>>> added) {
         Objects.requireNonNull(target, "target");
-        for (Map.Entry<String, Consumer<EloquentBuilder<?>>> entry : Objects.requireNonNull(added, "added").entrySet()) {
+        Objects.requireNonNull(added, "added");
+        for (Map.Entry<String, Consumer<EloquentBuilder<?>>> entry : added.entrySet()) {
             combine(target, entry.getKey(), entry.getValue());
         }
     }

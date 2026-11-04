@@ -74,6 +74,12 @@ public abstract class Model extends ModelGuards {
         return this;
     }
 
+    final QueryFactory swapFactory(QueryFactory next) {
+        QueryFactory prior = factory;
+        factory = next;
+        return prior;
+    }
+
     final void bind(QueryFactory queryFactory, ConnectionResolver connections, ModelClock modelClock,
             ModelQuery<?> query) {
         this.factory = queryFactory;
@@ -196,7 +202,7 @@ public abstract class Model extends ModelGuards {
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
      */
     public boolean save() {
-        return save(false);
+        return save(null);
     }
 
     /**
@@ -229,7 +235,7 @@ public abstract class Model extends ModelGuards {
                 // Strict transactions refuse the root connection, so the save runs on the callback's.
                 factory = QueryFactory.of(c, outer.grammar(), outer.processor());
                 try {
-                    return save(true);
+                    return save(outer);
                 } finally {
                     factory = bound;
                 }
@@ -244,7 +250,8 @@ public abstract class Model extends ModelGuards {
         }
     }
 
-    private boolean save(boolean strict) {
+    // A non-null outer is the factory a saveOrFail() transaction was opened on.
+    private boolean save(QueryFactory outer) {
         if (!saving()) {
             return false;
         }
@@ -252,10 +259,11 @@ public abstract class Model extends ModelGuards {
         if (exists) {
             saved = !isDirty() || performUpdate();
         } else {
-            saved = performInsert(strict);
+            saved = performInsert(outer != null);
         }
         if (saved) {
             saved();
+            touchOwnersAfterSave(outer);
             syncOriginal();
         }
         return saved;
@@ -373,6 +381,7 @@ public abstract class Model extends ModelGuards {
         if (!exists || !deleting()) {
             return false;
         }
+        touchOwnersBeforeDelete();
         setKeysForSaveQuery(newBaseQuery()).delete();
         exists = false;
         deleted();

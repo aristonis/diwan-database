@@ -32,6 +32,8 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
 
     private final String localKey;
 
+    private String inverseName;
+
     HasOneOrMany(EloquentBuilder<R> query, Model parent, String foreignKey, String localKey) {
         super(query, parent, null);
         Objects.requireNonNull(foreignKey, "foreignKey");
@@ -96,6 +98,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
         R instance = getRelated().newInstance();
         instance.fill(attributes);
         instance.setAttribute(foreignKeyName, parentKey);
+        linkInverse(instance, getParent());
         return instance;
     }
 
@@ -113,6 +116,8 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
     public final R save(R model) {
         Objects.requireNonNull(model, "model");
         model.setAttribute(foreignKeyName, requireParentKey());
+        // Linked before the save, as Laravel's setForeignAttributesForCreate, so hooks see the parent.
+        linkInverse(model, getParent());
         model.save();
         return model;
     }
@@ -177,6 +182,125 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
         return Collections.unmodifiableList(created);
     }
 
+    // ---- chaperone
+
+    /**
+     * Sets the parent on every child this relation reads or writes, under the inverse relation
+     * name guessed from the related model's relations: Laravel's {@code chaperone()}. The child
+     * then answers {@code related(inverse)} with the same parent instance, without a query.
+     *
+     * <p>Candidates, first known one wins: the foreign key before the parent's key name in camel
+     * case ({@code user_id} gives {@code user}), the same for the parent's default foreign key,
+     * the parent's simple class name in camel case, {@code owner}, and {@code parent} when both
+     * sides are the same class. Linking runs on {@code make}, {@code save}, {@code saveMany},
+     * {@code create}, {@code createMany}, lazy reads, eager matches (each child gets its own
+     * parent) and, for a {@link HasOne}, the default model. It adds no query.
+     *
+     * @apiNote On Android, R8 renames classes, so the class-name candidates may not match; pass
+     *     the name with {@link #chaperone(String)}. Serializing a linked graph terminates: a model
+     *     already on the path is written with its attributes only.
+     * @return this relation
+     * @throws RelationNotFoundException if no candidate is a relation of the related model
+     */
+    public final S chaperone() {
+        inverseName = InverseRelations.guess(this);
+        return self();
+    }
+
+    /**
+     * Sets the parent on every child this relation reads or writes, under the given inverse
+     * relation name, as {@link #chaperone()} does.
+     *
+     * @param inverseRelation the related model's relation that points back at the parent, never
+     *     {@code null}
+     * @return this relation
+     * @throws NullPointerException if {@code inverseRelation} is {@code null}
+     * @throws RelationNotFoundException if the related model has no relation of that name
+     */
+    public final S chaperone(String inverseRelation) {
+        Objects.requireNonNull(inverseRelation, "inverseRelation");
+        inverseName = InverseRelations.check(this, inverseRelation);
+        return self();
+    }
+
+    /**
+     * Sets the parent on every child under the guessed inverse name; the same as
+     * {@link #chaperone()}.
+     *
+     * @return this relation
+     * @throws RelationNotFoundException if no candidate is a relation of the related model
+     */
+    public final S inverse() {
+        return chaperone();
+    }
+
+    /**
+     * Sets the parent on every child under the given inverse name; the same as
+     * {@link #chaperone(String)}.
+     *
+     * @param inverseRelation the related model's relation that points back at the parent, never
+     *     {@code null}
+     * @return this relation
+     * @throws NullPointerException if {@code inverseRelation} is {@code null}
+     * @throws RelationNotFoundException if the related model has no relation of that name
+     */
+    public final S inverse(String inverseRelation) {
+        return chaperone(inverseRelation);
+    }
+
+    /**
+     * Stops linking the parent on the children of this relation instance. A later
+     * {@link #chaperone()} turns it on again.
+     *
+     * @return this relation
+     */
+    public final S withoutChaperone() {
+        inverseName = null;
+        return self();
+    }
+
+    /**
+     * Stops linking the parent; the same as {@link #withoutChaperone()}.
+     *
+     * @return this relation
+     */
+    public final S withoutInverse() {
+        return withoutChaperone();
+    }
+
+    /**
+     * Returns the inverse relation name children are linked under.
+     *
+     * @return the name, or {@code null} when linking is off
+     */
+    final String inverseName() {
+        return inverseName;
+    }
+
+    /**
+     * Sets the parent on the child under the inverse name; does nothing when linking is off or
+     * the child is {@code null}.
+     *
+     * @param child the related model, or {@code null}
+     * @param parent the parent to link, the same instance, never {@code null}
+     */
+    final void linkInverse(Model child, Model parent) {
+        if (inverseName != null && child != null) {
+            child.setRelation(inverseName, parent);
+        }
+    }
+
+    @Override
+    final void linkResults(List<R> results) {
+        if (inverseName == null) {
+            return;
+        }
+        Model parent = getParent();
+        for (R result : results) {
+            linkInverse(result, parent);
+        }
+    }
+
     private Object requireParentKey() {
         Object parentKey = getParentKey();
         if (parentKey == null) {
@@ -187,6 +311,17 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
                     + "] value; save the parent first");
         }
         return parentKey;
+    }
+
+    /**
+     * Returns {@code true}: a has-one or has-many may be touched; {@link #touch()} updates every
+     * child row whose foreign key holds the parent's local key.
+     *
+     * @return {@code true}
+     */
+    @Override
+    final boolean supportsTouch() {
+        return true;
     }
 
     @Override
@@ -219,7 +354,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
     final EloquentBuilder<R> existenceQuery(EloquentBuilder<?> parentQuery, AliasCounter aliases) {
         Objects.requireNonNull(parentQuery, "parentQuery");
         Objects.requireNonNull(aliases, "aliases");
-        String parentKey = getParent().qualifyColumn(localKey);
+        String parentKey = parentKeyAgainst(parentQuery, localKey);
         if (RelationExistence.isSelfRelation(baseQuery(), parentQuery)) {
             String alias = aliasRelatedTable(aliases);
             baseQuery().whereColumn(parentKey, "=", alias + "." + foreignKeyName);

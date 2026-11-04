@@ -33,6 +33,17 @@
  * is not API. Scopes, soft deletes and event dispatchers are not here yet; the protected hook
  * methods on the model are the place they will attach.
  *
+ * <p>Beyond reading and writing relations, a query adds relation aggregates as columns
+ * ({@code withCount}, {@code withMax}, {@code withMin}, {@code withSum}, {@code withAvg},
+ * {@code withExists}, {@code withAggregate}) and loaded models get them with the {@code load*}
+ * methods; {@code withCasts} and {@code mergeCasts} add casts to one query's models or one
+ * instance; {@code touches()} names the owners a save or delete touches, and
+ * {@code withoutTouching} turns that off for named classes on the calling thread for one call;
+ * {@code push()} saves a model and its loaded relations. Touching and {@code push()} visit each
+ * model once per call and never lazy load. {@code touchOwners()}, {@code push()} and
+ * {@code toMap()} recurse once per level of the loaded graph, so a very deep chain can overflow a
+ * small thread stack.
+ *
  * <p>A related model's class must have run its static initialiser before a relation names it,
  * because a class literal such as {@code Post.class} does not run it. Touch each model's
  * {@code query} entry at startup.

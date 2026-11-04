@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.Cursor;
 import org.aristonis.diwan.database.query.CursorPage;
@@ -34,7 +35,7 @@ import org.aristonis.diwan.database.query.SimplePage;
  *
  * @param <T> the model class
  */
-public final class EloquentBuilder<T extends Model> extends EloquentRelationQueries<T> {
+public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T> {
 
     private static final int DEFAULT_CHUNK = 1000;
 
@@ -70,6 +71,11 @@ public final class EloquentBuilder<T extends Model> extends EloquentRelationQuer
 
     private T hydrateOne(Map<String, ?> row) {
         T loaded = source.newModel();
+        // Before hydrateFrom, so retrieved() already reads through the casts (Laravel newFromBuilder).
+        Map<String, Cast<?>> casts = castsToMerge();
+        if (!casts.isEmpty()) {
+            loaded.mergeResolvedCasts(casts);
+        }
         loaded.hydrateFrom(new LinkedHashMap<String, Object>(row));
         return loaded;
     }

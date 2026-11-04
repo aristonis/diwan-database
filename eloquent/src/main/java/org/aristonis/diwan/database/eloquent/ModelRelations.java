@@ -6,10 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 import org.aristonis.diwan.database.eloquent.relations.BelongsTo;
 import org.aristonis.diwan.database.eloquent.relations.HasMany;
 import org.aristonis.diwan.database.eloquent.relations.HasOne;
@@ -509,25 +509,25 @@ abstract class ModelRelations extends ModelSerialization {
     // ---- package-private: serialisation hook
 
     @Override
-    final void appendRelations(Map<String, Object> result, Set<Model> visiting) {
+    final void appendRelations(Map<String, Object> result, VisitPath path) {
         boolean isSnake = snakeRelationKeys();
         for (Map.Entry<String, Object> entry : loadedRelations.entrySet()) {
             String name = entry.getKey();
             if (isShown(name)) {
-                result.put(isSnake ? Inflector.snake(name) : name, relationToPlain(entry.getValue(), visiting));
+                result.put(isSnake ? Inflector.snake(name) : name, relationToPlain(entry.getValue(), path));
             }
         }
     }
 
-    private static Object relationToPlain(Object value, Set<Model> visiting) {
+    private static Object relationToPlain(Object value, VisitPath path) {
         if (value instanceof Model) {
-            return ((Model) value).toMap(visiting);
+            return ((Model) value).toMap(path);
         }
         if (value instanceof ModelCollection) {
             ModelCollection<?> models = (ModelCollection<?>) value;
             List<Map<String, Object>> maps = new ArrayList<>(models.size());
             for (Model model : models) {
-                maps.add(model.toMap(visiting));
+                maps.add(model.toMap(path));
             }
             return maps;
         }

@@ -66,6 +66,75 @@ public interface RelationAccess {
             Consumer<EloquentBuilder<?>> constraint);
 
     /**
+     * Adds one aggregate subselect per relation ({@code withCount}, {@code withMax} and their
+     * forms) to a builder, in map order.
+     *
+     * @param outer the builder the subselects are added to, never {@code null}
+     * @param relations the constraints keyed by raw name, {@code as} alias included, with no dot
+     *     expansion, never {@code null}; empty does nothing
+     * @param column the aggregated column: a {@code String} ({@code "*"} for count and exists) or
+     *     a core {@code Expression}, never {@code null}
+     * @param function the aggregate function in any case (count, max, min, sum, avg or exists), or
+     *     {@code null} for one related row's column
+     * @throws NullPointerException if {@code outer}, {@code relations} or {@code column} is
+     *     {@code null}
+     * @throws IllegalArgumentException if the function is not one of the six
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     *     is unknown or is a dot path; the builder is unchanged
+     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
+     *     and groupBy; the builder is unchanged
+     */
+    void addAggregate(EloquentBuilder<?> outer, Map<String, Consumer<EloquentBuilder<?>>> relations, Object column,
+            String function);
+
+    /**
+     * Loads relation aggregates onto models already in memory ({@code loadCount},
+     * {@code loadMax} and their forms): one key-only query per key chunk, the values copied onto
+     * each model whose row came back, not dirty.
+     *
+     * @param models the models, never {@code null}, all of one class; empty does nothing and
+     *     checks no name
+     * @param relations the constraints keyed by raw name, {@code as} alias included, as for
+     *     {@link #addAggregate(EloquentBuilder, Map, Object, String)}, never {@code null}
+     * @param column the aggregated column: a {@code String} ({@code "*"} for count and exists) or
+     *     a core {@code Expression}, never {@code null}
+     * @param function the aggregate function in any case, or {@code null} for one related row's
+     *     column
+     * @throws NullPointerException if {@code models}, a model, {@code relations} or
+     *     {@code column} is {@code null}
+     * @throws IllegalArgumentException if the models are not all of one class, the function is not
+     *     one of the six, or the constraint bindings leave no room for a key; no query has run
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     *     is unknown or is a dot path; no query has run
+     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
+     *     and groupBy
+     */
+    void loadAggregate(List<? extends Model> models, Map<String, Consumer<EloquentBuilder<?>>> relations,
+            Object column, String function);
+
+    /**
+     * Touches the owners a model names in its {@code touches()} and walks on into the owners
+     * already loaded on it: Laravel's {@code touchOwners}.
+     *
+     * <p>Each name runs one raw {@code UPDATE} of its relation; no relation is loaded and no
+     * {@code SELECT} runs. A single loaded owner gets its {@code saved()} hook and then its own
+     * touches; each item of a loaded collection gets its own touches only. A model on the path or
+     * walked already in this call is skipped, so a cycle ends and a shared owner is walked once.
+     *
+     * @param model the model whose owners are touched, never {@code null}
+     * @param path the path and done set of the outermost call, never {@code null}; a new one per
+     *     outermost call, never shared between threads
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if the
+     *     class's {@code touches()} names an unknown relation or one whose type does not support
+     *     touches; checked once per class
+     * @throws IllegalArgumentException if a loaded relation value is not a model, a collection of
+     *     models or {@code null}
+     * @throws IllegalStateException if a model's class has no {@code ModelQuery} entry
+     */
+    void touchOwners(Model model, VisitPath path);
+
+    /**
      * Resolves a relation by name through the model class's checked relation map.
      *
      * @param model the parent model, never {@code null}

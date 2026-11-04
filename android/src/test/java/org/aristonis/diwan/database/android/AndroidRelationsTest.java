@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.android;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
@@ -9,9 +10,13 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
@@ -158,6 +163,39 @@ public class AndroidRelationsTest {
         }
     }
 
+    /** A folder: has many notes; has timestamps. */
+    public static final class Folder extends Model {
+        static final ModelQuery<Folder> QUERY = ModelQuery.of(Folder.class, Folder::new);
+
+        @Override
+        protected RelationMap<?> relations() {
+            return RelationMap.of(Folder.class).add("notes", Folder::notes);
+        }
+
+        public HasMany<Note> notes() {
+            return hasMany(Note.class, "folder_id");
+        }
+    }
+
+    /** A note: belongs to a folder and touches it on save. */
+    public static final class Note extends Model {
+        static final ModelQuery<Note> QUERY = ModelQuery.of(Note.class, Note::new);
+
+        @Override
+        protected Set<String> touches() {
+            return Collections.singleton("folder");
+        }
+
+        @Override
+        protected RelationMap<?> relations() {
+            return RelationMap.of(Note.class).add("folder", Note::folder);
+        }
+
+        public BelongsTo<Folder> folder() {
+            return belongsTo(Folder.class, "folder_id");
+        }
+    }
+
     private final List<String> sql = new ArrayList<>();
     private final List<Integer> bindingCounts = new ArrayList<>();
     private SQLiteDatabase database;
@@ -198,7 +236,18 @@ public class AndroidRelationsTest {
             t.string("country_code");
             t.string("name");
         });
-        assertTrue(Arrays.asList(Country.QUERY, City.QUERY, Post.QUERY, Comment.QUERY, User.QUERY, Profile.QUERY)
+        schema.create("folders", t -> {
+            t.id();
+            t.string("name");
+            t.timestamps();
+        });
+        schema.create("notes", t -> {
+            t.id();
+            t.integer("folder_id").nullable();
+            t.string("body");
+            t.timestamps();
+        });
+        assertTrue(Arrays.asList(Folder.QUERY, Note.QUERY, Country.QUERY, City.QUERY, Post.QUERY, Comment.QUERY, User.QUERY, Profile.QUERY)
                 .stream().noneMatch(entry -> entry == null));
     }
 
@@ -287,5 +336,136 @@ public class AndroidRelationsTest {
         assertEquals(4, bindingCounts.size());
         assertEquals(Collections.emptyList(), bindingCounts.stream().filter(n -> n >= VARIABLE_LIMIT).toList());
         assertEquals(1, countries.get(COUNTRIES - 1).relatedMany("cities").size());
+    }
+
+    private static final String OLD = "2000-01-01 00:00:00";
+
+    private static Map<String, Object> stamped(Object... pairs) {
+        Map<String, Object> row = new HashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            row.put((String) pairs[i], pairs[i + 1]);
+        }
+        row.put("created_at", OLD);
+        row.put("updated_at", OLD);
+        return row;
+    }
+
+    private void seedFolder() {
+        SQLiteQuery.of(real).table("folders").insert(stamped("id", 1, "name", "f"));
+        SQLiteQuery.of(real).table("notes").insert(stamped("id", 1, "folder_id", 1, "body", "a"));
+        SQLiteQuery.of(real).table("notes").insert(stamped("id", 2, "folder_id", 1, "body", "b"));
+    }
+
+    /** On Android: loadCount over 2,000 string keys is 3 queries of 900, 900 and 200 keys. */
+    @Test
+    public void loadCountOverStringKeysRunsInThreeChunks() {
+        seedCountries();
+        ModelCollection<Country> countries = Country.QUERY.on(db).query().get();
+        clearLog();
+
+        countries.loadCount("cities");
+
+        assertEquals(Arrays.asList(900, 900, 200), bindingCounts);
+        for (Country country : countries) {
+            assertEquals(1, ((Number) country.getAttribute("cities_count")).intValue());
+        }
+    }
+
+    /** On Android: a constrained load keeps constraint bindings plus keys under 999 per query. */
+    @Test
+    public void constrainedLoadCountStaysUnder999PerQuery() {
+        seedCountries();
+        ModelCollection<Country> countries = Country.QUERY.on(db).query().get();
+        clearLog();
+        Map<String, Consumer<EloquentBuilder<?>>> constrained = new HashMap<>();
+        constrained.put("cities", q -> q.where("name", "city"));
+
+        countries.loadCount(constrained);
+
+        assertEquals(3, bindingCounts.size());
+        for (int count : bindingCounts) {
+            assertTrue("bindings " + count, count < VARIABLE_LIMIT);
+        }
+        int total = 0;
+        for (int count : bindingCounts) {
+            total += count;
+        }
+        assertEquals(COUNTRIES + bindingCounts.size(), total);
+        assertEquals(1, ((Number) countries.get(COUNTRIES - 1).getAttribute("cities_count")).intValue());
+    }
+
+    /** On Android: loadExists over string keys is chunked and returns Boolean. */
+    @Test
+    public void loadExistsOverStringKeysIsBoolean() {
+        seedCountries();
+        real.statement("insert into countries (code, name) values ('empty', 'none')");
+        ModelCollection<Country> countries = Country.QUERY.on(db).query().get();
+        clearLog();
+
+        countries.loadExists("cities");
+
+        assertEquals(3, bindingCounts.size());
+        for (int count : bindingCounts) {
+            assertTrue(count < VARIABLE_LIMIT);
+        }
+        int falses = 0;
+        for (Country country : countries) {
+            Object value = country.getAttribute("cities_exists");
+            assertTrue(value instanceof Boolean);
+            if (Boolean.FALSE.equals(value)) {
+                falses++;
+                assertEquals("empty", country.getKey());
+            }
+        }
+        assertEquals(1, falses);
+    }
+
+    /** On Android: withExists yields Boolean true and false on API 28 SQLite. */
+    @Test
+    public void withExistsReturnsBoolean() {
+        seedFolder();
+        SQLiteQuery.of(real).table("folders").insert(stamped("id", 2, "name", "empty"));
+
+        ModelCollection<Folder> folders = Folder.QUERY.on(db).query().withExists("notes").orderBy("id").get();
+
+        assertEquals(Boolean.TRUE, folders.get(0).getAttribute("notes_exists"));
+        assertEquals(Boolean.FALSE, folders.get(1).getAttribute("notes_exists"));
+    }
+
+    /** On Android: withCount runs as a correlated subselect on API 28 SQLite. */
+    @Test
+    public void withCountCountsRelatedRows() {
+        seedFolder();
+        clearLog();
+
+        Folder folder = Folder.QUERY.on(db).query().withCount("notes").findOrFail(1);
+
+        assertEquals(2, ((Number) folder.getAttribute("notes_count")).intValue());
+        assertEquals(1, sql.size());
+        assertTrue(sql.get(0).contains("(select count(*) from \"notes\" where"));
+    }
+
+    /** On Android: saving a note issues the touch UPDATE and moves the folder's updated_at. */
+    @Test
+    public void touchUpdatesOwnerOnApi28() {
+        seedFolder();
+        Note note = Note.QUERY.on(db).findOrFail(1);
+        note.setAttribute("body", "changed");
+
+        assertTrue(note.save());
+
+        Folder folder = Folder.QUERY.on(db).findOrFail(1);
+        assertNotEquals(OLD, String.valueOf(folder.getAttribute("updated_at")));
+    }
+
+    /** On Android: a clean save issues no touch. */
+    @Test
+    public void cleanSaveLeavesOwnerUntouched() {
+        seedFolder();
+        Note note = Note.QUERY.on(db).findOrFail(1);
+
+        assertTrue(note.save());
+
+        assertEquals(OLD, String.valueOf(Folder.QUERY.on(db).findOrFail(1).getAttribute("updated_at")));
     }
 }

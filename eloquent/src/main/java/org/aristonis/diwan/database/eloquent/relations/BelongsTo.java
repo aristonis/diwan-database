@@ -235,6 +235,25 @@ public final class BelongsTo<R extends Model> extends Relation<R, BelongsTo<R>> 
         return RelationRegistry.of(getChild()).belongsToName(getRelated().getClass(), foreignKey, ownerKey);
     }
 
+    /**
+     * Sets the owner's update timestamp to now, as {@link Relation#touch()} does. A child whose
+     * foreign key is {@code null} has no owner, so nothing runs.
+     *
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     */
+    @Override
+    public void touch() {
+        if (getChild().getAttribute(foreignKey) == null) {
+            return;
+        }
+        super.touch();
+    }
+
+    @Override
+    boolean supportsTouch() {
+        return true;
+    }
+
     @Override
     BelongsTo<R> self() {
         return this;
@@ -294,12 +313,13 @@ public final class BelongsTo<R extends Model> extends Relation<R, BelongsTo<R>> 
     EloquentBuilder<R> existenceQuery(EloquentBuilder<?> parentQuery, AliasCounter aliases) {
         Objects.requireNonNull(parentQuery, "parentQuery");
         Objects.requireNonNull(aliases, "aliases");
+        String childKey = parentKeyAgainst(parentQuery, foreignKey);
         if (RelationExistence.isSelfRelation(baseQuery(), parentQuery)) {
             String alias = aliasRelatedTable(aliases);
-            baseQuery().whereColumn(alias + "." + ownerKey, "=", getQualifiedForeignKeyName());
+            baseQuery().whereColumn(alias + "." + ownerKey, "=", childKey);
             return existenceBaseQuery();
         }
-        baseQuery().whereColumn(getQualifiedForeignKeyName(), "=", getQualifiedOwnerKeyName());
+        baseQuery().whereColumn(childKey, "=", getQualifiedOwnerKeyName());
         return existenceBaseQuery();
     }
 

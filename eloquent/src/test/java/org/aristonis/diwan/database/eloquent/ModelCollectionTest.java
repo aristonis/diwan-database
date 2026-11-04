@@ -76,4 +76,22 @@ class ModelCollectionTest {
         assertSame(models, models.load(Collections.emptyMap()));
         assertTrue(fake.calls.isEmpty());
     }
+
+    @Test
+    void loadAggregatesReturnThisWithoutAQueryOnAnEmptyCollection() {
+        ModelCollection<User> none = users.hydrate(Collections.emptyList());
+
+        assertSame(none, none.loadCount("posts"));
+        assertSame(none, none.loadCount(Collections.emptyMap()));
+        assertSame(none, none.loadMax("posts", "id"));
+        assertSame(none, none.loadMin(Collections.emptyMap(), "id"));
+        assertSame(none, none.loadSum("posts", "id"));
+        assertSame(none, none.loadAvg("posts", "id"));
+        assertSame(none, none.loadExists("posts"));
+        assertSame(none, none.loadExists(Collections.emptyMap()));
+        assertSame(none, none.loadAggregate("posts", "id", "max"));
+        assertSame(none, none.loadAggregate(Collections.emptyMap(), "id", "max"));
+        assertSame(none, none.loadAggregate("posts", "id"));
+        assertTrue(fake.calls.isEmpty());
+    }
 }

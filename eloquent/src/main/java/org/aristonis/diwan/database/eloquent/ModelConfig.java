@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.aristonis.diwan.database.eloquent.casts.Attribute;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
@@ -248,6 +249,46 @@ abstract class ModelConfig {
      */
     protected RelationMap<?> relations() {
         return RelationMap.empty();
+    }
+
+    /**
+     * Returns the names of the relations whose owners this model touches; none by default, a
+     * port of Laravel's {@code $touches}.
+     *
+     * <p>Saving a dirty model, or deleting an existing one, sets the {@code updated_at} column
+     * of each named relation's rows to the current time, in the set's iteration order, so return
+     * a {@link java.util.LinkedHashSet} when the order matters:
+     *
+     * <pre>{@code
+     * protected Set<String> touches() {
+     *     return new LinkedHashSet<>(Arrays.asList("post"));
+     * }
+     * }</pre>
+     *
+     * <p>Each name must be a key of {@link #relations()} whose relation is a {@code HasOne},
+     * {@code HasMany} or {@code BelongsTo}. The set is read and checked once per model class, on
+     * first use, so it must not depend on instance state; a bad name throws
+     * {@link org.aristonis.diwan.database.eloquent.relations.InvalidRelationException} naming the
+     * class and the relation. A check that fails only because a related class has no
+     * {@link ModelQuery} entry yet is not cached and runs again on the next save. The bad entry
+     * is reported on first use, after the save that triggered it has written its row, so the
+     * exception reaches the caller with that row stored and the model left dirty.
+     *
+     * <p>A touch is one raw {@code UPDATE}: it raises no model events, applies no casts and
+     * loads no model. The owner models already in memory keep their old {@code updated_at}
+     * value. The touch goes on into an owner only when that relation is already loaded on this
+     * model, where the owner's {@code saved()} hook runs and its own touches follow; unlike
+     * Laravel, an unloaded relation is never loaded for this. Like the relation map, this needs
+     * no reflection.
+     *
+     * <p>{@code save()} runs no transaction: if a touch {@code UPDATE} fails, the child row is
+     * already written, the model stays dirty and the exception reaches the caller. Use
+     * {@code saveOrFail()} to make the save and its touches one transaction.
+     *
+     * @return the relation names, never {@code null}
+     */
+    protected Set<String> touches() {
+        return Collections.emptySet();
     }
 
     /**

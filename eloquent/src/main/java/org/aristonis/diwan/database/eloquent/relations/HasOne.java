@@ -46,16 +46,19 @@ public final class HasOne<R extends Model> extends HasOneOrMany<R, HasOne<R>> {
         if (getParentKey() == null) {
             return defaultFor(getParent());
         }
-        return getQuery().first().orElseGet(() -> defaultFor(getParent()));
+        return first().orElseGet(() -> defaultFor(getParent()));
     }
 
     /**
-     * Runs the lazy query and returns the first related model, without the default.
+     * Runs the lazy query and returns the first related model, without the default. With
+     * {@link #chaperone()} on, the model has the parent set under the inverse name.
      *
      * @return the first related model, or empty
      */
     public Optional<R> first() {
-        return getQuery().first();
+        Optional<R> found = getQuery().first();
+        found.ifPresent(model -> linkInverse(model, getParent()));
+        return found;
     }
 
     /**
@@ -114,7 +117,9 @@ public final class HasOne<R extends Model> extends HasOneOrMany<R, HasOne<R>> {
         for (Model parent : parents) {
             List<R> matches = matchesOf(dictionary, parent);
             if (matches != null) {
-                parent.setRelation(name, matches.get(0));
+                R match = matches.get(0);
+                parent.setRelation(name, match);
+                linkInverse(match, parent);
             }
         }
     }
@@ -126,6 +131,8 @@ public final class HasOne<R extends Model> extends HasOneOrMany<R, HasOne<R>> {
     private R newRelatedFor(Model parent) {
         R instance = getRelated().newInstance();
         instance.setAttribute(getForeignKeyName(), parent.getAttribute(getLocalKeyName()));
+        // Linked before a withDefault callback runs, as Laravel's newRelatedInstanceFor.
+        linkInverse(instance, parent);
         return instance;
     }
 }

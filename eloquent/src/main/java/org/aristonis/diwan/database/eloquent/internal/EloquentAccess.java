@@ -2,12 +2,15 @@ package org.aristonis.diwan.database.eloquent.internal;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
+import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.relations.RelationMap;
+import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
  * What the relation package needs from the model package's package-private members.
@@ -129,4 +132,66 @@ public interface EloquentAccess {
      * @throws NullPointerException if {@code model} or the map it returns is {@code null}
      */
     RelationMap<?> relationMap(Model model);
+
+    /**
+     * Starts a query on the entry of a model's class, on the model's connection when the model
+     * is bound to one, as a relation's related query does.
+     *
+     * @param <T> the model type
+     * @param model the model whose class and connection the query takes, never {@code null}
+     * @return a new builder, never {@code null}
+     * @throws NullPointerException if {@code model} is {@code null}
+     * @throws IllegalStateException if the model's class has no {@code ModelQuery} entry
+     */
+    <T extends Model> EloquentBuilder<T> newQueryOn(T model);
+
+    /**
+     * Returns the relation names a model declares in its protected {@code touches()} method.
+     *
+     * @param model the model, never {@code null}
+     * @return the names, never {@code null}
+     * @throws NullPointerException if {@code model} or the set it returns is {@code null}
+     */
+    Set<String> touches(Model model);
+
+    /**
+     * Returns the {@code touches()} cache slot of a model's class: the {@code ModelQuery} entry's
+     * second reference, read through {@code ModelQuery.registered(model.getClass())}, written once.
+     *
+     * @apiNote The slot is typed {@code Object} because the configuration type is package-private
+     *     in the relation package; only that package reads or writes it.
+     * @param model a model of the class, never {@code null}
+     * @return the slot, never {@code null}; holds {@code null} until the first check
+     * @throws NullPointerException if {@code model} is {@code null}
+     * @throws IllegalStateException if the model's class has no {@code ModelQuery} entry
+     */
+    AtomicReference<Object> touchesSlot(Model model);
+
+    /**
+     * Runs a model's protected {@code saved()} hook.
+     *
+     * @param model the model, never {@code null}
+     * @throws NullPointerException if {@code model} is {@code null}
+     */
+    void fireSaved(Model model);
+
+    /**
+     * Replaces the query factory a model is bound to and returns the one it had, so a caller can
+     * put it back in {@code finally}. A {@code null} factory leaves the model to its resolver.
+     *
+     * @param model the model, never {@code null}
+     * @param next the factory to bind, or {@code null} for none
+     * @return the factory bound before, or {@code null} when there was none
+     * @throws NullPointerException if {@code model} is {@code null}
+     */
+    QueryFactory swapFactory(Model model, QueryFactory next);
+
+    /**
+     * Returns the casts a builder's {@code withCasts} registered.
+     *
+     * @param builder the builder, never {@code null}
+     * @return the casts by column, unmodifiable, empty when none, never {@code null}
+     * @throws NullPointerException if {@code builder} is {@code null}
+     */
+    Map<String, Cast<?>> castsToMerge(EloquentBuilder<?> builder);
 }

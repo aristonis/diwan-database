@@ -191,6 +191,25 @@ class RelationSerializationTest {
         assertEquals(POST_COUNT * perPost, maps);
     }
 
+    @Test
+    void chaperoneTwoWayTerminates() {
+        User user = ann();
+        ModelCollection<Post> posts = user.posts().chaperone("author").get();
+        user.setRelation("posts", posts);
+
+        Map<String, Object> map = assertTimeoutPreemptively(Duration.ofSeconds(10), () -> user.toMap());
+        String json = assertTimeoutPreemptively(Duration.ofSeconds(10), () -> user.toJson());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> list = (List<Map<String, Object>>) map.get("posts");
+        assertEquals(2, list.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inner = (Map<String, Object>) list.get(0).get("author");
+        assertEquals("Ann", inner.get("name"));
+        assertFalse(inner.containsKey("posts"));
+        assertTrue(json.contains("\"author\":{"), json);
+    }
+
     private static int countMaps(Object value) {
         if (value instanceof Map) {
             int total = 1;

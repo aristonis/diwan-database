@@ -3,17 +3,16 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastSerializer;
 import org.aristonis.diwan.database.eloquent.casts.CastValues;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 import org.aristonis.diwan.database.eloquent.json.JsonException;
 
 /**
@@ -71,27 +70,27 @@ abstract class ModelSerialization extends ModelAccessors {
      *     timestamp column holds something that is not a moment
      */
     public Map<String, Object> toMap() {
-        return toMap(Collections.newSetFromMap(new IdentityHashMap<>()));
+        return toMap(new VisitPath());
     }
 
     /**
      * Returns the map form, guarded against cycles by the models already being serialised.
      *
-     * @param visiting the models whose maps are being built, by identity, never {@code null}; this
-     *     model is added for the duration of the call and removed after
+     * @param path the models whose maps are being built, by identity, never {@code null}; this
+     *     model enters it for the duration of the call and leaves after
      * @return a new mutable map, never {@code null}
      */
-    final Map<String, Object> toMap(Set<Model> visiting) {
+    final Map<String, Object> toMap(VisitPath path) {
         Model model = self();
-        if (!visiting.add(model)) {
+        if (!path.enter(model)) {
             return attributesToMap();
         }
         try {
             Map<String, Object> result = attributesToMap();
-            appendRelations(result, visiting);
+            appendRelations(result, path);
             return result;
         } finally {
-            visiting.remove(model);
+            path.leave(model);
         }
     }
 
@@ -100,9 +99,9 @@ abstract class ModelSerialization extends ModelAccessors {
      * layer has no relations, so it writes nothing.
      *
      * @param result the map being built, never {@code null}
-     * @param visiting the models whose maps are being built, never {@code null}
+     * @param path the models whose maps are being built, never {@code null}
      */
-    void appendRelations(Map<String, Object> result, Set<Model> visiting) {
+    void appendRelations(Map<String, Object> result, VisitPath path) {
     }
 
     private Map<String, Object> attributesToMap() {
