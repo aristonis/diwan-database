@@ -54,7 +54,7 @@ class ModelCastsTest {
     }
 
     @Test
-    void uncastKeysKeepSprint18Behaviour() {
+    void uncastKeyComparesLooselyAndKeepsTheSetValue() {
         Order order = new Order();
         order.setRawAttributes(row("name", 1), true);
 

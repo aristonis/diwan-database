@@ -40,7 +40,7 @@ class LayerGuardTest {
     }
 
     @Test
-    void modelWithoutCastsBehavesAsSprint18() {
+    void modelWithoutCastsKeepsRawValuesAndLooseDirtyCheck() {
         BlogPost post = new BlogPost();
         Map<String, Object> tags = new java.util.HashMap<>(Map.of("a", 1));
         post.setRawAttributes(row("views", 1, "tags", tags), true);
