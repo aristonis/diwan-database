@@ -79,7 +79,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @throws IllegalArgumentException if {@code id} is a {@link Collection}
      */
     public final Optional<R> find(Object id) {
-        return prepared(Select.REPLACE).find(id);
+        return prepared(Select.REPLACE).find(PivotRecords.findKey(id, getRelatedKeyName()));
     }
 
     /**
@@ -89,7 +89,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @return the models found, in the database's order, never {@code null}
      */
     public final ModelCollection<R> find(Collection<?> ids) {
-        return prepared(Select.REPLACE).find(ids);
+        return prepared(Select.REPLACE).find(PivotRecords.findKeys(ids, getRelatedKeyName()));
     }
 
     /**
@@ -100,7 +100,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @return the models found, in the database's order, never {@code null}
      */
     public final ModelCollection<R> findMany(Collection<?> ids) {
-        return prepared(Select.REPLACE).findMany(ids);
+        return prepared(Select.REPLACE).findMany(PivotRecords.findKeys(ids, getRelatedKeyName()));
     }
 
     /**
@@ -111,7 +111,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @throws ModelNotFoundException if the parent has no such related model
      */
     public final R findOrFail(Object id) {
-        return prepared(Select.REPLACE).findOrFail(id);
+        return prepared(Select.REPLACE).findOrFail(PivotRecords.findKey(id, getRelatedKeyName()));
     }
 
     /**
@@ -123,7 +123,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @throws ModelNotFoundException if any key is not found, naming the missing keys
      */
     public final ModelCollection<R> findOrFail(Collection<?> ids) {
-        return prepared(Select.REPLACE).findOrFail(ids);
+        return prepared(Select.REPLACE).findOrFail(PivotRecords.findKeys(ids, getRelatedKeyName()));
     }
 
     /**
@@ -135,7 +135,7 @@ abstract class PivotReads<R extends Model> extends PivotClauses<R> {
      * @return the model with its pivot, or the fallback's result
      */
     public final R findOr(Object id, Supplier<R> fallback) {
-        return prepared(Select.REPLACE).findOr(id, fallback);
+        return prepared(Select.REPLACE).findOr(PivotRecords.findKey(id, getRelatedKeyName()), fallback);
     }
 
     /**

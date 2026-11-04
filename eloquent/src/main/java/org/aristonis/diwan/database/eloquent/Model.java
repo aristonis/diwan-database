@@ -183,7 +183,14 @@ public abstract class Model extends ModelGuards {
         return hasRawOriginal(key);
     }
 
-    private Builder setKeysForSaveQuery(Builder query) {
+    /**
+     * Adds the where clauses that select this model's row for an update, delete or refresh.
+     * By default the primary key, using its original value; a model keyed otherwise overrides it.
+     *
+     * @param query the base query on the model's table, never {@code null}
+     * @return the same query with the key clauses added
+     */
+    protected Builder setKeysForSaveQuery(Builder query) {
         return query.where(getKeyName(), "=", getKeyForSaveQuery());
     }
 

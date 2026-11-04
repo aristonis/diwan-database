@@ -116,8 +116,8 @@ final class BtmDb implements AutoCloseable {
         SQLiteSchema.of(real).create("role_user", t -> {
             t.integer("user_id");
             t.integer("role_id");
-            t.string("status");
-            t.integer("weight");
+            t.string("status").nullable();
+            t.integer("weight").nullable();
             t.timestamp("created_at").nullable();
             t.timestamp("updated_at").nullable();
         });

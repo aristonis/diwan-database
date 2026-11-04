@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.internal.Access;
+import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.support.Inflector;
 
 /**
@@ -18,12 +19,15 @@ import org.aristonis.diwan.database.support.Inflector;
  * <p>A pivot is never incrementing and has no mass-assignment guard. It takes the table and the
  * connection it was built with, and its timestamp columns are its parent's. A subclass that
  * overrides {@code timestamps()} or {@code connectionName()} replaces the values that
- * {@code fromAttributes} and {@code fromRawAttributes} set. Any write that needs a key value is
- * refused while the pivot has none, such as a join table with no {@code id} column:
- * {@code update}, {@code delete}, {@code increment}, {@code decrement}, {@code refresh} and
- * {@code fresh} throw an {@link IllegalStateException} that names the class and the table. A
- * clean pivot still saves without error, since it has nothing to write. Writes that need a
- * composite key are not supported.
+ * {@code fromAttributes} and {@code fromRawAttributes} set.
+ *
+ * <p>A pivot with a key value writes by that key. A pivot with no key value, such as a join table
+ * with no {@code id} column, writes by the two pivot key columns once {@link #setPivotKeys} has
+ * set them and both hold a value, using their original values. Until then {@code update} and
+ * {@code delete} throw an {@link IllegalStateException} that names the class and the table.
+ * {@code increment}, {@code decrement}, {@code refresh} and {@code fresh} always need a key value
+ * and throw the same exception without one. A clean pivot still saves without error, since it has
+ * nothing to write.
  *
  * <p>The guards are overrides. A subclass that overrides {@code updating()} or {@code deleting()}
  * without calling {@code super} bypasses them. {@code push()} saves the related models one after
@@ -130,29 +134,47 @@ public class Pivot extends Model {
     }
 
     /**
-     * Refuses an update while the pivot has no key value, then runs the model's own check.
+     * Refuses an update while the pivot has neither a key value nor both pivot key values, then
+     * runs the model's own check.
      *
      * @return whether to continue, as the model's {@code updating()} says
-     * @throws IllegalStateException if the pivot has no key value; the message names the class
-     *     and the table
+     * @throws IllegalStateException if the pivot has no way to select its row; the message names
+     *     the class and the table
      */
     @Override
     protected boolean updating() {
-        requireKey("update");
+        requireWriteKey("update");
         return super.updating();
     }
 
     /**
-     * Refuses a delete while the pivot has no key value, then runs the model's own check.
+     * Refuses a delete while the pivot has neither a key value nor both pivot key values, then
+     * runs the model's own check.
      *
      * @return whether to continue, as the model's {@code deleting()} says
-     * @throws IllegalStateException if the pivot has no key value; the message names the class
-     *     and the table
+     * @throws IllegalStateException if the pivot has no way to select its row; the message names
+     *     the class and the table
      */
     @Override
     protected boolean deleting() {
-        requireKey("delete");
+        requireWriteKey("delete");
         return super.deleting();
+    }
+
+    /**
+     * Selects the pivot's row by its key value, or, when it has none and the pivot keys are set,
+     * by both pivot key columns with their original values.
+     *
+     * @param query the base query on the pivot's table, never {@code null}
+     * @return the same query with the key clauses added
+     */
+    @Override
+    protected Builder setKeysForSaveQuery(Builder query) {
+        if (getKey() != null || foreignKey == null) {
+            return super.setKeysForSaveQuery(query);
+        }
+        return query.where(foreignKey, "=", originalOrCurrent(foreignKey))
+                .where(relatedKey, "=", originalOrCurrent(relatedKey));
     }
 
     /**
@@ -397,6 +419,23 @@ public class Pivot extends Model {
             Access.eloquent().markExisting(target);
         }
         return pivot;
+    }
+
+    private Object originalOrCurrent(String key) {
+        Object original = getRawOriginal(key);
+        return original != null ? original : getAttribute(key);
+    }
+
+    private boolean hasPivotKeyValues() {
+        return foreignKey != null && relatedKey != null
+                && originalOrCurrent(foreignKey) != null && originalOrCurrent(relatedKey) != null;
+    }
+
+    // Update and delete can fall back to the pivot keys; the other writes cannot.
+    private void requireWriteKey(String operation) {
+        if (getKey() == null && !hasPivotKeyValues()) {
+            requireKey(operation);
+        }
     }
 
     // Checked before the model's own method, so a refused write never changes the attributes.

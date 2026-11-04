@@ -167,15 +167,26 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
      */
     public void touch() {
+        String column = touchColumn();
+        if (column != null) {
+            rawUpdate(Collections.singletonMap(column, getRelated().freshTimestampValue()));
+        }
+    }
+
+    /**
+     * Returns the related update timestamp column a touch writes, or {@code null} when a touch
+     * must not run: the related class keeps no timestamps, has no such column, or has its touches
+     * switched off on this thread.
+     *
+     * @return the column name, or {@code null} for no touch
+     */
+    final String touchColumn() {
         R related = getRelated();
         String column = related.getUpdatedAtColumn();
-        if (!related.usesTimestamps() || column == null) {
-            return;
+        if (!related.usesTimestamps() || column == null || TouchScope.isIgnoring(related.getClass())) {
+            return null;
         }
-        if (TouchScope.isIgnoring(related.getClass())) {
-            return;
-        }
-        rawUpdate(Collections.singletonMap(column, related.freshTimestampValue()));
+        return column;
     }
 
     /**

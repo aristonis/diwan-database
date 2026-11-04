@@ -111,7 +111,7 @@ class BelongsToManySubclassTest {
         }
 
         @Override
-        Pivot newPivot(Map<String, ?> attributes, boolean exists) {
+        public Pivot newPivot(Map<String, ?> attributes, boolean exists) {
             calls.add("pivot");
             return super.newPivot(attributes, exists);
         }

@@ -351,6 +351,40 @@ class PivotModelTest {
     }
 
     @Test
+    void updateWithPivotKeysWritesCompositeRow() {
+        // Arrange
+        Pivot pivot = keyless(user()).setPivotKeys("user_id", "role_id");
+        pivot.setAttribute("status", "inactive");
+
+        // Act
+        boolean saved = pivot.save();
+
+        // Assert
+        assertTrue(saved);
+        assertEquals("inactive", db.real.scalar(
+                "select status from role_user where user_id = 1 and role_id = 1").orElseThrow());
+        assertEquals("pending", db.real.scalar(
+                "select status from role_user where user_id = 1 and role_id = 2").orElseThrow());
+    }
+
+    @Test
+    void deleteWithPivotKeysRemovesCompositeRow() {
+        // Arrange
+        Pivot pivot = keyless(user()).setPivotKeys("user_id", "role_id");
+
+        // Act
+        boolean deleted = pivot.delete();
+
+        // Assert
+        assertTrue(deleted);
+        assertFalse(pivot.exists());
+        assertEquals(0, ((Number) db.real.scalar(
+                "select count(*) from role_user where user_id = 1 and role_id = 1").orElseThrow()).intValue());
+        assertEquals(1, ((Number) db.real.scalar(
+                "select count(*) from role_user where user_id = 1 and role_id = 2").orElseThrow()).intValue());
+    }
+
+    @Test
     void incrementWithoutKeyThrows() {
         // Arrange
         Pivot pivot = keyless(user());

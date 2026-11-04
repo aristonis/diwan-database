@@ -37,5 +37,7 @@
  * lazy, eager and existence queries, relation aggregates, finders, iteration and pages, and the
  * pivot configuration with the {@code wherePivot} family. Each related row carries its joining
  * row as a {@link org.aristonis.diwan.database.eloquent.relations.Pivot}, a model of its own.
+ * The write side of belongsToMany is in this package too: attach, detach, sync, toggle and the saves
+ * of related models that write the joining rows. It sits in layers that extend the read side.
  */
 package org.aristonis.diwan.database.eloquent.relations;

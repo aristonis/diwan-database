@@ -114,6 +114,21 @@ class BelongsToManyFindTest {
     }
 
     @Test
+    void findAcceptsModelAndCollection() {
+        BelongsToMany<BtmModels.Role> roles = user(1).roles();
+        BtmModels.Role admin = BtmModels.Role.QUERY.on(db.db).findOrFail(1);
+        BtmModels.Role pending = BtmModels.Role.QUERY.on(db.db).findOrFail(2);
+
+        Optional<BtmModels.Role> found = roles.find(pending);
+        ModelCollection<BtmModels.Role> byModels = roles.findMany(Arrays.asList(admin, pending));
+        ModelCollection<BtmModels.Role> mixed = roles.findMany(Arrays.asList(admin, 2));
+
+        assertEquals(2, found.get().getAttribute("id"));
+        assertEquals(new HashSet<>(Arrays.asList(1, 2)), new HashSet<>(byModels.modelKeys()));
+        assertEquals(new HashSet<>(Arrays.asList(1, 2)), new HashSet<>(mixed.modelKeys()));
+    }
+
+    @Test
     void someMissing() {
         BelongsToMany<BtmModels.Role> roles = user(1).roles();
 

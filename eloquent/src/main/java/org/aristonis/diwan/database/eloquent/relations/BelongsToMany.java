@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.eloquent.relations;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,7 +46,7 @@ import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
  *
  * @param <R> the related model class
  */
-public class BelongsToMany<R extends Model> extends PivotReads<R> {
+public class BelongsToMany<R extends Model> extends PivotModelWrites<R> {
 
     /** A blank pivot of the {@code using} class, cloned for each row; {@code null} until first needed. */
     private Pivot prototype;
@@ -156,18 +157,22 @@ public class BelongsToMany<R extends Model> extends PivotReads<R> {
 
     /**
      * Creates the pivot of one row: the attributes moved out of the row, in the relation's pivot
-     * class when one was given and in the plain pivot class otherwise.
+     * class when one was given and in the plain pivot class otherwise. The values recorded by
+     * {@code withPivotValue} are merged under the attributes, so an attribute given here wins.
      *
      * @param attributes the pivot columns with their prefix removed, never {@code null}
      * @param exists whether the row is in the database
      * @return the new pivot, never {@code null}
      */
-    Pivot newPivot(Map<String, ?> attributes, boolean exists) {
+    @Override
+    public Pivot newPivot(Map<String, ?> attributes, boolean exists) {
+        Map<String, Object> merged = new LinkedHashMap<>(pivotValues());
+        merged.putAll(attributes);
         Class<? extends Pivot> using = usingClass();
         if (using == null) {
-            return Pivot.fromAttributes(getParent(), attributes, getTable(), exists);
+            return Pivot.fromAttributes(getParent(), merged, getTable(), exists);
         }
-        return Pivot.fromRawAttributes(freshUsing(using), getParent(), attributes, getTable(), exists);
+        return Pivot.fromRawAttributes(freshUsing(using), getParent(), merged, getTable(), exists);
     }
 
     /**
