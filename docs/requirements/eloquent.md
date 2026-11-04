@@ -3,8 +3,9 @@
 What models must do, observed from outside. The reasons behind the choices are in
 [ADR 0015](../adr/0015-eloquent-models.md) and
 [ADR 0016](../adr/0016-attributes-casts-and-the-json-codec.md) and
-[ADR 0017](../adr/0017-relations.md) and
-[ADR 0018](../adr/0018-relations-s2.md); the detailed contract of each type is its Javadoc.
+[ADR 0017](../adr/0017-relations.md),
+[ADR 0018](../adr/0018-relations-s2.md) and
+[ADR 0019](../adr/0019-relations-s3a.md); the detailed contract of each type is its Javadoc.
 
 ## 1. Problem
 
@@ -115,6 +116,50 @@ builder, without reflection, annotations or build plugins.
 36. A one-to-one or one-to-many relation can set its parent on each child it returns or writes
     (`chaperone`), guessing the inverse name or taking it, without a query.
 37. Serialization, touching and `push` all stop on cycles in the loaded graph.
+38. A many-to-many relation is declared by naming the related class and, when the schema differs,
+    the joining table, the two pivot keys, the parent and related keys and the relation name. A
+    joining table given as a model class uses that class's table, and a joining class that
+    extends the pivot base type is used for the joining rows. Omitted names follow Laravel's
+    defaults: the joining table is the two class names in snake case, sorted and joined with an
+    underscore, and the keys are the foreign and primary keys of the two models. An unregistered
+    class fails at the call, naming it.
+39. Reading a many-to-many relation, lazily or eagerly, returns each related row with its joining
+    row. A related row linked to two parents comes back once per link, each with its own joining
+    row.
+40. The joining row holds the columns that the read selects: the key columns, the columns named
+    with `withPivot`, and the timestamp columns named with `withTimestamps`. It is read as `pivot`,
+    or under the name given by `as`, and `Pivot.of` returns it typed.
+41. An attribute whose name starts with `pivot_` moves into the joining row with the prefix
+    removed, including a related column with that name. The related row is not dirty because of
+    the move, a save never writes a moved value, and `toMap` leaves moved values out.
+42. A read leaves the relation unchanged, so the same call sends the same statement each time.
+    `get` uses the columns the relation selects, or else the columns passed to it. The iterators
+    and page methods add the related columns after what is selected.
+43. `wherePivot` and its `or`, `in`, `between` and `null` forms, `orderByPivot` and
+    `withPivotValue` qualify a joining column with the joining table's name. They apply to lazy
+    reads, eager loads, existence checks and aggregates, and a sort applies to reads only.
+44. `withPivotValue` filters by equal value and refuses a null value, applying nothing from that
+    call.
+45. Finders, iterators and pages exist on many-to-many relations under the names of the query
+    builder's methods, and they return rows with their joining rows. `cursorPaginate` cannot order
+    by a joining-table column; it orders by the related key or by the alias of the joining column.
+46. A joining row without a primary key value refuses update, delete, increment, decrement,
+    refresh and fresh before any statement runs.
+47. Eager loading of a many-to-many relation matches rows on the joining key, normalised as the
+    other eager keys are, drops a null parent key, and runs one query per key chunk. A constraint
+    that selects only some columns still gets the joining row and still matches. A limit or offset
+    in the constraint is refused.
+48. `has`, `whereHas`, `doesntHave`, `whereRelation` and the count forms work on many-to-many
+    relations. A self relation is aliased, the joining table is never aliased, and a closure
+    filters on a joining column by its qualified name.
+49. Relation aggregates and the `load*` methods work on many-to-many relations. A dotted joining
+    column is aggregated as written, an undotted column is read from the related table, and loaded
+    models receive the aggregates in one query per key chunk.
+50. `chaperone` on a many-to-many relation links each joining row to its parent and to its related
+    row, with no query. It does nothing unless a joining class is given, and an explicit name that
+    the joining class does not declare is refused.
+51. `toMap` and `toJson` include the joining row under its name, honour the joining class's hidden
+    and visible lists, and stop on cycles.
 
 ## 4. Non-functional requirements
 
@@ -172,11 +217,29 @@ builder, without reflection, annotations or build plugins.
 | `push()` on a shared model | Saved again on every path | Saved once per call | Linear in the size of the graph |
 | Inverse on eager loads | Linked twice, first to a blank parent | Linked once, to the matched parent | No wasted work |
 | Clauses chained inside a relation factory | Applied after the constraints the constructor added | Recorded and replayed after the lazy constraints; eager loads apply them to the key query; `has` takes their wheres | Constraints are added by the lazy read paths only |
+| Many-to-many `get()` | Overridden by the relation | `get()` stays final; the select and hydration steps are hooks | Other relation kinds keep their contract |
+| Iterators and pages of a many-to-many relation | Add the select to the relation's own query, so a second call repeats it | Work on a copy; repeated calls send the same SQL | No hidden state on a held relation |
+| Many-to-many `wherePivot` in a `whereHas` closure | A dynamic where turns it into a clause on a column named `pivot` | Not on the closure's builder: a compile error | A silent wrong clause |
+| Many-to-many `wherePivot` with a closure | Qualifies each column inside the closure | Not offered; use a qualified column | Core where clauses are immutable |
+| Many-to-many self-join alias | Sets the table of the related model object | An alias in the query only; no model state changes | Same SQL, no mutation |
+| Many-to-many joining table segment | Overridable | Not overridable; pass the table | No hook in the model |
+| Many-to-many default joining class table | The singular of the class name | The snake-case class name, not singular | No singulariser |
+| Many-to-many timestamp column off | `false` for a timestamp argument | An empty string | A string parameter cannot be false |
+| Many-to-many pivot key getters | `getForeignKey` and `getRelatedKey` on the pivot | `getForeignPivotKeyName` and `getRelatedPivotKeyName`; `getForeignKey` is unchanged | `getForeignKey` already gives the `_id` guess |
+| Many-to-many `find` with a model as id | Accepts models and collections of models | Ids and id collections only | Model-to-key parsing comes with pivot writes |
+| Many-to-many `cursorPaginate` by a joining column | Undefined | Refused with a clear error | The cursor reads values from the row |
 
 Kept as Laravel does it, for relations: a one-to-one relation takes the first row in database
 order, a relation loaded as null is not retried by `loadMissing`, an `or` inside an eager
 constraint is not grouped, writes through a relation run without a transaction, and saving a child
 does not set the relation on the parent.
+
+Kept as Laravel does it, for many-to-many relations: a `pivot_` prefix moves a real related column
+into the joining row; `get` replaces the columns passed to it, while the iterators and pages append
+them; `chaperone` does nothing without a joining class, and the order of the calls decides that; a
+name set by `as` replaces a relation of the same name on the model; a self relation with no keys
+given uses the same pivot key on both sides, so both keys are passed; `getQuery` returns the raw
+query builder with no joining columns.
 
 Kept as Laravel does it, for aggregates, touches and `push`: `select` after `withCount` replaces
 the column list and drops the aggregate, while `addSelect` keeps it; a dot in the aggregated column
@@ -194,8 +257,10 @@ cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a 
 ## 6. Scope and non-goals
 
 Not covered now, planned later: encrypted and hashed casts, collection and value-object cast
-classes, JSON path writes, cast-aware `increment`, many-to-many and through relations, polymorphic
-relations and their aggregates, touches and inverses, per-parent limits in eager loads,
+classes, JSON path writes, cast-aware `increment`, many-to-many writes (`attach`, `detach`, `sync`,
+`toggle` and the find-or-create family through the relation), a closure form of `wherePivot`,
+through relations, polymorphic relations and their aggregates, touches and inverses, per-parent
+limits in eager loads,
 `pushQuietly` and `touchQuietly`, query scopes, soft deletes, model events with a dispatcher and
 observers, factories.
 Also out: upsert through a model, read and write connections, annotations.
@@ -237,3 +302,20 @@ Also out: upsert through a model, read and write connections, annotations.
 21. `push()` saves self first, then loaded relations in order, and stops at the first failure.
 22. `chaperone()` links children to the same parent instance with no query, and `toJson()` of the
     linked graph ends.
+23. A many-to-many relation read from a model returns each related row with its joining row on
+    SQLite and PostgreSQL. A model without a key reads nothing and runs no query.
+24. Eager loading of a many-to-many relation runs one query per key chunk, matches each related row
+    to its parents by the joining key, and loads 2,000 string keys in three queries on SQLite and
+    one on PostgreSQL.
+25. A constraint on an eager many-to-many load that selects some columns still gives each related
+    row its joining row; a limit or offset in it is refused.
+26. `has`, `whereHas`, `withCount`, `withSum` and `withExists` on a many-to-many relation return the
+    right rows and values on SQLite and PostgreSQL, and a self relation gives the same SQL on every
+    build.
+27. Finders, iterators and pages on a many-to-many relation return rows with their joining rows, and
+    a cursor ordered by a joining-table column is refused.
+28. Reading a joining column never makes a related row dirty, a save never writes a moved value, and
+    `toMap` leaves moved values out.
+29. A joining row without a primary key value refuses update and delete before any statement runs.
+30. A chaperoned many-to-many read links each joining row to the same parent instance with no extra
+    query, and `toJson` of the linked graph ends.

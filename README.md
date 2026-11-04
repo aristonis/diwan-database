@@ -307,15 +307,14 @@ CursorPage next = query.table("orders").orderByDesc("created_at").orderBy("id")
 
 `chunk` pages by offset, so use `chunkById` when rows change during the loop.
 
-Always open a cursor in try-with-resources. A cursor outside a transaction that is neither read
-to the end nor closed keeps its connection for good, and nothing closes it for you. Each one
-left open takes a pool slot, so a few of them can starve the app. On PostgreSQL it also leaves
-the server session idle in a transaction, which blocks vacuum on the tables it read. Inside a
-transaction no other statement runs on the connection until the cursor is closed. On Android,
-use a cursor only from the thread that opened it.
-Cursor tokens are not signed: a forged one cannot inject SQL but can ask for other allowed rows.
-Choices and differences from Laravel are in
-[ADR 0014](docs/adr/0014-cursors-and-pagination.md).
+Always open a cursor in try-with-resources. A cursor outside a transaction that is neither read to
+the end nor closed keeps its connection for good, and nothing closes it for you. Each one left open
+takes a pool slot, so a few of them can starve the app. On PostgreSQL it also leaves the server
+session idle in a transaction, which blocks vacuum on the tables it read. Inside a transaction no
+other statement runs on the connection until the cursor is closed. On Android, use a cursor only
+from the thread that opened it. Cursor tokens are not signed: a forged one cannot inject SQL but can
+ask for other allowed rows. Choices and differences from Laravel are in [ADR
+0014](docs/adr/0014-cursors-and-pagination.md).
 
 ### Models
 
@@ -375,9 +374,8 @@ db.transaction(c -> {
 });
 ```
 
-`saveOrFail()` saves inside its own transaction and throws `IllegalStateException` when a model
-with a non-incrementing key has nothing to insert; `save()` returns `true` in that case, as in
-Laravel.
+`saveOrFail()` saves inside its own transaction and throws `IllegalStateException` when a model with
+a non-incrementing key has nothing to insert; `save()` returns `true` in that case, as in Laravel.
 
 ```java
 User grace = users.make(Map.of("name", "Grace", "email", "grace@example.com"));
@@ -614,10 +612,8 @@ users.query().get().get(0).relatedMany("posts");   // LazyLoadingViolationExcept
 
 Two notes for relations:
 
-- A class literal such as `Post.class` does not run the class's static initialiser, and a relation
-  needs the related class's `query` entry to exist. Touch every model's `query` entry at startup
-  (for example, list them in one place), or make sure each model was used before a relation
-  names it.
+- A class literal such as `Post.class` does not run the class's static initialiser, so touch each
+  model's `query` entry at startup, for example in one place, before a relation names it.
 - The default foreign key is the snake-case class name plus `_id`. On Android, R8 renames classes,
   so pass foreign keys explicitly, as above, or override `getForeignKey()`.
 
@@ -731,20 +727,24 @@ The link is set on lazy reads, on eager loads (to each child's own parent), on `
 `create`, `saveMany` and `createMany`, and on a `withDefault` model. `inverse` is an alias;
 `withoutChaperone()` turns it off for one relation. Without a name, `chaperone()` tries the foreign
 key without its key suffix (`post_id` gives `post`), the parent's foreign key, the parent's class
-name, `owner`, and `parent` for a self relation, and throws `RelationNotFoundException` when none
-is a relation of the child. On Android R8 renames classes, so pass the name. `toJson()` of a
-parent and its linked children ends: a model already being written is written again with its
-attributes only.
+name, `owner`, and `parent` for a self relation, and throws `RelationNotFoundException` when none is
+a relation of the child. On Android R8 renames classes, so pass the name. `toJson()` of a parent and
+its linked children ends: a model already being written is written again with its attributes only.
 
-`touchOwners()`, `push()` and `toMap()` recurse once per level of the loaded graph. A very deep
-self chain, such as thousands of nested categories loaded one under another, can overflow a small
-thread stack, such as the default on Android; load such chains in pieces.
+`touchOwners()`, `push()` and `toMap()` recurse once per level of the loaded graph, so a very deep
+chain can overflow a small thread stack; load it in pieces.
 
 Cost at scale: index each child foreign key that relations, `has`/`whereHas`, `withCount`,
 `withExists` and `load*` use, since they run a correlated subquery per outer row. A `hasMany` or
 `hasOne` touch rewrites every child row of the parent, and many children touching one owner make
 it a hot row (lock waits on PostgreSQL, `SQLITE_BUSY` on SQLite and Android); `push()` sends one
 owner `UPDATE` per touching child. Wrap bulk imports in `withoutTouching`.
+
+Many-to-many relations read through a joining table with `belongsToMany`; each related row carries
+its joining row as `pivot`. Index the joining table on a unique (`user_id`, `role_id`) and on
+`role_id`. Attach, detach and sync are not available yet. Behavior and limits:
+[docs/behavior/eloquent](docs/behavior/eloquent/README.md); decisions:
+[ADR 0019](docs/adr/0019-relations-s3a.md).
 
 ### Migrations
 

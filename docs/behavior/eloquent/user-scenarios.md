@@ -39,6 +39,19 @@ With aggregates, touches and push:
 6. They declare `comments()` with `chaperone("post")`; `comment.related("post")` on a loaded
    comment runs no query and returns the same post object.
 
+With many-to-many relations:
+
+1. The developer declares `roles()` on `User` with `belongsToMany(Role.class).withPivot("status")`;
+   the joining table is `role_user`.
+2. They list a user's active roles with `wherePivot("status", "active")` and read each role's
+   joining `status` through `Pivot.of(role)`.
+3. They load roles for a table of users with `with("roles")`: one query per key chunk, each role
+   with its joining row.
+4. They page a user's roles with `paginate(10)`; every role on the page carries its joining row.
+5. They add `withCount("roles")` and `withSum("roles", "role_user.weight")` to the user list; one
+   query.
+6. They send `toJson()` of a role; its joining row appears under `pivot`.
+
 ## Edge cases
 
 | # | Situation | What happens | Test |
@@ -123,7 +136,7 @@ With aggregates, touches and push:
 | E78 | A constraint closure with `distinct`, `join`, `having` or `union` | `IllegalStateException` naming the relation | `AggregateConstraintTest#distinctRefused`, `AggregateConstraintTest#joinRefused`, `AggregateConstraintTest#havingRefused`, `AggregateConstraintTest#unionRefused` |
 | E79 | An aggregate on a self relation | An alias per subselect, the same SQL every build | `WithAggregateSelfRelationTest#countAlias`, `WithAggregateSelfRelationTest#counterIncrements`, `WithAggregateSelfRelationTest#deterministic` |
 | E80 | `withCount` or `whereHas` on `from("users as u")` | The subselect correlates on `u` | `AliasedFromTest#withCountCorrelatesOnTheAlias`, `AliasedFromTest#whereHasQualifiesTheParentKeyWithTheAlias` |
-| E81 | `withExists` on SQLite and PostgreSQL | `Boolean` on both; counts and sums keep the driver's type | `WithAggregateTest#existsIsBoolean`, `SQLiteAggregatesTest#existsBoolean`, `SQLiteAggregatesTest#sumKeepsDriverType`, `PostgresAggregatesTest#existsBoolean`, `PostgresAggregatesTest#countKeepsDriverType` |
+| E81 | `withExists` on SQLite and PostgreSQL | `Boolean` on both; counts and sums keep the driver's type | `WithAggregateTest#existsIsBoolean`, `SQLiteAggregatesTest#existsBoolean`, `SQLiteAggregatesTest#countKeepsDriverType`, `PostgresAggregatesTest#existsBoolean`, `PostgresAggregatesTest#sumKeepsDriverType` |
 | E82 | `count()` or `paginate` total on a query with `withCount` | The aggregate is left out of the count | `WithAggregateTest#countIgnoresAggregates`, `WithAggregateTest#paginateTotalIgnoresAggregates` |
 | E83 | `loadCount` on a collection | One query selecting the key and the aggregate; the models are clean and an earlier change stays dirty | `LoadAggregateTest#oneQueryKeyOnlySelect`, `LoadAggregateTest#otherDirtyKept` |
 | E84 | `loadCount` when a row was deleted, a key is null, or no row comes back | The model is skipped; no exception | `LoadAggregateTest#deletedRowSkipped`, `LoadAggregateTest#nullKeySkipped`, `LoadAggregateTest#noRowsReturned` |
@@ -151,3 +164,51 @@ With aggregates, touches and push:
 | E106 | `withoutChaperone()`, then `chaperone()` again | Off, then on | `ChaperoneTest#withoutChaperone`, `ChaperoneTest#reenable` |
 | E107 | `toJson()` of a chaperoned parent and children | Ends; the repeated parent has attributes only | `RelationSerializationTest#chaperoneTwoWayTerminates`, `RecursionGuardTest#attributesOnlyOnReentry` |
 | E108 | An exception inside `toMap`, `touchOwners` or `push` | The path is released; the next call starts clean | `RecursionGuardTest#recoversAfterException`, `TouchOwnersTest#pathReleasedOnException`, `PushTest#guardReleasedOnException` |
+| E109 | `belongsToMany(Role.class)` on `User`, with no table or keys | Table `role_user`; keys `user_id` and `role_id` | `JoiningTableNameTest#userAndRoleJoinToRoleUserWithDefaultKeys` |
+| E110 | Class names `Zeta` and `alpha` | The joining table is `alpha_zeta` | `JoiningTableNameTest#mixedCaseNamesSortAlphabeticallyBeforeJoining` |
+| E111 | `User` related to `User` with no table | Table `user_user`; both pivot keys are `user_id`, so the caller passes both | `JoiningTableNameTest#selfRelationWithoutTableJoinsToUserUserWithUserIdKeys` |
+| E112 | A table class that is not registered, or a null related class | `UnregisteredModelException` naming the class; `NullPointerException` | `BelongsToManyFactoryTest#unregisteredTableClassThrowsNamingTheClass`, `BelongsToManyFactoryTest#nullRelatedClassThrowsNullPointerException` |
+| E113 | A `Pivot` subclass in the table position | Its table is used and it becomes the joining class | `BelongsToManyFactoryTest#pivotClassOverloadUsesItsTableAndPivotClass` |
+| E114 | Lazy read from a user with a null key | Empty result; no query | `BelongsToManyQueryTest#nullParentKeyGivesEmptyResultWithoutQuery` |
+| E115 | `get()` or `paginate` called twice on one relation | The same SQL each time; the relation's own query is unchanged | `BelongsToManyQueryTest#repeatedGetSendsIdenticalSqlAndKeepsRelationQueryRaw`, `BelongsToManyPageTest#repeatedCallSameSql` |
+| E116 | A relation with `select("roles.name")`, then `get("id")` | `get` keeps the user's columns and ignores the passed one; the joining aliases are always added | `BelongsToManyQueryTest#getColumnsParameterIgnoredWhenUserSelected`, `BelongsToManyQueryTest#selectedUserColumnsReplaceRelatedColumnsAndKeepAliases` |
+| E117 | `chunk` or `paginate` on a relation with a select | Related columns appended after the user's columns | `BelongsToManyIterationTest#chunkAppendsSelect`, `BelongsToManyPageTest#appendSelect` |
+| E118 | Two joining rows for the same user and role | Two instances of the role, each with its own joining row | `PivotHydrationTest#oneInstancePerJoinedRow`, `PivotHydrationTest#twoPivotRowsGiveTwoInstances` |
+| E119 | A related column named `pivot_note`, or an alias `pivot_foo` | Moved into the joining row as `note` or `foo`; the role no longer has it | `PivotHydrationTest#pivotXColumnOfRelatedTableIsMoved`, `PivotHydrationTest#userAliasIsStolen` |
+| E120 | A role read through a relation, then `save()`; then a changed `name` and `save()` | Not dirty, so the first save runs nothing; the second writes only `name` | `PivotHydrationTest#modelNotDirty`, `PivotHydrationTest#saveNeverWritesPivotColumns`, `AttributeRemovalTest#changedNameSendsOnlyName` |
+| E121 | `discardChanges()` on such a role, and `replicate()` | Moved values come back in the attributes, so `toMap()` shows them; `replicate()` copies none | `AttributeRemovalTest#discardChangesRestoresThem`, `AttributeRemovalTest#replicateOmitsRemovedAttributes` |
+| E122 | A select with no joining aliases | The role gets an empty joining row | `PivotHydrationTest#emptyPivotWhenNoAliases` |
+| E123 | `withPivot("status")` repeated, or `withPivot("role_user.status")` | Added once; a dotted name is refused before anything is added | `BelongsToManyQueryTest#withPivotRepeatingAnAliasAddsNoDuplicate`, `PivotColumnsTest#dottedPivotColumnRefusedWithoutRecording` |
+| E124 | `withTimestamps("", null)`, or a parent with no timestamp columns | An empty name turns that column off; a missing parent column registers nothing | `PivotColumnsTest#emptyStringDisables`, `PivotColumnsTest#parentWithoutTimestamps` |
+| E125 | `as("")`, or `as` with a name a loaded relation already has | Refused; or the loaded relation of that name is replaced | `PivotAccessorTest#emptyAccessorRejected`, `PivotAccessorTest#overwritesSameName` |
+| E126 | `using(X)` where `X` is not registered | `UnregisteredModelException` at the call | `PivotAccessorTest#unregisteredUsing` |
+| E127 | `using` of a joining class not yet initialised in a fresh JVM | Loaded by name and found; a class with no registry entry still throws | `PivotRegistryLoadTest#usingClassNotYetInitialisedLoadsAndRetries`, `PivotRegistryLoadTest#usingClassWithoutEntryThrowsNamingTheClass` |
+| E128 | `withPivotValue` with a null value, or the map form with one null entry | `IllegalArgumentException`; nothing is applied from that call | `WherePivotTest#pivotValueNull`, `WherePivotTest#pivotValueMap` |
+| E129 | `wherePivot(...)` then `orWherePivot(...)` on a direct read | Applied flat: `user_id = ? and status = ? or status = ?`, so the second clause matches other users' rows; group the chain with `where` | `WherePivotTest#orForm` |
+| E130 | The same `or` chain declared in the relation method, used by `has` | Grouped inside the subquery, so the parent match holds | `BelongsToManyExistenceTest#declaredOrWherePivotStaysCorrelated` |
+| E131 | `wherePivotIn("status", [])` | Matches nothing (the query builder's empty-list rule) | `WherePivotTest#emptyIn` |
+| E132 | `orderByPivot` declared in the relation method, used by `withCount` | No order in the subselect | `WherePivotTest#ordersDroppedInAggregates` |
+| E133 | Eager load of `roles` with a constraint that selects `name` | Roles get `name` and the joining row; match works; no unaliased match column is added | `BelongsToManyEagerTest#narrowSelectClosureStillMatchesAndAddsAliases`, `BelongsToManyEagerTest#noUnaliasedMatchColumnIsAddedToNarrowSelect` |
+| E134 | Eager constraint or relation method with `limit` | `IllegalStateException` | `BelongsToManyEagerTest#closureLimitIsRefused`, `BelongsToManyEagerTest#relationLimitIsRefused` |
+| E135 | Eager load of 2,000 string keys on SQLite | Three queries; each parent gets its own roles | `BelongsToManyEagerKeysTest#stringKeysAreChunkedAtTheBoundSizeOnSqlite` |
+| E136 | Eager load with a null parent key, or a joining row with a null key | The null-key parent gets an empty collection and is not queried; the joining row is skipped without error | `BelongsToManyEagerTest#nullKeyParentDroppedFromKeysAndGetsEmptyCollection`, `BelongsToManyEagerTest#nullPivotKeyRowIsSkippedWithoutError` |
+| E137 | `wherePivot` or `orderByPivot` declared in the relation method, then eager load | Applied per parent in the eager query | `BelongsToManyEagerTest#wherePivotDeclaredInRelationAppliesInEagerQuery`, `BelongsToManyEagerTest#orderByPivotDeclaredInRelationOrdersEagerMatches` |
+| E138 | `has("friends")` on a self relation | Related table aliased `laravel_reserved_0`; the joining table is not aliased; the same SQL on every build; a second use in one query gets `_1` | `BelongsToManySelfJoinTest#hasShape`, `BelongsToManySelfJoinTest#sameSqlOnSecondBuild`, `BelongsToManySelfJoinTest#secondUseInOneQueryIncrementsAndNextQueryStartsAtZero`, `BelongsToManySelfJoinTest#pivotTableNeverAliased` |
+| E139 | A closure in `whereHas` adds a join | Refused; the relation's own join is accepted | `BelongsToManyExistenceTest#closureJoinRefused`, `BelongsToManyExistenceTest#ownJoinAccepted` |
+| E140 | `withSum("roles", "role_user.weight")` | `sum("role_user"."weight")`, alias `roles_sum_role_userweight` | `BelongsToManyAggregateTest#pivotColumnSum` |
+| E141 | `loadCount` on a user whose row is gone, or whose key is null | The model is skipped; no exception | `BelongsToManyLoadAggregateTest#missingRowsSkipped` |
+| E142 | `find(99)` or `findOrFail(99)` for a role not attached | Empty `Optional`, or `ModelNotFoundException` naming the role class | `BelongsToManyFindTest#findMissing`, `BelongsToManyFindTest#findOrFailThrows` |
+| E143 | `findMany` of an empty collection | Empty collection; no query | `BelongsToManyFindTest#findManyEmpty` |
+| E144 | `chunkById` on the relation with no column given | Ordered by the related key, qualified, so the join is not ambiguous | `BelongsToManyIterationTest#chunkByIdDefaults` |
+| E145 | `cursor()` with an eager load set on the relation | `IllegalStateException` | `BelongsToManyIterationTest#cursorWithEagerRefused` |
+| E146 | `paginate` count query | No select list and no joining aliases | `BelongsToManyPageTest#countQueryShape` |
+| E147 | `cursorPaginate` ordered by a joining-table column, then by its `pivot_` alias | The first throws `IllegalStateException` naming the column; the alias pages correctly | `BelongsToManyPageTest#cursorPivotOrderRefused`, `BelongsToManyPageTest#cursorPaginateOrdersByPivotAlias` |
+| E148 | `toMap()` of a role read through a user | The joining row under `pivot`; `as("membership")` renames the key; `hidden` drops it | `BelongsToManySerializationTest#pivotInMap`, `BelongsToManySerializationTest#renamedKey`, `BelongsToManySerializationTest#hiddenAccessor` |
+| E149 | A joining class with `hidden` and a date cast | The hidden column is absent; the cast applies when it is serialized | `BelongsToManySerializationTest#pivotHiddenAndCasts` |
+| E150 | `chaperone()` with no `using`, or called before `using` | No effect | `PivotChaperoneTest#noopWithoutUsing`, `PivotChaperoneTest#orderMatters` |
+| E151 | `chaperone("nope")` | `RelationNotFoundException` naming the joining class and the name | `PivotChaperoneTest#badNameRejected` |
+| E152 | Chaperone that finds only one side, or neither | The side found is linked; the other stays quiet, with no error | `PivotChaperoneTest#oneSideOnly`, `PivotChaperoneTest#noneFoundQuiet` |
+| E153 | Chaperoned read, lazy or eager | Each joining row points at its own parent instance; no extra query | `PivotChaperoneTest#lazyLinks`, `PivotChaperoneTest#eagerLinksRealParent`, `PivotChaperoneTest#noExtraQueries` |
+| E154 | `toJson()` of a chaperoned graph | Ends; the repeated model has attributes only | `PivotChaperoneTest#serializationEnds`, `BelongsToManySerializationTest#chaperoneEnds` |
+| E155 | `update`, `delete`, `refresh` on a joining row with no key | `IllegalStateException` before any statement; a clean save of such a row runs no update | `PivotModelTest#updateWithoutKeyThrows`, `PivotModelTest#deleteWithoutKeyThrows`, `PivotModelTest#refreshWithoutKeyThrows`, `PivotModelTest#cleanKeylessSaveRunsNoUpdate` |
+| E156 | `Pivot.of(role)` when no joining row is loaded, or `Pivot.of(null)` | `null`; a null argument throws `NullPointerException` | `PivotModelTest#ofNullWhenNonPivotLoadedUnderPivotName`, `PivotModelTest#ofNull` |

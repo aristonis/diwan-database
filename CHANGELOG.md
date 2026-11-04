@@ -184,6 +184,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cycle. As in Laravel, a loaded `withDefault` placeholder is inserted.
 - `chaperone()` (alias `inverse()`) on `hasOne` and `hasMany` sets the parent on each loaded child
   without a query.
+- Many-to-many relations, read side: `belongsToMany` declares the relation with Laravel's joining
+  table and key names, and each related row carries its joining row as a `Pivot` under `pivot` (or
+  the name given by `as`), read with `Pivot.of`. Joining columns are chosen with `withPivot`,
+  `withTimestamps` and `as`, a joining class with `using`, and the joining table is filtered and
+  sorted with `wherePivot`, `orderByPivot` and `withPivotValue`. Lazy and eager reads, `has`,
+  `whereHas`, `withCount` and the other aggregates, `load*`, the finders, iteration and the three
+  page kinds work on the relation, and `chaperone` links a joining row to both sides when a joining
+  class is given. Unlike Laravel, a read never changes the relation, a related column named with
+  the `pivot_` prefix is moved into the joining row, `cursorPaginate` refuses an order on a
+  joining-table column, and a joining row with no key refuses `update` and `delete`. Writes through
+  the relation (`attach`, `detach`, `sync`) are not available yet.
 
 ### Changed
 

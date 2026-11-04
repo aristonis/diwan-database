@@ -52,6 +52,11 @@ found.delete();
 | Bump a parent's `updated_at` | override `touches()`; `touchOwners`, `Relation.touch`, `Model.withoutTouching`, `Model.withoutTouchingOn` |
 | Save a model and its loaded relations | `push` |
 | Point children back to their parent | `chaperone`, `inverse`, `withoutChaperone`, `withoutInverse` on `hasOne` and `hasMany` |
+| Declare many-to-many relations | `belongsToMany` with a table, keys, a joining class or a relation name |
+| Read the joining row | `pivot`, `Pivot.of`, and `withPivot`, `withTimestamps`, `as`, `using` on `BelongsToMany` |
+| Filter and sort by the joining row | `wherePivot`, `orWherePivot`, `wherePivotIn`, `wherePivotNull` and their forms, `orderByPivot`, `withPivotValue` |
+| Find, iterate and page many-to-many rows | `find`, `findMany`, `findOrFail`, `first`, `firstWhere`, `sole`, `chunk`, `each`, `lazy`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` on `BelongsToMany` |
+| Link the joining row to both sides | `chaperone`, `withoutChaperone` on `BelongsToMany`, after `using` |
 
 ## Casts, accessors and serialization
 
@@ -116,6 +121,94 @@ Eager loading drops null keys and splits long key lists so no statement passes t
 limits. `has` and
 `whereHas` compile to `exists` subqueries; a relation to the same table gets an alias per level.
 `toMap()` writes loaded relations after the attributes under snake-case keys and stops on cycles.
+
+## Many-to-many
+
+```java
+public final class User extends Model {
+    public static final ModelQuery<User> query = ModelQuery.of(User.class, User::new);
+
+    @Override
+    protected RelationMap<?> relations() {
+        return RelationMap.of(User.class).add("roles", User::roles);
+    }
+
+    public BelongsToMany<Role> roles() {
+        return belongsToMany(Role.class).withPivot("status");   // role_user: user_id, role_id
+    }
+}
+
+ModelCollection<Role> active = user.roles().wherePivot("status", "active").get();
+String status = Pivot.of(active.get(0)).getString("status");    // the joining row, typed
+```
+
+The joining table and its keys come from the class names: `role_user`, with `user_id` and
+`role_id`. Each role read through the relation carries its joining row as `pivot`. The joining row
+holds only what you name: `withPivot("status")` for columns, `withTimestamps()` for the parent's
+two timestamp columns, `as("membership")` for another key, and `using(Membership.class)` for a
+`Pivot` subclass with its own methods, casts and hidden columns. `wherePivotIn`, `wherePivotBetween`
+and `wherePivotNull` take the same `or` forms as `wherePivot`, and `orderByPivot` sorts by a
+joining column. `withPivotValue("status", "active")` filters with `=` and refuses a null value.
+
+```java
+ModelCollection<User> all = users.with("roles").get();              // one query per key chunk
+users.with("roles", q -> q.where("role_user.status", "active")).get();
+users.query().whereHas("roles", q -> q.where("name", "admin")).get();
+users.query().withCount("roles").withSum("roles", "role_user.weight").get();
+
+user.roles().first();                                             // Optional, limit 1
+user.roles().firstWhere("name", "admin");
+user.roles().chunk(100, roles -> { /* ... */ return true; });
+ModelPage<Role> page = user.roles().paginate(20, 1);
+```
+
+Eager loads match each joining row to its parent by the joining key, and a constraint that selects
+only some columns still gets the joining row. Long key lists are split as other eager keys are.
+Finders, iterators and pages exist on the many-to-many relation only; `find` takes ids, not models.
+Each read works on a copy, so calling `get` or `paginate` twice on one relation sends the same SQL.
+
+Clauses on the relation are added in call order on direct reads, as in Laravel, and are not
+grouped. A chain of `or` clauses therefore widens the match. This query also returns the pending
+joining rows of every user:
+
+```java
+user.roles().wherePivot("status", "active").orWherePivot("status", "pending").get();
+```
+
+Group the chain yourself with the relation's `where` method:
+
+```java
+user.roles().where(q -> q.where("role_user.status", "active")
+        .orWhere("role_user.status", "pending")).get();
+```
+
+The clauses a relation method declares are grouped inside `has`, `whereHas` and the aggregates, so
+the same chain cannot widen the parent match there.
+
+`has` and `whereHas` compile to `exists` subqueries; a self relation such as
+`belongsToMany(User.class, "user_user", "user_id", "friend_id")` gets the alias
+`laravel_reserved_0` on the related table, numbered per outer query, and its joining table is not
+aliased. `toMap()` and `toJson()` write the joining row under `pivot` or the `as` name, after the
+attributes.
+
+Two joining columns need care. Any column or alias whose name starts with `pivot_` moves into the
+joining row with the prefix removed, so a related column `pivot_note` reads as `note` there and is
+gone from the role. The moved values are not dirty and a save never writes them. `discardChanges()`
+copies them back, so `toMap()` shows them again, and `replicate()` does not carry them.
+
+`chaperone()` links each joining row to its parent and its related row with no query, but only
+when `using` came first: `belongsToMany(Role.class).using(Membership.class).chaperone()`. Without
+names it guesses the inverse from the pivot key (`user_id` gives `user`), then from the class name,
+and a side it cannot find stays unlinked without an error.
+
+Index the joining table on a unique (`user_id`, `role_id`) and on `role_id`. Each `withCount` and
+`has` runs one correlated subquery per outer row, and that subquery looks up the joining rows by
+`user_id`, which the leading column of the unique index serves. Without that index each outer row
+scans the joining table.
+
+`attach`, `detach` and `sync` are not in this read side. A joining row without a primary key
+refuses `update`, `delete`, `increment`, `decrement`, `refresh` and `fresh` with
+`IllegalStateException` before any statement runs.
 
 ## Aggregates, touches, push and chaperone
 
@@ -208,9 +301,19 @@ foreign key, the parent class name, `owner`, then `parent` for a self relation.
   own touch walk.
 - `touchOwners()`, `push()` and `toMap()` recurse once per level of the loaded graph; a very deep
   self chain can overflow a small thread stack, such as the default on Android.
+- Clauses on a many-to-many relation are not grouped on direct reads, so a chain of `or` clauses
+  widens the match. Group it with the relation's `where`.
+- `cursorPaginate` refuses an order on a joining-table column. Order by its `pivot_` alias.
+- `chaperone()` does nothing unless `using` came first.
+- A related column whose name starts with `pivot_` moves into the joining row.
+- A joining row without a primary key refuses writes. `attach`, `detach` and `sync` are not here
+  yet.
+- On Android, pass the table, the pivot keys and the chaperone names: R8 renames the classes that
+  the defaults come from.
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md). The decisions are in
 [ADR 0015](../../adr/0015-eloquent-models.md), for casts
 [ADR 0016](../../adr/0016-attributes-casts-and-the-json-codec.md), for relations
 [ADR 0017](../../adr/0017-relations.md), and for aggregates, touches, push and chaperone
-[ADR 0018](../../adr/0018-relations-s2.md).
+[ADR 0018](../../adr/0018-relations-s2.md), and for many-to-many relations
+[ADR 0019](../../adr/0019-relations-s3a.md).

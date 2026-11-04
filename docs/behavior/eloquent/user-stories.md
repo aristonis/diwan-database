@@ -159,3 +159,91 @@ back to it without a query.
 Done when: the inverse is guessed or checked at the call, every lazy, eager and write path links
 the same parent instance, and `toJson()` of the linked graph ends.
 
+### Many-to-many relations
+
+As an application developer, I want `belongsToMany(Role.class)` on `User`, so that a many-to-many
+relation is one line, with the joining table and its keys found by Laravel's names.
+
+Done when: the default table and keys are `role_user`, `user_id` and `role_id`; a table or key can
+be given instead, and an unregistered class fails naming it.
+
+### The joining row
+
+As an application developer, I want each role read through a user to carry its joining row, so
+that I can read `status` or `created_at` of the link.
+
+Done when: `Pivot.of(role)` returns the joining row with its columns, a role with no joining row
+gives `null`, and the role has no `pivot_*` attribute.
+
+### Choosing joining columns
+
+As an application developer, I want `withPivot`, `withTimestamps` and `as` to choose which joining
+columns I read, and the name they are read under.
+
+Done when: each column is selected once, the key is the name I gave, and a dotted or empty name is
+refused before anything changes.
+
+### A joining class of my own
+
+As an application developer, I want `using(Membership.class)`, so that the joining row has my own
+methods, casts and hidden columns.
+
+Done when: the joining row is an instance of my class, built through its registry entry, and a
+class that is not registered fails at the call.
+
+### Filtering and sorting by the joining row
+
+As an application developer, I want `wherePivot`, `wherePivotIn`, `wherePivotNull` and
+`orderByPivot`, so that I can filter and sort by a joining column without writing its table name.
+
+Done when: each clause qualifies its column, applies to lazy and eager reads, existence checks and
+aggregates, and an `or` chain on a direct read needs my own `where` group.
+
+### Eager loading many-to-many
+
+As an application developer, I want `with("roles")` to load every user's roles in one query per key
+chunk, matched by the joining row, so that a list of users costs a fixed number of queries.
+
+Done when: a constraint that selects only some columns still gives each role its joining row, a
+limit is refused, and 2,000 string keys run three queries on SQLite.
+
+### Filtering and counting by related rows
+
+As an application developer, I want `has`, `whereHas`, `withCount`, `withSum` and `withExists` on a
+many-to-many relation, including a self relation such as `friends`.
+
+Done when: each form is one `exists` or subselect, a self relation gets a stable alias, a closure
+can filter by a qualified joining column, and the SQL is the same every time.
+
+### Pages and iteration of joining rows
+
+As an application developer, I want `find`, `first`, `chunk`, `each`, `lazy`, `cursor` and the page
+methods on `user.roles()`, so that each role comes with its joining row.
+
+Done when: every method returns the joining row, the relation is unchanged after each call, and
+`cursorPaginate` refuses an order on a joining-table column while accepting the `pivot_` alias.
+
+### Linked parents without queries
+
+As an application developer, I want `chaperone()` on a many-to-many relation with a joining class,
+so that each joining row points back to its user and role without a query.
+
+Done when: the links are set on every read path, `chaperone()` does nothing before `using`, and
+`toJson()` of the linked graph ends.
+
+### Joining rows in JSON
+
+As an API developer, I want `toJson()` of a role to include its joining row under `pivot`, so that
+clients get the link data with the role.
+
+Done when: the joining row appears under `pivot` or its `as` name, `hidden` can remove it, and a
+cycle through the chaperone ends.
+
+### A joining row that cannot be written yet
+
+As an application developer, I want a joining row without a primary key to refuse updates and
+deletes, so that a save never reaches the wrong row.
+
+Done when: `update`, `delete`, `increment`, `decrement`, `refresh` and `fresh` refuse before any
+statement runs. `attach`, `detach` and `sync` are not available yet.
+
