@@ -339,11 +339,11 @@ class ModelPersistenceTest {
 
     @Test
     void destroyLoadsThenDeletesEachModel() {
-        fake.returns("select * from \"users\" where \"id\" in (?, ?)", row("id", 1L), row("id", 2L));
+        fake.returns("select * from \"users\" where \"users\".\"id\" in (?, ?)", row("id", 1L), row("id", 2L));
 
         assertEquals(2, users.destroy(1, 2));
 
-        assertEquals(Arrays.asList("select * from \"users\" where \"id\" in (?, ?)",
+        assertEquals(Arrays.asList("select * from \"users\" where \"users\".\"id\" in (?, ?)",
                 "delete from \"users\" where \"id\" = ?", "delete from \"users\" where \"id\" = ?"), fake.sql());
         assertEquals(0, users.destroy());
         assertEquals(0, users.destroy(Collections.emptyList()));

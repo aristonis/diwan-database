@@ -302,6 +302,32 @@ abstract class ModelConfig {
     }
 
     /**
+     * Returns whether the model is soft deleted: {@code delete()} then sets the deleted-at column
+     * instead of removing the row, and queries skip trashed rows. {@code false} by default.
+     *
+     * <p>The answer must not depend on instance state: the default datetime cast of the deleted-at
+     * column is resolved once per model class.
+     *
+     * @return whether the model uses soft deletes
+     */
+    protected boolean softDeletes() {
+        return false;
+    }
+
+    /**
+     * Returns the column that holds the moment of a soft delete; {@code deleted_at} by default.
+     * Only read when {@link #softDeletes()} is {@code true}.
+     *
+     * <p>The answer must not depend on instance state: the default datetime cast of the column is
+     * resolved once per model class.
+     *
+     * @return the column name, never {@code null} or blank
+     */
+    protected String deletedAtColumn() {
+        return "deleted_at";
+    }
+
+    /**
      * Returns the table the model reads and writes, or the alias it was given as the related
      * model of a self-relation existence query.
      *

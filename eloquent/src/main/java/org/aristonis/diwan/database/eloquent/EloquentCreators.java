@@ -229,8 +229,10 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
     }
 
     // Laravel's clone keeps the eager loads and casts; the alias counter is copied, not shared.
+    @Override
     final EloquentBuilder<T> copy() {
         EloquentBuilder<T> copied = new EloquentBuilder<>(source, model, query.clone());
+        copied.copyScopesFrom(this);
         self().copyRelationStateTo(copied);
         self().copyAggregateStateTo(copied);
         copied.useRowHook(rowHook);
@@ -248,7 +250,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
      */
     public final int update(Map<String, ?> values) {
-        return query.update(addUpdatedAtColumn(values));
+        return scoped().update(addUpdatedAtColumn(values));
     }
 
     /**
@@ -282,7 +284,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @return the affected rows
      */
     public final int increment(String column, Number amount, Map<String, ?> extra) {
-        return query.increment(column, amount, addUpdatedAtColumn(extra));
+        return scoped().increment(column, amount, addUpdatedAtColumn(extra));
     }
 
     /**
@@ -316,16 +318,122 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @return the affected rows
      */
     public final int decrement(String column, Number amount, Map<String, ?> extra) {
-        return query.decrement(column, amount, addUpdatedAtColumn(extra));
+        return scoped().decrement(column, amount, addUpdatedAtColumn(extra));
     }
 
     /**
-     * Deletes every matching row. No model hooks run.
+     * Deletes every matching row. No model hooks run. A soft-deleting model is not deleted: the
+     * rows get the deleted-at column (and {@code updated_at} when the model keeps timestamps) set
+     * to one moment, whether or not the soft-deleting scope was removed from this builder.
      *
      * @return the affected rows
      */
     public final int delete() {
-        return query.delete();
+        return model.isSoftDeletable() ? softDeleteRows() : scoped().delete();
+    }
+
+    /**
+     * Deletes every matching row for good, skipping the soft-deleting scope. No model hooks run.
+     *
+     * @return the affected rows
+     * @throws IllegalStateException if the model does not soft delete
+     */
+    public final int forceDelete() {
+        requireSoftDeletes("forceDelete()");
+        return copy().withoutGlobalScope(SoftDeletingScope.NAME).scoped().delete();
+    }
+
+    /**
+     * Restores every matching soft-deleted row by clearing the deleted-at column, also when the
+     * soft-deleting scope would hide it. No model hooks run.
+     *
+     * @return the affected rows
+     * @throws IllegalStateException if the model does not soft delete
+     */
+    public final int restore() {
+        requireSoftDeletes("restore()");
+        Map<String, Object> cleared = new LinkedHashMap<>();
+        cleared.put(deletedAtSetColumn(), null);
+        return copy().withTrashed().update(cleared);
+    }
+
+    /**
+     * Returns the first model matching the attributes, trashed or not, creating one when none
+     * matches; a trashed match is restored.
+     *
+     * @param attributes the columns to match, never {@code null}
+     * @return the model, never {@code null}
+     * @throws IllegalStateException if the model does not soft delete
+     */
+    public final T restoreOrCreate(Map<String, ?> attributes) {
+        return restoreOrCreate(attributes, new LinkedHashMap<String, Object>());
+    }
+
+    /**
+     * Returns the first model matching the attributes, trashed or not, creating one from the
+     * attributes and the values when none matches; a trashed match is restored.
+     *
+     * @param attributes the columns to match, never {@code null}
+     * @param values more attributes for a new model, never {@code null}
+     * @return the model, never {@code null}
+     * @throws IllegalStateException if the model does not soft delete
+     * @throws MassAssignmentException as {@link Model#fill(Map)}, for a new model
+     */
+    public final T restoreOrCreate(Map<String, ?> attributes, Map<String, ?> values) {
+        requireSoftDeletes("restoreOrCreate()");
+        return restoredIfTrashed(copy().withTrashed().firstOrCreate(attributes, values));
+    }
+
+    /**
+     * Creates a model from the attributes, or returns the existing match, trashed or not, when a
+     * unique index refuses it; a trashed match is restored.
+     *
+     * @param attributes the columns to match, never {@code null}
+     * @return the model, never {@code null}
+     * @throws IllegalStateException if the model does not soft delete
+     */
+    public final T createOrRestore(Map<String, ?> attributes) {
+        return createOrRestore(attributes, new LinkedHashMap<String, Object>());
+    }
+
+    /**
+     * Creates a model from the attributes and values, or returns the existing match, trashed or
+     * not, when a unique index refuses it; a trashed match is restored.
+     *
+     * @param attributes the columns to match, never {@code null}
+     * @param values more attributes for the new model, never {@code null}
+     * @return the model, never {@code null}
+     * @throws IllegalStateException if the model does not soft delete
+     * @throws UniqueConstraintViolationException if the insert is refused and no match is found
+     */
+    public final T createOrRestore(Map<String, ?> attributes, Map<String, ?> values) {
+        requireSoftDeletes("createOrRestore()");
+        return restoredIfTrashed(copy().withTrashed().createOrFirst(attributes, values));
+    }
+
+    private T restoredIfTrashed(T found) {
+        if (found.trashed()) {
+            found.restore();
+        }
+        return found;
+    }
+
+    // One moment for both columns; the update adds updated_at itself when the model keeps timestamps.
+    private int softDeleteRows() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        Object moment = model.freshTimestampValue();
+        values.put(deletedAtSetColumn(), moment);
+        String updatedAt = model.getUpdatedAtColumn();
+        if (model.usesTimestamps() && updatedAt != null) {
+            values.put(updatedAt, moment);
+        }
+        return update(values);
+    }
+
+    // The deleted-at column in an UPDATE: always bare, since SQLite and PostgreSQL refuse a qualified
+    // SET column; a joined update is rewritten by the core to a keyed subquery.
+    private String deletedAtSetColumn() {
+        return model.getDeletedAtColumn();
     }
 
     // Laravel puts the table-qualified updated_at last; the SQLite and PostgreSQL grammars then

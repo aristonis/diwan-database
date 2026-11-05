@@ -519,6 +519,51 @@ abstract class BasicWheres extends BuilderState {
         return self();
     }
 
+    /**
+     * Regroups the where conditions around {@code index}. The conditions before it and the
+     * conditions from it on are two slices; a slice that holds an {@code or} becomes one nested
+     * group, so its {@code or} cannot widen the other slice. A slice without an {@code or} stays
+     * flat. Only the {@code wheres} list changes: the bindings keep their order.
+     *
+     * @param index where the second slice starts, from {@code 0} to the number of wheres
+     * @param newSliceJoinsWithAnd whether the second slice, when grouped, joins the first with
+     *     {@code and} instead of its own first conjunction
+     * @return this builder
+     * @throws IllegalArgumentException if {@code index} is below {@code 0} or above the number
+     *     of wheres
+     */
+    public Builder groupWheresAt(int index, boolean newSliceJoinsWithAnd) {
+        if (index < 0 || index > wheres.size()) {
+            throw new IllegalArgumentException(
+                    "index must be between 0 and " + wheres.size() + ", got " + index);
+        }
+        if (index == wheres.size()) {
+            return self();
+        }
+        List<Where> regrouped = new ArrayList<>(groupSlice(wheres.subList(0, index), false));
+        regrouped.addAll(groupSlice(wheres.subList(index, wheres.size()), newSliceJoinsWithAnd));
+        wheres.clear();
+        wheres.addAll(regrouped);
+        return self();
+    }
+
+    private List<Where> groupSlice(List<Where> slice, boolean joinsWithAnd) {
+        boolean hasOr = false;
+        for (Where where : slice) {
+            hasOr = hasOr || where.conjunction().startsWith(OR);
+        }
+        if (!hasOr) {
+            return new ArrayList<>(slice);
+        }
+        Builder group = forNestedWhere();
+        group.wheres.addAll(slice);
+        String first = slice.get(0).conjunction();
+        String connector = joinsWithAnd || first.startsWith(AND) ? AND : OR;
+        List<Where> grouped = new ArrayList<>();
+        grouped.add(new Where.Nested(connector, group));
+        return grouped;
+    }
+
     Builder forNestedWhere() {
         Builder query = self().newQuery();
         query.from = from;

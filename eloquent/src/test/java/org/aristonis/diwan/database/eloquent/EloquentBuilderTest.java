@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.aristonis.diwan.database.eloquent.ScopeFixtures.Tag;
 import org.aristonis.diwan.database.eloquent.TestModels.Note;
 import org.aristonis.diwan.database.eloquent.TestModels.User;
 import org.aristonis.diwan.database.query.Builder;
@@ -382,5 +383,23 @@ class EloquentBuilderTest {
         assertThrows(IllegalStateException.class, cursor::next);
 
         assertTrue(cursor.isClosed());
+    }
+
+    @Test
+    void unscopedModelsAreUnchanged() {
+        ModelQuery<Tag> tags = Tag.QUERY.on(fake.db);
+        fake.returns("select * from \"tags\" where \"name\" = ?", row("id", 1L, "name", "php"));
+        EloquentBuilder<Tag> query = tags.query().where("name", "php");
+
+        Builder base = fake.db.table("tags").where("name", "php");
+
+        assertEquals(base.toSql(), query.toSql());
+        assertEquals(base.getBindings(), query.getBindings());
+        assertEquals(base.toSql(), query.toBase().toSql());
+        assertEquals(Collections.emptyList(), query.removedScopes());
+        assertEquals(1, tags.query().where("name", "php").get().size());
+        assertEquals(1, fake.calls.size());
+        assertEquals("select * from \"tags\" where \"name\" = ?", fake.last().sql());
+        assertEquals(Collections.singletonList("php"), fake.last().bindings());
     }
 }

@@ -47,6 +47,8 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
     private final String localKey;
     private final String secondLocalKey;
     private final Map<Model, Object> throughKeys = new IdentityHashMap<>();
+    private boolean isWithTrashedParents;
+    private boolean hasBuilt;
 
     /**
      * Builds the relation over the related query and the six keys.
@@ -188,6 +190,7 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
         refuseSameTables();
         performJoin(baseQuery());
         baseQuery().where(getQualifiedFirstKeyName(), "=", parentKey());
+        addThroughParentFilter(baseQuery(), throughParent.getTable());
     }
 
     @Override
@@ -200,6 +203,7 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
         refuseSameTables();
         performJoin(eagerQuery);
         whereEagerKeys(eagerQuery, getQualifiedFirstKeyName(), chunk);
+        addThroughParentFilter(eagerQuery, throughParent.getTable());
     }
 
     @Override
@@ -340,6 +344,7 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
             aliasRelatedTable(aliases);
             performJoin(baseQuery());
             baseQuery().whereColumn(outerKey, "=", getQualifiedFirstKeyName());
+            addThroughParentFilter(baseQuery(), throughParent.getTable());
             return existenceBaseQuery();
         }
         String outerFrom = parentQuery.toBase().getFrom();
@@ -348,10 +353,12 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
             baseQuery().join(throughParent.getTable() + AS + alias, alias + "." + secondLocalKey, "=",
                     getQualifiedForeignKeyName());
             baseQuery().whereColumn(outerKey, "=", alias + "." + firstKey);
+            addThroughParentFilter(baseQuery(), alias);
             return existenceBaseQuery();
         }
         performJoin(baseQuery());
         baseQuery().whereColumn(outerKey, "=", getQualifiedFirstKeyName());
+        addThroughParentFilter(baseQuery(), throughParent.getTable());
         return existenceBaseQuery();
     }
 
@@ -377,7 +384,39 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
         return copy;
     }
 
+    /**
+     * Tells whether the through model soft-deletes, so trashed through parents are left out.
+     *
+     * @return {@code true} when the through model soft-deletes
+     */
+    public final boolean throughParentSoftDeletes() {
+        return throughParent.isSoftDeletable();
+    }
+
+    /**
+     * Keeps through parents that are soft-deleted. Removing global scopes does not do this; only
+     * this call does.
+     *
+     * @return this relation
+     * @throws IllegalStateException if the relation already built a query
+     */
+    public final S withTrashedParents() {
+        if (hasBuilt) {
+            throw new IllegalStateException("Relation [" + describe() + "] of [" + getParent().getClass().getName()
+                    + "] already built a query; call withTrashedParents() before the first read");
+        }
+        isWithTrashedParents = true;
+        return self();
+    }
+
+    private void addThroughParentFilter(EloquentBuilder<R> target, String tableOrAlias) {
+        if (throughParentSoftDeletes() && !isWithTrashedParents) {
+            target.whereNull(tableOrAlias + "." + throughParent.getDeletedAtColumn());
+        }
+    }
+
     private void refuseSameTables() {
+        hasBuilt = true;
         if (getRelated().getTable().equals(throughParent.getTable())) {
             throw new IllegalStateException("Relation [" + describe() + "] of [" + getParent().getClass().getName()
                     + "] reads the table [" + throughParent.getTable()

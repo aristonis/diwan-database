@@ -31,7 +31,7 @@ import org.aristonis.diwan.database.query.QueryFactory;
  *
  * <p>Instances are not safe to share across threads.
  */
-public abstract class Model extends ModelGuards {
+public abstract class Model extends ModelSoftDeletes {
 
     private static final ThreadLocal<int[]> TIMESTAMPS_OFF = ThreadLocal.withInitial(() -> new int[1]);
 
@@ -374,7 +374,9 @@ public abstract class Model extends ModelGuards {
     // ---- deleting ----
 
     /**
-     * Deletes the model's row by its key.
+     * Deletes the model's row by its key. A soft-deleting model instead sets its deleted-at
+     * column and, when the model writes timestamps, its updated-at column, and keeps existing;
+     * {@link #forceDelete()} removes the row for good.
      *
      * @return {@code true} when deleted; {@code false} when the model does not exist (Laravel
      *     returns {@code null}) or a hook vetoed it
@@ -389,8 +391,10 @@ public abstract class Model extends ModelGuards {
             return false;
         }
         touchOwnersBeforeDelete();
-        setKeysForSaveQuery(newBaseQuery()).delete();
-        exists = false;
+        if (!runSoftDelete()) {
+            setKeysForSaveQuery(newBaseQuery()).delete();
+            exists = false;
+        }
         deleted();
         return true;
     }

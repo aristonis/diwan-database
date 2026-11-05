@@ -41,6 +41,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
 
     EloquentBuilder(ModelQuery<T> source, T model) {
         this(source, model, model.newBaseQuery());
+        attachClassScopes();
     }
 
     EloquentBuilder(ModelQuery<T> source, T model, Builder query) {
@@ -92,7 +93,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the models, never {@code null}
      */
     public ModelCollection<T> get() {
-        return eagerLoaded(hydrate(query.get()));
+        return eagerLoaded(hydrate(scoped().get()));
     }
 
     /**
@@ -101,7 +102,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the model, or empty
      */
     public Optional<T> first() {
-        Optional<Map<String, Object>> row = query.first();
+        Optional<Map<String, Object>> row = scoped().first();
         if (!row.isPresent()) {
             return Optional.empty();
         }
@@ -285,7 +286,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the value, or empty when no row matches or the value is {@code null}
      */
     public Optional<Object> value(String column) {
-        return query.value(column);
+        return scoped().value(column);
     }
 
     /**
@@ -295,7 +296,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the values, never {@code null}
      */
     public List<Object> pluck(String column) {
-        return query.pluck(column);
+        return scoped().pluck(column);
     }
 
     /**
@@ -304,7 +305,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the count
      */
     public long count() {
-        return query.count();
+        return scoped().count();
     }
 
     /**
@@ -313,7 +314,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return whether a row exists
      */
     public boolean exists() {
-        return query.exists();
+        return scoped().exists();
     }
 
     private ModelNotFoundException notFound(List<?> ids) {
@@ -322,10 +323,13 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
 
     // ---- chunks and streams ----
 
-    private void enforceOrderBy() {
-        if (query.getOrders().isEmpty() && query.getUnionOrders().isEmpty()) {
-            query.orderBy(model.getQualifiedKeyName(), "asc");
+    // Orders the query a terminal runs on; with no scope attached that is this builder's own query.
+    private Builder orderedByKey() {
+        Builder ordered = scoped();
+        if (ordered.getOrders().isEmpty() && ordered.getUnionOrders().isEmpty()) {
+            ordered.orderBy(model.getQualifiedKeyName(), "asc");
         }
+        return ordered;
     }
 
     /**
@@ -336,8 +340,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return {@code false} when the callback stopped early
      */
     public boolean chunk(int count, Predicate<ModelCollection<T>> callback) {
-        enforceOrderBy();
-        return query.chunk(count, rows -> callback.test(eagerLoaded(hydrate(rows))));
+        return orderedByKey().chunk(count, rows -> callback.test(eagerLoaded(hydrate(rows))));
     }
 
     /**
@@ -389,7 +392,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return {@code false} when the callback stopped early
      */
     public boolean chunkById(int count, Predicate<ModelCollection<T>> callback, String column, String alias) {
-        return query.chunkById(count, rows -> callback.test(eagerLoaded(hydrate(rows))), column, alias);
+        return scoped().chunkById(count, rows -> callback.test(eagerLoaded(hydrate(rows))), column, alias);
     }
 
     /**
@@ -408,8 +411,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the models, read as iterated, never {@code null}
      */
     public Iterable<T> lazy(int count) {
-        enforceOrderBy();
-        return mapped(query.lazy(count), count);
+        return mapped(orderedByKey().lazy(count), count);
     }
 
     /**
@@ -431,7 +433,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the models, read as iterated, never {@code null}
      */
     public Iterable<T> lazyById(int count, String column, String alias) {
-        return mapped(query.lazyById(count, column, alias), count);
+        return mapped(scoped().lazyById(count, column, alias), count);
     }
 
     private Iterable<T> mapped(Iterable<Map<String, Object>> rows, int count) {
@@ -509,7 +511,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
         if (hasEagerLoads()) {
             throw new IllegalStateException("Eager loading is not supported with cursor(); use lazy()");
         }
-        return new ModelCursor<>(query.cursor(), this::hydrateOne);
+        return new ModelCursor<>(scoped().cursor(), this::hydrateOne);
     }
 
     // ---- pages ----
@@ -541,7 +543,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the page, never {@code null}
      */
     public ModelPage<T> paginate(int perPage, int page) {
-        LengthAwarePage rows = query.paginate(perPage, page);
+        LengthAwarePage rows = scoped().paginate(perPage, page);
         return new ModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 
@@ -572,7 +574,7 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the page, never {@code null}
      */
     public SimpleModelPage<T> simplePaginate(int perPage, int page) {
-        SimplePage rows = query.simplePaginate(perPage, page);
+        SimplePage rows = scoped().simplePaginate(perPage, page);
         return new SimpleModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 
@@ -604,10 +606,11 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      * @return the page, never {@code null}
      */
     public CursorModelPage<T> cursorPaginate(int perPage, Cursor cursor) {
-        if (query.getOrders().isEmpty() && query.getUnionOrders().isEmpty()) {
-            query.orderBy(model.getQualifiedKeyName());
+        Builder ordered = scoped();
+        if (ordered.getOrders().isEmpty() && ordered.getUnionOrders().isEmpty()) {
+            ordered.orderBy(model.getQualifiedKeyName());
         }
-        CursorPage rows = query.cursorPaginate(perPage, cursor);
+        CursorPage rows = ordered.cursorPaginate(perPage, cursor);
         return new CursorModelPage<>(rows, eagerLoaded(hydrate(rows.items())));
     }
 }

@@ -85,7 +85,16 @@ class LayerGuardTest {
         assertSame(ModelManyRelations.class, ModelThroughRelations.class.getSuperclass());
         assertSame(ModelThroughRelations.class, ModelRelationActions.class.getSuperclass());
         assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
-        assertSame(ModelGuards.class, Model.class.getSuperclass());
+        assertSame(ModelGuards.class, ModelSoftDeletes.class.getSuperclass());
+        assertSame(ModelSoftDeletes.class, Model.class.getSuperclass());
+    }
+
+    @Test
+    void scopeLayerSitsBetweenWheresAndClauses() {
+        assertSame(EloquentWheres.class, EloquentScopes.class.getSuperclass());
+        assertSame(EloquentScopes.class, EloquentClauses.class.getSuperclass());
+        assertSame(EloquentClauses.class, EloquentCreators.class.getSuperclass());
+        assertSame(EloquentCreators.class, EloquentRelationQueries.class.getSuperclass());
     }
 
     @Test

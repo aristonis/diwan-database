@@ -430,6 +430,10 @@ abstract class ModelCasts extends ModelAttributes {
                 throw new InvalidCastException(getClass(), key, specOf(cast), e);
             }
         }
+        if (softDeletes()) {
+            // A declared cast for the column wins; the class's settings must not depend on instance state.
+            resolved.putIfAbsent(deletedAtColumn(), Casts.resolve(Casts.datetime()));
+        }
         return Collections.unmodifiableMap(resolved);
     }
 

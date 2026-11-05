@@ -199,6 +199,17 @@ public interface EloquentAccess {
     void markExisting(Model model);
 
     /**
+     * Adds a parenthesised group to a builder like {@code whereGroup}, but merges the scope
+     * removals made inside the group into the builder, so a relation constraint can lift a scope
+     * of the related model.
+     *
+     * @param builder the builder to add the group to, never {@code null}
+     * @param group builds the clauses of the group, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    void constraintGroup(EloquentBuilder<?> builder, Consumer<EloquentBuilder<?>> group);
+
+    /**
      * Creates a new model from the registry entry of a class, loading the class first when its entry
      * is missing. The new model is bound to {@code connectionOf}'s connection when it has no
      * connection of its own and {@code connectionOf} is bound.

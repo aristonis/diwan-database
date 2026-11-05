@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -405,20 +406,46 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
     /**
      * Adds a parenthesised group of clauses built on an Eloquent builder for the same model, as
      * Laravel's {@code where(Closure)}. Existence methods called inside the group continue this
-     * builder's alias numbering. A group that adds no condition is left out.
+     * builder's alias numbering. A group that adds no condition is left out. Scope removals made
+     * inside the group, such as {@code withTrashed()} or {@code withoutGlobalScope(...)}, are
+     * ignored, as in Laravel.
      *
      * @param group builds the clauses of the group, never {@code null}
      * @return this builder
      * @throws NullPointerException if {@code group} is {@code null}
      */
     public final EloquentBuilder<T> whereGroup(Consumer<? super EloquentBuilder<T>> group) {
+        return group(group, false);
+    }
+
+    /**
+     * Adds a group like {@link #whereGroup(Consumer)}, but merges the scope removals made inside it
+     * into this builder, so a relation constraint can lift a scope of the related model.
+     *
+     * @param group builds the clauses of the group, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if {@code group} is {@code null}
+     */
+    final EloquentBuilder<T> constraintGroup(Consumer<? super EloquentBuilder<T>> group) {
+        return group(group, true);
+    }
+
+    private EloquentBuilder<T> group(Consumer<? super EloquentBuilder<T>> group, boolean isMerging) {
         Objects.requireNonNull(group, "group");
         AliasCounter shared = aliases();
-        return query(base -> base.where(nested -> {
+        List<EloquentBuilder<T>> inners = new ArrayList<>(1);
+        query(base -> base.where(nested -> {
             EloquentBuilder<T> inner = new EloquentBuilder<>(source, model, nested);
             inner.useAliases(shared);
             group.accept(inner);
+            inners.add(inner);
         }));
+        if (isMerging) {
+            for (EloquentBuilder<T> inner : inners) {
+                mergeRemovedFrom(inner);
+            }
+        }
+        return self();
     }
 
     private EloquentBuilder<T> existence(String relation, String operator, long count, boolean or,

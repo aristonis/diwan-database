@@ -10,7 +10,7 @@ import org.aristonis.diwan.database.query.Builder;
  *
  * @param <T> the model class
  */
-abstract class EloquentClauses<T extends Model> extends EloquentWheres<T> {
+abstract class EloquentClauses<T extends Model> extends EloquentScopes<T> {
 
     EloquentClauses(ModelQuery<T> source, T model, Builder query) {
         super(source, model, query);
@@ -78,12 +78,14 @@ abstract class EloquentClauses<T extends Model> extends EloquentWheres<T> {
     }
 
     /**
-     * Returns a copy of the wrapped query builder; changing the copy does not change this builder.
+     * Returns a copy of the wrapped query builder with the global scopes applied; changing the
+     * copy does not change this builder.
      *
      * @return the copy, never {@code null}
      */
     public final Builder toBase() {
-        return query.clone();
+        Builder scoped = scoped();
+        return scoped == query ? query.clone() : scoped;
     }
 
     /**
@@ -92,7 +94,7 @@ abstract class EloquentClauses<T extends Model> extends EloquentWheres<T> {
      * @return the SQL, never {@code null}
      */
     public final String toSql() {
-        return query.toSql();
+        return scoped().toSql();
     }
 
     /**
@@ -101,7 +103,7 @@ abstract class EloquentClauses<T extends Model> extends EloquentWheres<T> {
      * @return the bindings, unmodifiable, never {@code null}
      */
     public final List<Object> getBindings() {
-        return query.getBindings();
+        return scoped().getBindings();
     }
 
     /**

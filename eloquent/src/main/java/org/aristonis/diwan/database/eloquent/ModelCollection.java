@@ -119,7 +119,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
         if (models.isEmpty()) {
             return this;
         }
-        ModelCollection<T> loaded = source.query().findMany(modelKeys());
+        ModelCollection<T> loaded = source.query().withoutGlobalScopes().findMany(modelKeys());
         List<T> ordered = new ArrayList<>(models.size());
         for (T model : models) {
             Optional<T> match = model.exists() ? loaded.find(model.getKey()) : Optional.<T>empty();

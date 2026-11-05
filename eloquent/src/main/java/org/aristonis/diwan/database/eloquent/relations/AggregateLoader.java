@@ -74,7 +74,7 @@ final class AggregateLoader {
         }
         EloquentAccess access = Access.eloquent();
         String keyName = first.getKeyName();
-        EloquentBuilder<Model> outer = access.newQueryOn(first).select(keyName);
+        EloquentBuilder<Model> outer = access.newQueryOn(first).withoutGlobalScopes().select(keyName);
         RelationAggregates.add(outer, relations, column, function);
         String names = String.join(", ", relations.keySet());
         boolean isInline = Relation.isIntegerKey(first, keyName);

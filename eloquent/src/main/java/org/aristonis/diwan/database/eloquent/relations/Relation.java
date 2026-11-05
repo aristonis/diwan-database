@@ -14,6 +14,7 @@ import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
 import org.aristonis.diwan.database.eloquent.internal.EloquentAccess;
 import org.aristonis.diwan.database.eloquent.internal.TouchScope;
+import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryGrammar;
 
 /**
@@ -446,9 +447,10 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
         prepareEagerQuery(probe, Collections.emptyList());
         constraint.accept(probe);
         context.capture(probe.getEagerLoads());
-        int size = eagerChunkSize(probe.toBase().getGrammar());
+        Builder probeBase = probe.toBase();
+        int size = eagerChunkSize(probeBase.getGrammar());
         if (!inlinesEagerKeys()) {
-            size = Math.max(1, size - probe.toBase().getBindings().size());
+            size = Math.max(1, size - probeBase.getBindings().size());
         }
         List<R> results = new ArrayList<>();
         for (List<Object> chunk : EagerKeys.chunks(keys, size)) {
@@ -465,7 +467,8 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
     }
 
     private void refuseLimit(EloquentBuilder<R> eager) {
-        if (eager.toBase().getLimit().isPresent() || eager.toBase().getOffset().isPresent()) {
+        Builder base = eager.toBase();
+        if (base.getLimit().isPresent() || base.getOffset().isPresent()) {
             throw new IllegalStateException("The eager constraint of relation [" + relationName + "] on model ["
                     + parent.getClass().getName() + "] sets a limit or an offset; that would cut the results of"
                     + " every parent together, not per parent");

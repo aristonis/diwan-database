@@ -248,14 +248,14 @@ final class RelationAggregates {
         return fn + "(" + value + ")";
     }
 
-    // whereGroup only merges wheres back from its nested builder, so the clauses an
+    // The constraint group only merges wheres and scope removals back from its nested builder, so the clauses an
     // aggregate constraint may also set are copied here, and any other kind is refused.
     private static void constrain(EloquentBuilder<?> sub, Entry entry, Model model) {
         if (entry.constraint == null) {
             return;
         }
         Builder[] group = new Builder[1];
-        sub.whereGroup(q -> {
+        Access.eloquent().constraintGroup(sub, q -> {
             entry.constraint.accept(q);
             group[0] = q.toBase();
         });

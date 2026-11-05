@@ -97,11 +97,11 @@ final class RelationExistence {
         return relatedFrom != null && parentFrom != null && table(relatedFrom).equals(table(parentFrom));
     }
 
-    // The group only merges wheres back into the subquery, so a join added inside it would be
-    // dropped without a word; it is refused instead.
+    // The group only merges wheres and scope removals back into the subquery, so a join added
+    // inside it would be dropped without a word; it is refused instead.
     private static void constrain(EloquentBuilder<?> sub, String relation, Consumer<EloquentBuilder<?>> constraint) {
         Builder[] group = new Builder[1];
-        sub.whereGroup(q -> {
+        Access.eloquent().constraintGroup(sub, q -> {
             constraint.accept(q);
             group[0] = q.toBase();
         });

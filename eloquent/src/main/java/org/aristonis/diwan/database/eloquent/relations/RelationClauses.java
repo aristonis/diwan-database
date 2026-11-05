@@ -1,9 +1,11 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
+import org.aristonis.diwan.database.eloquent.Scope;
 import org.aristonis.diwan.database.query.Builder;
 
 /**
@@ -299,5 +301,133 @@ abstract class RelationClauses<R extends Model, S extends RelationClauses<R, S>>
      */
     public final S take(int value) {
         return limit(value);
+    }
+
+    /**
+     * Removes one global scope of the related model from this relation's queries.
+     *
+     * @param name the scope key, never {@code null}
+     * @return this relation
+     */
+    public final S withoutGlobalScope(String name) {
+        applyWhere(query -> query.withoutGlobalScope(name));
+        return self();
+    }
+
+    /**
+     * Removes one global scope of the related model, found by its class.
+     *
+     * @param type the scope class, never {@code null}
+     * @return this relation
+     */
+    public final S withoutGlobalScope(Class<? extends Scope> type) {
+        applyWhere(query -> query.withoutGlobalScope(type));
+        return self();
+    }
+
+    /**
+     * Removes one global scope of the related model, found by its instance.
+     *
+     * @param scope the scope, never {@code null}
+     * @return this relation
+     */
+    public final S withoutGlobalScope(Scope scope) {
+        applyWhere(query -> query.withoutGlobalScope(scope));
+        return self();
+    }
+
+    /**
+     * Removes every global scope of the related model from this relation's queries.
+     *
+     * @return this relation
+     */
+    public final S withoutGlobalScopes() {
+        applyWhere(query -> query.withoutGlobalScopes());
+        return self();
+    }
+
+    /**
+     * Removes the named global scopes of the related model.
+     *
+     * @param names the scope keys, never {@code null}
+     * @return this relation
+     */
+    public final S withoutGlobalScopes(Collection<String> names) {
+        applyWhere(query -> query.withoutGlobalScopes(names));
+        return self();
+    }
+
+    /**
+     * Removes every global scope of the related model except the named ones.
+     *
+     * @param names the scope keys to keep, never {@code null}
+     * @return this relation
+     */
+    public final S withoutGlobalScopesExcept(Collection<String> names) {
+        applyWhere(query -> query.withoutGlobalScopesExcept(names));
+        return self();
+    }
+
+    /**
+     * Applies a local scope to this relation's queries.
+     *
+     * @param scope the scope, never {@code null}
+     * @return this relation
+     */
+    public final S scope(Consumer<EloquentBuilder<R>> scope) {
+        applyWhere(query -> query.scope(scope));
+        return self();
+    }
+
+    /**
+     * Applies several local scopes, in order.
+     *
+     * @param scopes the scopes, never {@code null}
+     * @return this relation
+     */
+    public final S scopes(List<Consumer<EloquentBuilder<R>>> scopes) {
+        applyWhere(query -> query.scopes(scopes));
+        return self();
+    }
+
+    /**
+     * Includes soft-deleted related rows.
+     *
+     * @return this relation
+     */
+    public final S withTrashed() {
+        applyWhere(query -> query.withTrashed());
+        return self();
+    }
+
+    /**
+     * Includes or excludes soft-deleted related rows.
+     *
+     * @param withTrashed {@code true} to include them
+     * @return this relation
+     */
+    public final S withTrashed(boolean withTrashed) {
+        applyWhere(query -> query.withTrashed(withTrashed));
+        return self();
+    }
+
+    /**
+     * Returns only soft-deleted related rows.
+     *
+     * @return this relation
+     */
+    public final S onlyTrashed() {
+        applyWhere(query -> query.onlyTrashed());
+        return self();
+    }
+
+    /**
+     * Excludes soft-deleted related rows.
+     *
+     * @return this relation
+     */
+    public final S withoutTrashed() {
+        applyWhere(query -> query.withoutTrashed());
+        return self();
     }
 }
