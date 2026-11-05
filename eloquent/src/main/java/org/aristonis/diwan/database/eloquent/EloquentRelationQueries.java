@@ -415,11 +415,23 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code group} is {@code null}
      */
     public final EloquentBuilder<T> whereGroup(Consumer<? super EloquentBuilder<T>> group) {
-        return group(group, false);
+        return group(group, false, false);
     }
 
     /**
-     * Adds a group like {@link #whereGroup(Consumer)}, but merges the scope removals made inside it
+     * Adds a group like {@link EloquentBuilder#whereGroup(Consumer)}, joined to the earlier clauses with
+     * {@code or}, as Laravel's {@code orWhere(Closure)}.
+     *
+     * @param group builds the clauses of the group, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if {@code group} is {@code null}
+     */
+    public final EloquentBuilder<T> orWhereGroup(Consumer<? super EloquentBuilder<T>> group) {
+        return group(group, true, false);
+    }
+
+    /**
+     * Adds a group like {@link EloquentBuilder#whereGroup(Consumer)}, but merges the scope removals made inside it
      * into this builder, so a relation constraint can lift a scope of the related model.
      *
      * @param group builds the clauses of the group, never {@code null}
@@ -427,19 +439,26 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code group} is {@code null}
      */
     final EloquentBuilder<T> constraintGroup(Consumer<? super EloquentBuilder<T>> group) {
-        return group(group, true);
+        return group(group, false, true);
     }
 
-    private EloquentBuilder<T> group(Consumer<? super EloquentBuilder<T>> group, boolean isMerging) {
+    private EloquentBuilder<T> group(Consumer<? super EloquentBuilder<T>> group, boolean isOr, boolean isMerging) {
         Objects.requireNonNull(group, "group");
         AliasCounter shared = aliases();
         List<EloquentBuilder<T>> inners = new ArrayList<>(1);
-        query(base -> base.where(nested -> {
+        Consumer<Builder> fill = nested -> {
             EloquentBuilder<T> inner = new EloquentBuilder<>(source, model, nested);
             inner.useAliases(shared);
             group.accept(inner);
             inners.add(inner);
-        }));
+        };
+        query(base -> {
+            if (isOr) {
+                base.orWhere(fill);
+            } else {
+                base.where(fill);
+            }
+        });
         if (isMerging) {
             for (EloquentBuilder<T> inner : inners) {
                 mergeRemovedFrom(inner);

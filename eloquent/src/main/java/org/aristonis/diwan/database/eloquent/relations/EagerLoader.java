@@ -178,7 +178,8 @@ final class EagerLoader {
         Map<String, Consumer<EloquentBuilder<?>>> merged = new LinkedHashMap<>(nested);
         for (Map.Entry<String, Consumer<EloquentBuilder<?>>> entry : captured.entrySet()) {
             Consumer<EloquentBuilder<?>> existing = merged.get(entry.getKey());
-            merged.put(entry.getKey(), existing == null ? entry.getValue() : existing.andThen(entry.getValue()));
+            merged.put(entry.getKey(), existing == null ? entry.getValue()
+                    : MorphEagerConstraint.combine(existing, entry.getValue()));
         }
         return merged;
     }

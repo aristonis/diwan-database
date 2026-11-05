@@ -32,7 +32,9 @@ import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
  * kept apart, and an id stored as text matches a numeric key. A constraint given to the eager
  * load runs on every class, so it must only name columns every class has. The eager loads such a
  * constraint sets, and the nested paths below a morph-to, are applied per result class; a path
- * must therefore exist on every class that appears.
+ * must therefore exist on every class that appears. Options given with {@code withMorph} apply to
+ * one class only: its constraint, its counts and its relations, so a relation need only exist on
+ * the class it is named for.
  *
  * <p>Single use, not safe to share across threads (see {@link Relation}). The eager key buckets
  * live on the instance for one load.
@@ -289,9 +291,13 @@ public final class MorphTo<R extends Model> extends Relation<R, MorphTo<R>> {
         Map<Class<? extends Model>, Map<Object, Object>> idsByClass = resolveBuckets();
         List<Model> all = new ArrayList<>();
         for (Map.Entry<Class<? extends Model>, Map<Object, Object>> entry : idsByClass.entrySet()) {
-            // One context: only the first capture counts, which is the first class's.
             List<Object> ids = new ArrayList<>(entry.getValue().values());
-            all.addAll(loadClass(entry.getKey(), ids, constraint, context));
+            if (constraint instanceof MorphEagerConstraint) {
+                all.addAll(loadClassWithOptions(entry.getKey(), ids, (MorphEagerConstraint) constraint, context));
+            } else {
+                // One context: only the first capture counts, which is the first class's.
+                all.addAll(loadClass(entry.getKey(), ids, constraint, context));
+            }
         }
         // Safe: R is Model for every relation that reaches more than one class.
         @SuppressWarnings("unchecked")
@@ -326,6 +332,46 @@ public final class MorphTo<R extends Model> extends Relation<R, MorphTo<R>> {
         EloquentBuilder<M> query = Access.eloquent().newQueryOn(instance);
         BelongsTo<M> helper = new BelongsTo<>(query, getChild(), foreignKey, ownerKeyFor(query.getModel()), null);
         return helper.eagerResults(ids, constraint, context);
+    }
+
+    /**
+     * Loads one class's owners under the per-class options. The plain constraint's eager loads go
+     * to the shared context and apply to every class; the class's own constraint, counts and
+     * relations stay with this class, in a context of its own.
+     */
+    private <M extends Model> List<M> loadClassWithOptions(Class<M> type, List<Object> ids,
+            MorphEagerConstraint morph, EagerContext shared) {
+        MorphEagerOptions options = morph.options();
+        Consumer<EloquentBuilder<?>> classConstraint = query -> {
+            morph.accept(query);
+            Map<String, Consumer<EloquentBuilder<?>>> plainLoads = new LinkedHashMap<>(query.getEagerLoads());
+            shared.capture(plainLoads);
+            if (!plainLoads.isEmpty()) {
+                query.without(plainLoads.keySet().toArray(new String[0]));
+            }
+            Consumer<EloquentBuilder<?>> own = options.constraintFor(type);
+            if (own != null) {
+                own.accept(query);
+            }
+            List<String> counts = options.countsFor(type);
+            if (!counts.isEmpty()) {
+                query.withCount(counts.toArray(new String[0]));
+            }
+        };
+        EagerContext classContext = new EagerContext();
+        List<M> owners = loadClass(type, ids, classConstraint, classContext);
+        Map<String, Consumer<EloquentBuilder<?>>> loads = new LinkedHashMap<>(classContext.eagerLoads());
+        Map<String, Consumer<EloquentBuilder<?>>> named =
+                Access.eloquent().parseWith(options.relationsFor(type).toArray(new String[0]));
+        for (Map.Entry<String, Consumer<EloquentBuilder<?>>> entry : named.entrySet()) {
+            Consumer<EloquentBuilder<?>> existing = loads.get(entry.getKey());
+            loads.put(entry.getKey(),
+                    existing == null ? entry.getValue() : MorphEagerConstraint.combine(existing, entry.getValue()));
+        }
+        if (!owners.isEmpty()) {
+            EagerLoader.load(owners, loads);
+        }
+        return owners;
     }
 
     @Override

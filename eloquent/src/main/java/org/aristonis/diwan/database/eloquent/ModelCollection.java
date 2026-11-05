@@ -197,6 +197,44 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
         return this;
     }
 
+    /**
+     * Eager loads relations onto the owners the models' morph-to relation has loaded, choosing the
+     * relations by owner class: Laravel's {@code loadMorph}. The relation is first loaded on the
+     * models missing it, in one query per owner class; {@code null} owners are skipped, and the
+     * models themselves are not read again.
+     *
+     * @param relation the morph-to relation's name, never {@code null}
+     * @param relations the relation paths to load, by owner class, never {@code null}
+     * @return this collection
+     * @throws NullPointerException if an argument, a class key or a path is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     *     names no relation of its owner class
+     */
+    public ModelCollection<T> loadMorph(String relation, Map<Class<? extends Model>, List<String>> relations) {
+        Relation.ensureInitialised();
+        Access.relations().loadMorph(models, relation, relations, false);
+        return this;
+    }
+
+    /**
+     * Loads the number of related rows of each relation onto the owners the models' morph-to
+     * relation has loaded, choosing the relations by owner class: Laravel's
+     * {@code loadMorphCount}. The relation is first loaded on the models
+     * missing it; {@code null} owners are skipped.
+     *
+     * @param relation the morph-to relation's name, never {@code null}
+     * @param relations the relation names to count, by owner class, never {@code null}
+     * @return this collection
+     * @throws NullPointerException if an argument, a class key or a name is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     *     is not a relation of its owner class
+     */
+    public ModelCollection<T> loadMorphCount(String relation, Map<Class<? extends Model>, List<String>> relations) {
+        Relation.ensureInitialised();
+        Access.relations().loadMorph(models, relation, relations, true);
+        return this;
+    }
+
     // ---- relation aggregates
 
     /**

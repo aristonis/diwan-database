@@ -49,21 +49,36 @@ final class RelationExistence {
      */
     static void add(EloquentBuilder<?> outer, String relation, String operator, long count, boolean or,
             Consumer<EloquentBuilder<?>> constraint) {
-        if (!OPERATORS.contains(operator)) {
-            throw new IllegalArgumentException("Unknown operator [" + operator + "] for relation [" + relation
-                    + "]; use one of " + new TreeSet<>(OPERATORS));
-        }
+        checkOperator(relation, operator);
         int dot = relation.indexOf('.');
         if (dot >= 0) {
             addNested(outer, relation.substring(0, dot), relation.substring(dot + 1), operator, count, or, constraint);
             return;
         }
-        Relation<?, ?> resolved = outer.getModel().relation(relation);
+        addResolved(outer, outer.getModel().relation(relation), relation, operator, count, or, constraint);
+    }
+
+    /**
+     * Adds an existence condition on an already resolved relation to a query.
+     *
+     * @param outer the query the condition is added to, never {@code null}
+     * @param resolved the relation, built without constraints, never {@code null}
+     * @param name the relation's name, used in messages, never {@code null}
+     * @param operator the count comparison, one of {@code = < > <= >= <> !=}, never {@code null}
+     * @param count the count compared with
+     * @param or {@code true} to join the condition with {@code or}
+     * @param constraint the constraint on the related query, or {@code null} for none
+     * @throws IllegalArgumentException if the operator is not one of the seven
+     * @throws IllegalStateException if the constraint adds a join
+     */
+    static void addResolved(EloquentBuilder<?> outer, Relation<?, ?> resolved, String name, String operator,
+            long count, boolean or, Consumer<EloquentBuilder<?>> constraint) {
+        checkOperator(name, operator);
         AliasCounter aliases = Access.eloquent().aliases(outer);
         EloquentBuilder<?> sub = resolved.existenceQuery(outer, aliases);
         Access.eloquent().shareAliases(outer, sub);
         if (constraint != null) {
-            constrain(sub, relation, constraint);
+            constrain(sub, name, constraint);
         }
         if (isExistsCheck(operator, count)) {
             Builder exists = sub.toBase();
@@ -81,6 +96,20 @@ final class RelationExistence {
                 base.where(counted, operator, value);
             }
         });
+    }
+
+    /**
+     * Checks that an operator is one a count may be compared with.
+     *
+     * @param relation the relation name, used in the message, never {@code null}
+     * @param operator the operator, never {@code null}
+     * @throws IllegalArgumentException if the operator is not one of the seven
+     */
+    static void checkOperator(String relation, String operator) {
+        if (!OPERATORS.contains(operator)) {
+            throw new IllegalArgumentException("Unknown operator [" + operator + "] for relation [" + relation
+                    + "]; use one of " + new TreeSet<>(OPERATORS));
+        }
     }
 
     /**

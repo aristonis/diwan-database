@@ -18,9 +18,12 @@ import org.junit.jupiter.api.Test;
  */
 class ForwarderDriftTest {
 
-    /** Eloquent-only where methods: the relation existence family and the Eloquent group. */
+    /** Eloquent-only where methods: the relation existence and morph families and the Eloquent groups. */
     private static final Set<String> ELOQUENT_ONLY = new HashSet<>(Arrays.asList("whereHas", "orWhereHas",
-            "whereDoesntHave", "orWhereDoesntHave", "whereRelation", "orWhereRelation", "whereGroup"));
+            "whereDoesntHave", "orWhereDoesntHave", "whereRelation", "orWhereRelation", "whereGroup", "orWhereGroup", "whereHasMorph", "orWhereHasMorph",
+            "whereDoesntHaveMorph", "orWhereDoesntHaveMorph", "whereMorphRelation", "orWhereMorphRelation",
+            "whereMorphDoesntHaveRelation", "orWhereMorphDoesntHaveRelation", "whereMorphedTo", "orWhereMorphedTo",
+            "whereNotMorphedTo", "orWhereNotMorphedTo"));
 
     private static final Set<String> OMITTED = new HashSet<>(Arrays.asList(OmittedForwarders.LIST));
 

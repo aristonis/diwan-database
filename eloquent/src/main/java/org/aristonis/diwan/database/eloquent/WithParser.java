@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.aristonis.diwan.database.eloquent.internal.Access;
+import org.aristonis.diwan.database.eloquent.relations.Relation;
 
 /**
  * Turns eager load paths into constraints by path, as Laravel's {@code parseWithRelations},
@@ -16,8 +18,9 @@ import java.util.function.Consumer;
  *       already present, then {@code a.b.c}.
  *   <li>{@code "name:c1,c2"} registers {@code name} with a constraint that selects the trimmed
  *       columns; the colon belongs to the last segment, so {@code "a.b:id"} constrains {@code a.b}.
- *   <li>The same path twice runs both constraints, first added first ({@link Consumer#andThen}).
- *       Laravel keeps only the last one; running both loses no constraint.
+ *   <li>The same path twice runs both constraints, first added first ({@link Consumer#andThen});
+ *       Laravel keeps only the last one; running both loses no constraint. A {@code withMorph}
+ *       constraint keeps its per-class options through the merge.
  * </ul>
  *
  * <p>{@link #parseAggregates(String...)} keys by the raw name, {@code as} alias included, and
@@ -156,7 +159,8 @@ final class WithParser {
         if (existing == null || existing == NO_OP) {
             results.put(path, constraint);
         } else if (constraint != NO_OP) {
-            results.put(path, existing.andThen(constraint));
+            Relation.ensureInitialised();
+            results.put(path, Access.relations().combineEager(existing, constraint));
         }
     }
 

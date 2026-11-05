@@ -30,7 +30,7 @@ import org.aristonis.diwan.database.query.Expression;
  *
  * @param <T> the model class
  */
-abstract class EloquentAggregates<T extends Model> extends EloquentRelationQueries<T> {
+abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<T> {
 
     private static final String ANY_COLUMN = "*";
     private static final String COUNT = "count";

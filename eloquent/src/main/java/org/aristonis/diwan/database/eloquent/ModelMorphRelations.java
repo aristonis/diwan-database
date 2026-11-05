@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.eloquent;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.relations.MorphMany;
@@ -172,6 +175,44 @@ abstract class ModelMorphRelations extends ModelThroughRelations {
         Class<? extends Model> target = typeName.isEmpty() ? child.getClass()
                 : resolveMorph(typeName, child);
         return new MorphTo<>(modelQuery(target), child, type, id, ownerKey, name);
+    }
+
+    /**
+     * Eager loads relations onto the owner this model's morph-to relation has loaded, choosing the
+     * relations by the owner's class: Laravel's {@code loadMorph}. A relation that is not loaded is
+     * loaded first, as Laravel's attribute read lazy loads it. A {@code null} owner, or an owner
+     * class with no entry, loads nothing more.
+     *
+     * @param relation the morph-to relation's name, never {@code null}
+     * @param relations the relation paths to load, by owner class, never {@code null}
+     * @return this model
+     * @throws NullPointerException if an argument, a class key or a path is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     *     names no relation of the owner's class
+     */
+    public Model loadMorph(String relation, Map<Class<? extends Model>, List<String>> relations) {
+        Relation.ensureInitialised();
+        Access.relations().loadMorph(Collections.singletonList(self()), relation, relations, false);
+        return self();
+    }
+
+    /**
+     * Loads the number of related rows of each relation onto the owner this model's morph-to
+     * relation has loaded, choosing the relations by the owner's class: Laravel's
+     * {@code loadMorphCount}. A relation that is not loaded is loaded first. A {@code null} owner,
+     * or an owner class with no entry, counts nothing.
+     *
+     * @param relation the morph-to relation's name, never {@code null}
+     * @param relations the relation names to count, by owner class, never {@code null}
+     * @return this model
+     * @throws NullPointerException if an argument, a class key or a name is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     *     is not a relation of the owner's class
+     */
+    public Model loadMorphCount(String relation, Map<Class<? extends Model>, List<String>> relations) {
+        Relation.ensureInitialised();
+        Access.relations().loadMorph(Collections.singletonList(self()), relation, relations, true);
+        return self();
     }
 
     private static Class<? extends Model> resolveMorph(String typeName, Model child) {

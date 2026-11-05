@@ -1,8 +1,10 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
@@ -39,6 +41,35 @@ final class RelationAccessImpl implements RelationAccess {
             Consumer<EloquentBuilder<?>> constraint) {
         RelationExistence.add(Objects.requireNonNull(outer, "outer"), Objects.requireNonNull(relation, "relation"),
                 Objects.requireNonNull(operator, "operator"), count, or, constraint);
+    }
+
+    @Override
+    public void addMorphExistence(EloquentBuilder<?> outer, String relation, List<Object> types, String operator,
+            long count, boolean or, BiConsumer<EloquentBuilder<?>, Class<? extends Model>> constraint) {
+        MorphExistence.hasMorph(outer, relation, types, operator, count, or, constraint);
+    }
+
+    @Override
+    public void whereMorphedTo(EloquentBuilder<?> outer, String relation, Object target, boolean not, boolean or) {
+        MorphExistence.whereMorphedTo(outer, relation, target, not, or);
+    }
+
+    @Override
+    public Consumer<EloquentBuilder<?>> morphEager(Consumer<MorphEagerOptions> options,
+            Consumer<EloquentBuilder<?>> plain) {
+        return MorphEagerConstraint.of(Objects.requireNonNull(options, "options"), plain);
+    }
+
+    @Override
+    public Consumer<EloquentBuilder<?>> combineEager(Consumer<EloquentBuilder<?>> a,
+            Consumer<EloquentBuilder<?>> b) {
+        return MorphEagerConstraint.combine(a, b);
+    }
+
+    @Override
+    public void loadMorph(Collection<? extends Model> models, String relation,
+            Map<Class<? extends Model>, List<String>> relations, boolean isCount) {
+        MorphLoads.loadMorph(models, relation, relations, isCount);
     }
 
     @Override

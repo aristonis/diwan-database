@@ -100,8 +100,13 @@ class LayerGuardTest {
     }
 
     @Test
-    void aggregateLayerSitsBetweenRelationQueriesAndBuilder() {
-        assertSame(EloquentRelationQueries.class, EloquentAggregates.class.getSuperclass());
+    void morphLayerSitsBetweenRelationQueriesAndAggregates() {
+        assertSame(EloquentRelationQueries.class, EloquentMorphQueries.class.getSuperclass());
+        assertSame(EloquentMorphQueries.class, EloquentAggregates.class.getSuperclass());
+    }
+
+    @Test
+    void aggregateLayerSitsBetweenMorphQueriesAndBuilder() {
         assertSame(EloquentAggregates.class, EloquentBuilder.class.getSuperclass());
     }
 
