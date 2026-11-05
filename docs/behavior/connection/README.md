@@ -43,6 +43,8 @@ a driver that does not need JDBC. The core has no runtime dependency.
 
 ## More
 
+- [Database manager and configuration](database-manager.md)
+- [Seeders](seeders.md)
 - [User stories](user-stories.md)
 - [User scenarios and edge cases](user-scenarios.md)
 - [Requirements](../../requirements/connection.md)
