@@ -80,6 +80,7 @@ final class RelationExistence {
         if (constraint != null) {
             constrain(sub, name, constraint);
         }
+        resolved.completeExistence(sub);
         if (isExistsCheck(operator, count)) {
             Builder exists = sub.toBase();
             boolean not = LESS_THAN.equals(operator);

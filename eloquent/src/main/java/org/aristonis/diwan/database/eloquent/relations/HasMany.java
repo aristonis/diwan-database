@@ -44,6 +44,23 @@ public final class HasMany<R extends Model> extends HasOneOrMany<R, HasMany<R>> 
         return get();
     }
 
+    /**
+     * Returns a one-result relation on the same columns and parent: Laravel's {@code one()}, the
+     * way to {@code latestOfMany()} and its kin. It is built on this relation's constrained
+     * query, so the key condition and every clause recorded here are kept, each once. The two
+     * relations share that query, as in Laravel: a join that {@code latestOfMany()} adds on the
+     * returned relation is also seen when this relation is read afterwards.
+     *
+     * @return a new relation, never {@code null}
+     */
+    public HasOne<R> one() {
+        boolean hadConstraints = hasLazyConstraints();
+        HasOne<R> one = new HasOne<>(queryForDerived(), getParent(), getQualifiedForeignKeyName(),
+                getLocalKeyName());
+        inheritConstraints(one, hadConstraints);
+        return one;
+    }
+
     @Override
     HasMany<R> self() {
         return this;

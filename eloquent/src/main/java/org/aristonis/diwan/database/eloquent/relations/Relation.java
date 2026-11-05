@@ -51,6 +51,8 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
 
     private boolean isConstrained;
 
+    private boolean isLazyFinished;
+
     private final List<Consumer<EloquentBuilder<R>>> pendingClauses = new ArrayList<>();
 
     private final List<Boolean> pendingIsWhere = new ArrayList<>();
@@ -279,6 +281,18 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
     }
 
     /**
+     * Finishes an existence query once everything the user added to it is on it, including the
+     * constraint closure of {@code whereHas} or an aggregate. A relation that joins a subquery,
+     * such as one-of-many, builds it here so the join sees the final scope removals.
+     *
+     * @param existence the query {@link #existenceQuery} returned, after the constraint ran, never {@code null}
+     */
+    @SuppressWarnings("unchecked")
+    final void completeExistence(EloquentBuilder<?> existence) {
+        afterExistenceWheres((EloquentBuilder<R>) Objects.requireNonNull(existence, "existence"));
+    }
+
+    /**
      * Returns the query as it stands, without replaying recorded clauses. The lazy constraint and
      * existence hooks add their own clauses here before the recorded ones.
      *
@@ -312,16 +326,104 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
     }
 
     /**
+     * Returns the query a one-result relation derived from this one is built over. When the lazy
+     * constraints are already on it they are kept; otherwise it is the raw query with the recorded
+     * clauses, so the derived relation adds its own constraints and an eager load of it does not
+     * inherit this relation's key condition, which a blank parent would make {@code = null}.
+     *
+     * @return the query to share with the derived relation, never {@code null}
+     */
+    final EloquentBuilder<R> queryForDerived() {
+        return isConstrained ? constrainedQuery() : rawQuery();
+    }
+
+    /**
+     * Hands the constraint state to a relation derived from this one: it skips the lazy
+     * constraints only if they were already on the shared query.
+     *
+     * @param derived the derived relation, never {@code null}
+     * @param hadConstraints whether {@link #hasLazyConstraints()} was true before the query was taken
+     */
+    static void inheritConstraints(Relation<?, ?> derived, boolean hadConstraints) {
+        if (hadConstraints) {
+            derived.skipLazyConstraints();
+        }
+    }
+
+    /**
+     * Reports whether the lazy constraints were already added to the query.
+     *
+     * @return {@code true} once the lazy constraints are on the query
+     */
+    final boolean hasLazyConstraints() {
+        return isConstrained;
+    }
+
+    /**
      * Adds the lazy constraints and then replays the recorded clauses the first time it is
-     * called; later calls do nothing.
+     * called, then runs {@link #afterLazyConstraints()} once; later calls do nothing. A relation
+     * built over an already constrained query skips the constraints but still runs the final
+     * step.
      */
     final void ensureLazyConstraints() {
-        if (isConstrained) {
-            return;
+        if (!isConstrained) {
+            isConstrained = true;
+            addConstraints();
+            replayClauses(false);
         }
-        isConstrained = true;
-        addConstraints();
-        replayClauses(false);
+        if (!isLazyFinished) {
+            isLazyFinished = true;
+            afterLazyConstraints();
+        }
+    }
+
+    /**
+     * Returns whether the lazy query was already finished, so a change that shapes it must come
+     * before the first read.
+     *
+     * @return {@code true} once the lazy query was built
+     */
+    final boolean isLazyFinished() {
+        return isLazyFinished;
+    }
+
+    /**
+     * Runs after the lazy constraints and every recorded clause are on the query. Does nothing by
+     * default; a one-of-many relation joins its subqueries here, so everything the caller added
+     * is seen.
+     */
+    void afterLazyConstraints() {
+        // Nothing by default: only one-of-many relations override it.
+    }
+
+    /**
+     * Runs on the probe and on every eager chunk query after the eager constraint ran. Does
+     * nothing by default.
+     *
+     * @param eager the eager query, never {@code null}
+     * @param chunk the chunk's keys, never {@code null}; empty for the binding probe
+     */
+    void afterEagerConstraint(EloquentBuilder<R> eager, List<Object> chunk) {
+        // Nothing by default: only one-of-many relations override it.
+    }
+
+    /**
+     * Returns how many bindings one eager key costs: two when the same key is bound in the outer
+     * filter and in a subquery filter.
+     *
+     * @return the bindings per non-inlined key, at least one
+     */
+    int eagerBindingsPerKey() {
+        return 1;
+    }
+
+    /**
+     * Runs once the existence query is complete, after the user's constraint. Does nothing by default.
+     *
+     * @param existence the existence query, never {@code null}
+     */
+    void afterExistenceWheres(EloquentBuilder<R> existence) {
+        // Nothing by default: only one-of-many relations override it.
     }
 
     // ---- hooks each relation kind implements
@@ -454,11 +556,12 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
         EloquentBuilder<R> probe = access.withoutEagerLoads(rawQuery());
         prepareEagerQuery(probe, Collections.emptyList());
         constraint.accept(probe);
+        afterEagerConstraint(probe, Collections.emptyList());
         context.capture(probe.getEagerLoads());
         Builder probeBase = probe.toBase();
         int size = eagerChunkSize(probeBase.getGrammar());
         if (!inlinesEagerKeys()) {
-            size = Math.max(1, size - probeBase.getBindings().size());
+            size = Math.max(1, (size - probeBase.getBindings().size()) / eagerBindingsPerKey());
         }
         List<R> results = new ArrayList<>();
         for (List<Object> chunk : EagerKeys.chunks(keys, size)) {
@@ -467,6 +570,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
             constraint.accept(eager);
             // The probe captured these loads; running them inside get() would load them per chunk.
             eager = access.withoutEagerLoads(eager);
+            afterEagerConstraint(eager, chunk);
             refuseLimit(eager);
             completeEagerQuery(eager);
             results.addAll(eager.get());
@@ -535,7 +639,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * @param chunk the keys, never {@code null}
      * @throws IllegalArgumentException if a key to inline is not an integer
      */
-    final void whereEagerKeys(EloquentBuilder<R> eagerQuery, String column, List<Object> chunk) {
+    final void whereEagerKeys(EloquentBuilder<?> eagerQuery, String column, List<Object> chunk) {
         if (!inlinesEagerKeys()) {
             eagerQuery.whereIn(column, chunk);
             return;

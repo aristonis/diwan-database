@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
@@ -73,6 +75,21 @@ public abstract class MorphOneOrMany<R extends Model, S extends MorphOneOrMany<R
     void performJoin(EloquentBuilder<R> target) {
         super.performJoin(target);
         target.where(target.getModel().qualifyColumn(morphTypeName), "=", getMorphClass());
+    }
+
+    @Override
+    List<String> partitionColumns(EloquentBuilder<R> query) {
+        List<String> columns = new ArrayList<>(super.partitionColumns(query));
+        columns.add(query.getModel().qualifyColumn(morphTypeName));
+        return columns;
+    }
+
+    @Override
+    void filterSubQuery(EloquentBuilder<R> sub, OneOfManyJoin.Mode mode, List<Object> keys) {
+        super.filterSubQuery(sub, mode, keys);
+        if (mode != OneOfManyJoin.Mode.EXISTENCE) {
+            sub.where(sub.getModel().qualifyColumn(morphTypeName), "=", getMorphClass());
+        }
     }
 
     /**

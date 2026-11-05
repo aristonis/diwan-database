@@ -50,6 +50,27 @@ public final class HasManyThrough<R extends Model> extends HasOneOrManyThrough<R
         return get();
     }
 
+    /**
+     * Returns a one-result relation over the same path and far parent: Laravel's {@code one()}, the
+     * way to {@code latestOfMany()} and its kin. It is built on this relation's constrained
+     * query, so the through join, the key condition and every clause recorded here are kept,
+     * each once. Trashed through parents stay kept when {@link #withTrashedParents()} was called.
+     * The two relations share that query, as in Laravel: a join that {@code latestOfMany()} adds
+     * on the returned relation is also seen when this relation is read afterwards.
+     *
+     * @return a new relation, never {@code null}
+     */
+    public HasOneThrough<R> one() {
+        boolean hadConstraints = hasLazyConstraints();
+        HasOneThrough<R> one = new HasOneThrough<>(queryForDerived(), getParent(), throughParent(),
+                getFirstKeyName(), getForeignKeyName(), getLocalKeyName(), getSecondLocalKeyName());
+        inheritConstraints(one, hadConstraints);
+        if (keepsTrashedParents()) {
+            one.withTrashedParents();
+        }
+        return one;
+    }
+
     @Override
     HasManyThrough<R> self() {
         return this;

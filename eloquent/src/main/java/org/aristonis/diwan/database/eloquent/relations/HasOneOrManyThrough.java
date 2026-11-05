@@ -1,12 +1,16 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.Access;
@@ -49,6 +53,9 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
     private final Map<Model, Object> throughKeys = new IdentityHashMap<>();
     private boolean isWithTrashedParents;
     private boolean hasBuilt;
+    private OneOfMany oneOfMany;
+    private String oneOfManyAlias;
+    private String throughAlias;
 
     /**
      * Builds the relation over the related query and the six keys.
@@ -350,6 +357,7 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
         String outerFrom = parentQuery.toBase().getFrom();
         if (outerFrom != null && RelationExistence.table(outerFrom).equals(throughParent.getTable())) {
             String alias = aliases.next();
+            throughAlias = alias;
             baseQuery().join(throughParent.getTable() + AS + alias, alias + "." + secondLocalKey, "=",
                     getQualifiedForeignKeyName());
             baseQuery().whereColumn(outerKey, "=", alias + "." + firstKey);
@@ -407,6 +415,133 @@ public abstract class HasOneOrManyThrough<R extends Model, S extends HasOneOrMan
         }
         isWithTrashedParents = true;
         return self();
+    }
+
+    // ---- one of many
+
+    /**
+     * Makes this relation the one row per far parent that the columns pick.
+     *
+     * @param columns the columns to their aggregate, in order, never {@code null}
+     * @param constraint the constraint for every subquery, or {@code null}
+     * @throws IllegalStateException if the lazy query was already built
+     * @throws IllegalArgumentException if a column or an aggregate is invalid
+     */
+    final void useOneOfMany(Map<String, String> columns, Consumer<EloquentBuilder<R>> constraint) {
+        if (isLazyFinished() || hasBuilt) {
+            throw alreadyBuilt();
+        }
+        oneOfMany = OneOfMany.of(new LinkedHashMap<>(Objects.requireNonNull(columns, "columns")),
+                getRelated().getKeyName(), OneOfMany.adapt(constraint), oneOfManyAlias);
+    }
+
+    private IllegalStateException alreadyBuilt() {
+        return new IllegalStateException("Relation [" + describe() + "] of [" + getParent().getClass().getName()
+                + "] already built its query; call the ofMany method before the first read");
+    }
+
+    /**
+     * Sets the alias of the joined subquery, also when {@code ofMany} comes later.
+     *
+     * @param alias the alias, never {@code null} or blank
+     * @throws NullPointerException if {@code alias} is {@code null}
+     * @throws IllegalArgumentException if {@code alias} is blank
+     * @throws IllegalStateException if the lazy query was already built
+     */
+    final void useOneOfManyAlias(String alias) {
+        if (isLazyFinished() || hasBuilt) {
+            throw alreadyBuilt();
+        }
+        Objects.requireNonNull(alias, "alias");
+        if (alias.trim().isEmpty()) {
+            throw new IllegalArgumentException("The ofMany alias must not be blank");
+        }
+        oneOfMany = oneOfMany == null ? null : oneOfMany.withAlias(alias);
+        oneOfManyAlias = alias;
+    }
+
+    /**
+     * Returns the one-of-many description.
+     *
+     * @return the description, or {@code null} when the relation is not one of many
+     */
+    final OneOfMany oneOfMany() {
+        return oneOfMany;
+    }
+
+    /**
+     * Returns whether trashed through parents are kept.
+     *
+     * @return {@code true} after {@link #withTrashedParents()}
+     */
+    final boolean keepsTrashedParents() {
+        return isWithTrashedParents;
+    }
+
+    private String throughQualifier(EloquentBuilder<R> query) {
+        // The alias only exists on the existence query this relation owns.
+        return throughAlias != null && query == baseQuery() ? throughAlias : throughParent.getTable();
+    }
+
+    private void joinOneOfMany(EloquentBuilder<R> query, OneOfManyJoin.Mode mode, List<Object> keys) {
+        if (oneOfMany == null) {
+            return;
+        }
+        OneOfManyJoin.apply(query, oneOfMany, new OneOfManyTarget<R>() {
+            @Override
+            public List<String> oneOfManyPartition(EloquentBuilder<R> q) {
+                return Collections.singletonList(throughQualifier(q) + "." + firstKey);
+            }
+
+            @Override
+            public void prepareOneOfManySubQuery(EloquentBuilder<R> sub) {
+                refuseSameTables();
+                // The related table is read by its real name in a subquery, never by an existence alias.
+                sub.join(throughParent.getTable(), getQualifiedSecondLocalKeyName(), "=",
+                        sub.getModel().qualifyColumn(secondKey));
+                addThroughParentFilter(sub, throughParent.getTable());
+            }
+
+            @Override
+            public void filterOneOfManySubQuery(EloquentBuilder<R> sub, OneOfManyJoin.Mode m, List<Object> ks) {
+                if (m == OneOfManyJoin.Mode.LAZY) {
+                    sub.where(getQualifiedFirstKeyName(), "=", parentKey());
+                } else if (m == OneOfManyJoin.Mode.EAGER) {
+                    whereEagerKeys(sub, getQualifiedFirstKeyName(), ks);
+                }
+            }
+
+            @Override
+            public String relatedQualifier(EloquentBuilder<R> target) {
+                return target.getModel().getTable();
+            }
+
+            @Override
+            public String oneOfManyAlias(String relatedTable) {
+                return OneOfMany.resolveAlias(oneOfMany.alias(), getRelationName(), relatedTable,
+                        Arrays.asList(throughParent.getTable(), getParent().getTable()));
+            }
+        }, mode, keys);
+    }
+
+    @Override
+    final void afterLazyConstraints() {
+        joinOneOfMany(baseQuery(), OneOfManyJoin.Mode.LAZY, Collections.<Object>emptyList());
+    }
+
+    @Override
+    final void afterEagerConstraint(EloquentBuilder<R> eager, List<Object> chunk) {
+        joinOneOfMany(eager, OneOfManyJoin.Mode.EAGER, chunk);
+    }
+
+    @Override
+    final void afterExistenceWheres(EloquentBuilder<R> existence) {
+        joinOneOfMany(existence, OneOfManyJoin.Mode.EXISTENCE, Collections.<Object>emptyList());
+    }
+
+    @Override
+    final int eagerBindingsPerKey() {
+        return oneOfMany != null && !inlinesEagerKeys() ? 2 : 1;
     }
 
     private void addThroughParentFilter(EloquentBuilder<R> target, String tableOrAlias) {

@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
@@ -33,6 +35,10 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
     private final String localKey;
 
     private String inverseName;
+
+    private OneOfMany oneOfMany;
+
+    private String oneOfManyAlias;
 
     HasOneOrMany(EloquentBuilder<R> query, Model parent, String foreignKey, String localKey) {
         super(query, parent, null);
@@ -335,6 +341,139 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
     @Override
     final boolean supportsTouch() {
         return true;
+    }
+
+    // ---- one of many
+
+    /**
+     * Makes this relation the one row per parent that the columns pick.
+     *
+     * @param columns the columns to their aggregate, in order, never {@code null}
+     * @param constraint the constraint for every subquery, or {@code null}
+     * @throws IllegalStateException if the lazy query was already built
+     * @throws IllegalArgumentException if a column or an aggregate is invalid
+     */
+    final void useOneOfMany(Map<String, String> columns, Consumer<EloquentBuilder<R>> constraint) {
+        if (isLazyFinished()) {
+            throw alreadyBuilt();
+        }
+        oneOfMany = OneOfMany.of(new LinkedHashMap<>(Objects.requireNonNull(columns, "columns")),
+                getRelated().getKeyName(), OneOfMany.adapt(constraint), oneOfManyAlias);
+    }
+
+    private IllegalStateException alreadyBuilt() {
+        return new IllegalStateException("Relation [" + getQualifiedForeignKeyName() + "] of ["
+                + getParent().getClass().getName()
+                + "] already built its query; call the ofMany method before the first read");
+    }
+
+    /**
+     * Sets the alias of the joined subquery, also when {@code ofMany} comes later.
+     *
+     * @param alias the alias, never {@code null} or blank
+     * @throws NullPointerException if {@code alias} is {@code null}
+     * @throws IllegalArgumentException if {@code alias} is blank
+     * @throws IllegalStateException if the lazy query was already built
+     */
+    final void useOneOfManyAlias(String alias) {
+        if (isLazyFinished()) {
+            throw alreadyBuilt();
+        }
+        Objects.requireNonNull(alias, "alias");
+        if (alias.trim().isEmpty()) {
+            throw new IllegalArgumentException("The ofMany alias must not be blank");
+        }
+        oneOfMany = oneOfMany == null ? null : oneOfMany.withAlias(alias);
+        oneOfManyAlias = alias;
+    }
+
+    /**
+     * Returns the one-of-many description.
+     *
+     * @return the description, or {@code null} when the relation is not one of many
+     */
+    final OneOfMany oneOfMany() {
+        return oneOfMany;
+    }
+
+    /**
+     * Returns the columns the rows are grouped by, qualified against the given query: the foreign
+     * key here, plus the type column in a morph relation.
+     *
+     * @param query the main query or a subquery, never {@code null}
+     * @return the qualified columns, never {@code null}
+     */
+    List<String> partitionColumns(EloquentBuilder<R> query) {
+        return Collections.singletonList(query.getModel().qualifyColumn(foreignKeyName));
+    }
+
+    /**
+     * Limits the innermost one-of-many subquery to the parents being read.
+     *
+     * @param sub the subquery, never {@code null}
+     * @param mode the build mode, never {@code null}
+     * @param keys the eager chunk's keys, never {@code null}
+     */
+    void filterSubQuery(EloquentBuilder<R> sub, OneOfManyJoin.Mode mode, List<Object> keys) {
+        String column = sub.getModel().qualifyColumn(foreignKeyName);
+        if (mode == OneOfManyJoin.Mode.LAZY) {
+            sub.where(column, "=", getParentKey());
+        } else if (mode == OneOfManyJoin.Mode.EAGER) {
+            whereEagerKeys(sub, column, keys);
+        }
+    }
+
+    private void joinOneOfMany(EloquentBuilder<R> query, OneOfManyJoin.Mode mode, List<Object> keys) {
+        if (oneOfMany == null) {
+            return;
+        }
+        OneOfManyJoin.apply(query, oneOfMany, new OneOfManyTarget<R>() {
+            @Override
+            public List<String> oneOfManyPartition(EloquentBuilder<R> q) {
+                return partitionColumns(q);
+            }
+
+            @Override
+            public void prepareOneOfManySubQuery(EloquentBuilder<R> sub) {
+                // A has-one needs nothing before grouping.
+            }
+
+            @Override
+            public void filterOneOfManySubQuery(EloquentBuilder<R> sub, OneOfManyJoin.Mode m, List<Object> ks) {
+                filterSubQuery(sub, m, ks);
+            }
+
+            @Override
+            public String relatedQualifier(EloquentBuilder<R> target) {
+                return target.getModel().getTable();
+            }
+
+            @Override
+            public String oneOfManyAlias(String relatedTable) {
+                return OneOfMany.resolveAlias(oneOfMany.alias(), getRelationName(), relatedTable,
+                        Collections.singletonList(getParent().getTable()));
+            }
+        }, mode, keys);
+    }
+
+    @Override
+    final void afterLazyConstraints() {
+        joinOneOfMany(baseQuery(), OneOfManyJoin.Mode.LAZY, Collections.<Object>emptyList());
+    }
+
+    @Override
+    final void afterEagerConstraint(EloquentBuilder<R> eager, List<Object> chunk) {
+        joinOneOfMany(eager, OneOfManyJoin.Mode.EAGER, chunk);
+    }
+
+    @Override
+    final void afterExistenceWheres(EloquentBuilder<R> existence) {
+        joinOneOfMany(existence, OneOfManyJoin.Mode.EXISTENCE, Collections.<Object>emptyList());
+    }
+
+    @Override
+    final int eagerBindingsPerKey() {
+        return oneOfMany != null && !inlinesEagerKeys() ? 2 : 1;
     }
 
     @Override

@@ -217,6 +217,7 @@ final class RelationAggregates {
         String expression = expression(sub, column, fn);
         sub.query(base -> base.select(Expression.raw(expression)));
         constrain(sub, entry, outer.getModel());
+        entry.relation.completeExistence(sub);
         sub.query(Builder::reorder);
         if (fn == null) {
             sub.query(base -> base.limit(1));

@@ -46,16 +46,18 @@ public final class MorphMany<R extends Model> extends MorphOneOrMany<R, MorphMan
 
     /**
      * Returns a one-result relation on the same columns and parent: Laravel's {@code one()}. It
-     * reads through this relation's constrained query, so the type and id conditions and every
-     * clause recorded here are kept, each once. The two relations then share that query, as in
-     * Laravel.
+     * is built on this relation's constrained query, so the type and id conditions and every
+     * clause recorded here are kept, each once. The two relations share that query, as in
+     * Laravel: a join that {@code latestOfMany()} adds on the returned relation is also seen when
+     * this relation is read afterwards.
      *
      * @return a new relation, never {@code null}
      */
     public MorphOne<R> one() {
-        MorphOne<R> one = new MorphOne<>(constrainedQuery(), getParent(), getMorphType(),
+        boolean hadConstraints = hasLazyConstraints();
+        MorphOne<R> one = new MorphOne<>(queryForDerived(), getParent(), getMorphType(),
                 getQualifiedForeignKeyName(), getLocalKeyName());
-        one.skipLazyConstraints();
+        inheritConstraints(one, hadConstraints);
         return one;
     }
 
