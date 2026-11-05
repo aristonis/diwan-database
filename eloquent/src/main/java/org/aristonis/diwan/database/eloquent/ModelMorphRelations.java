@@ -8,6 +8,7 @@ import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.relations.MorphMany;
 import org.aristonis.diwan.database.eloquent.relations.MorphMap;
 import org.aristonis.diwan.database.eloquent.relations.MorphOne;
+import org.aristonis.diwan.database.eloquent.relations.MorphToMany;
 import org.aristonis.diwan.database.eloquent.relations.MorphTo;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
 
@@ -24,6 +25,10 @@ import org.aristonis.diwan.database.eloquent.relations.Relation;
  * model's {@code getKeyName()}. {@code morphTo} sits on the child side; the owner class is read
  * from the type attribute when the relation is built, and the owner key defaults to the resolved
  * model's key.
+ *
+ * <p>{@code morphToMany} and {@code morphedByMany} share one pivot table with a type column
+ * {@code name_type} and an id column {@code name_id}, such as {@code taggables}. Their optional
+ * arguments take the default when {@code null}.
  *
  * <p>A {@code null} column or key is refused and never takes a default, except the owner key of
  * {@code morphTo}, where {@code null} means the owner's key.
@@ -213,6 +218,273 @@ abstract class ModelMorphRelations extends ModelThroughRelations {
         Relation.ensureInitialised();
         Access.relations().loadMorph(Collections.singletonList(self()), relation, relations, true);
         return self();
+    }
+
+    /**
+     * Builds a polymorphic many-to-many relation: the pivot's type column holds this model's morph
+     * class and its id column holds this model's key. The defaults are the plural of the last word of the name
+     * for the table, {@code name_id} for the foreign pivot key, and the related model's
+     * {@code getForeignKey()} for the related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphToMany(Class<R> related, String name) {
+        return buildMorphToMany(related, name, null, null, null, null, null, null, false);
+    }
+
+    /**
+     * Builds a polymorphic many-to-many relation: the pivot's type column holds this model's morph
+     * class and its id column holds this model's key. The defaults are the plural of the last word of the name
+     * for the table, {@code name_id} for the foreign pivot key, and the related model's
+     * {@code getForeignKey()} for the related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphToMany(Class<R> related, String name, String table) {
+        return buildMorphToMany(related, name, table, null, null, null, null, null, false);
+    }
+
+    /**
+     * Builds a polymorphic many-to-many relation: the pivot's type column holds this model's morph
+     * class and its id column holds this model's key. The defaults are the plural of the last word of the name
+     * for the table, {@code name_id} for the foreign pivot key, and the related model's
+     * {@code getForeignKey()} for the related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or
+     *     {@code null} for {@code name_id}
+     * @param relatedPivotKey the pivot column holding the related key, or {@code null} for the related
+     *     model's {@code getForeignKey()}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphToMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, null, null, null, false);
+    }
+
+    /**
+     * Builds a polymorphic many-to-many relation: the pivot's type column holds this model's morph
+     * class and its id column holds this model's key. The defaults are the plural of the last word of the name
+     * for the table, {@code name_id} for the foreign pivot key, and the related model's
+     * {@code getForeignKey()} for the related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or
+     *     {@code null} for {@code name_id}
+     * @param relatedPivotKey the pivot column holding the related key, or {@code null} for the related
+     *     model's {@code getForeignKey()}
+     * @param parentKey the parent's column the pivot points at, or {@code null} for this model's
+     *     {@code getKeyName()}
+     * @param relatedKey the related model's column the pivot points at, or {@code null} for the
+     *     related model's {@code getKeyName()}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphToMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey, String relatedKey) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, parentKey,
+                relatedKey, null, false);
+    }
+
+    /**
+     * Builds a polymorphic many-to-many relation: the pivot's type column holds this model's morph
+     * class and its id column holds this model's key. The defaults are the plural of the last word of the name
+     * for the table, {@code name_id} for the foreign pivot key, and the related model's
+     * {@code getForeignKey()} for the related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or
+     *     {@code null} for {@code name_id}
+     * @param relatedPivotKey the pivot column holding the related key, or {@code null} for the related
+     *     model's {@code getForeignKey()}
+     * @param parentKey the parent's column the pivot points at, or {@code null} for this model's
+     *     {@code getKeyName()}
+     * @param relatedKey the related model's column the pivot points at, or {@code null} for the
+     *     related model's {@code getKeyName()}
+     * @param relation the relation name, or {@code null} to take it from {@link #relations()}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphToMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey,
+            String relatedKey, String relation) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, parentKey,
+                relatedKey, relation, false);
+    }
+
+    /**
+     * Builds the inverse side of a polymorphic many-to-many relation: this model is the related side
+     * of the pivot, such as a tag, and the pivot's type column holds the class of the models it is
+     * attached to. The defaults are the plural of the last word of the name for the table,
+     * this model's {@code getForeignKey()} for the foreign pivot key, and {@code name_id} for the
+     * related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphedByMany(Class<R> related, String name) {
+        return buildMorphToMany(related, name, null, null, null, null, null, null, true);
+    }
+
+    /**
+     * Builds the inverse side of a polymorphic many-to-many relation: this model is the related side
+     * of the pivot, such as a tag, and the pivot's type column holds the class of the models it is
+     * attached to. The defaults are the plural of the last word of the name for the table,
+     * this model's {@code getForeignKey()} for the foreign pivot key, and {@code name_id} for the
+     * related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphedByMany(Class<R> related, String name, String table) {
+        return buildMorphToMany(related, name, table, null, null, null, null, null, true);
+    }
+
+    /**
+     * Builds the inverse side of a polymorphic many-to-many relation: this model is the related side
+     * of the pivot, such as a tag, and the pivot's type column holds the class of the models it is
+     * attached to. The defaults are the plural of the last word of the name for the table,
+     * this model's {@code getForeignKey()} for the foreign pivot key, and {@code name_id} for the
+     * related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or {@code null} for the
+     *     parent's {@code getForeignKey()}
+     * @param relatedPivotKey the pivot column holding the related key, or
+     *     {@code null} for {@code name_id}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphedByMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, null, null, null, true);
+    }
+
+    /**
+     * Builds the inverse side of a polymorphic many-to-many relation: this model is the related side
+     * of the pivot, such as a tag, and the pivot's type column holds the class of the models it is
+     * attached to. The defaults are the plural of the last word of the name for the table,
+     * this model's {@code getForeignKey()} for the foreign pivot key, and {@code name_id} for the
+     * related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or {@code null} for the
+     *     parent's {@code getForeignKey()}
+     * @param relatedPivotKey the pivot column holding the related key, or
+     *     {@code null} for {@code name_id}
+     * @param parentKey the parent's column the pivot points at, or {@code null} for this model's
+     *     {@code getKeyName()}
+     * @param relatedKey the related model's column the pivot points at, or {@code null} for the
+     *     related model's {@code getKeyName()}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphedByMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey, String relatedKey) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, parentKey,
+                relatedKey, null, true);
+    }
+
+    /**
+     * Builds the inverse side of a polymorphic many-to-many relation: this model is the related side
+     * of the pivot, such as a tag, and the pivot's type column holds the class of the models it is
+     * attached to. The defaults are the plural of the last word of the name for the table,
+     * this model's {@code getForeignKey()} for the foreign pivot key, and {@code name_id} for the
+     * related pivot key.
+     *
+     * @param <R> the related model class
+     * @param related the related model class, never {@code null}
+     * @param name the morph name, such as {@code taggable}, never {@code null} or empty
+     * @param table the pivot table, or {@code null} or empty for the plural of the last word of the name
+     * @param foreignPivotKey the pivot column holding the parent's key, or {@code null} for the
+     *     parent's {@code getForeignKey()}
+     * @param relatedPivotKey the pivot column holding the related key, or
+     *     {@code null} for {@code name_id}
+     * @param parentKey the parent's column the pivot points at, or {@code null} for this model's
+     *     {@code getKeyName()}
+     * @param relatedKey the related model's column the pivot points at, or {@code null} for the
+     *     related model's {@code getKeyName()}
+     * @param relation the relation name, or {@code null} to take it from {@link #relations()}
+     * @return a new, unconstrained relation, never {@code null}
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if {@code name} is {@code null} or empty
+     * @throws IllegalStateException if the related class has no {@link ModelQuery} entry
+     */
+    protected <R extends Model> MorphToMany<R> morphedByMany(Class<R> related, String name,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey,
+            String relatedKey, String relation) {
+        return buildMorphToMany(related, name, table, foreignPivotKey, relatedPivotKey, parentKey,
+                relatedKey, relation, true);
+    }
+
+    private <R extends Model> MorphToMany<R> buildMorphToMany(Class<R> related, String name, String table,
+            String foreignPivotKey, String relatedPivotKey, String parentKey, String relatedKey,
+            String relation, boolean isInverse) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "The morph name of a morph-to-many relation may not be null or empty");
+        }
+        Relation.ensureInitialised();
+        EloquentBuilder<R> query = newRelatedQuery(related);
+        Model instance = query.getModel();
+        Model parent = self();
+        String ownKey = isInverse ? parent.getForeignKey() : name + ID_SUFFIX;
+        String otherKey = isInverse ? name + ID_SUFFIX : instance.getForeignKey();
+        return Access.relations().newMorphToMany(query, parent, name, table,
+                foreignPivotKey != null ? foreignPivotKey : ownKey,
+                relatedPivotKey != null ? relatedPivotKey : otherKey,
+                parentKey != null ? parentKey : parent.getKeyName(),
+                relatedKey != null ? relatedKey : instance.getKeyName(), relation, isInverse);
     }
 
     private static Class<? extends Model> resolveMorph(String typeName, Model child) {

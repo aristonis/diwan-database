@@ -113,4 +113,13 @@ final class RelationAccessImpl implements RelationAccess {
         return new BelongsToMany<>(query, parent, table, foreignPivotKey, relatedPivotKey,
                 parentKey, relatedKey, relation);
     }
+
+    @Override
+    public <R extends Model> MorphToMany<R> newMorphToMany(EloquentBuilder<R> query, Model parent,
+            String name, String table, String foreignPivotKey, String relatedPivotKey,
+            String parentKey, String relatedKey, String relation, boolean inverse) {
+        String pivotTable = table != null && !table.isEmpty() ? table : MorphToMany.defaultTable(name);
+        return new MorphToMany<>(query, parent, name, pivotTable, foreignPivotKey, relatedPivotKey,
+                parentKey, relatedKey, relation, inverse);
+    }
 }

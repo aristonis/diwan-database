@@ -9,6 +9,7 @@ import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.relations.BelongsToMany;
 import org.aristonis.diwan.database.eloquent.relations.MorphEagerOptions;
+import org.aristonis.diwan.database.eloquent.relations.MorphToMany;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
 
 /**
@@ -274,4 +275,24 @@ public interface RelationAccess {
      */
     <R extends Model> BelongsToMany<R> newBelongsToMany(EloquentBuilder<R> query, Model parent, String table,
             String foreignPivotKey, String relatedPivotKey, String parentKey, String relatedKey, String relation);
+
+    /**
+     * Builds a morph-to-many relation. The arguments are resolved by the model's factories.
+     *
+     * @param <R> the related model class
+     * @param query the relation's unconstrained query, never {@code null}
+     * @param parent the owning model, never {@code null}
+     * @param name the morph name, never {@code null}
+     * @param table the pivot table, or {@code null} for the plural of the last word of the name
+     * @param foreignPivotKey the pivot's parent key column, never {@code null}
+     * @param relatedPivotKey the pivot's related key column, never {@code null}
+     * @param parentKey the parent's key column, never {@code null}
+     * @param relatedKey the related model's key column, never {@code null}
+     * @param relation the relation's name, or {@code null} to take it from the model's map
+     * @param inverse whether the type column holds the related model's morph class
+     * @return the new relation, never {@code null}
+     */
+    <R extends Model> MorphToMany<R> newMorphToMany(EloquentBuilder<R> query, Model parent, String name,
+            String table, String foreignPivotKey, String relatedPivotKey, String parentKey,
+            String relatedKey, String relation, boolean inverse);
 }

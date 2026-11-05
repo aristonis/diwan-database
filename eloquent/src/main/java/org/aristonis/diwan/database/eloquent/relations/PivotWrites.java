@@ -263,7 +263,27 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
                 }
             });
         }
-        return query.where(getQualifiedForeignPivotKeyName(), "=", requireParentKey());
+        query.where(getQualifiedForeignPivotKeyName(), "=", requireParentKey());
+        scopePivotQuery(query);
+        return query;
+    }
+
+    /**
+     * Narrows the pivot query a subclass owns, so a relation over a shared pivot table reads and
+     * writes only its own rows; the default adds nothing.
+     *
+     * @param query the pivot query being returned, never {@code null}
+     */
+    void scopePivotQuery(Builder query) {
+    }
+
+    /**
+     * Refuses an insert a subclass cannot type, so a relation that cannot fill the pivot's
+     * discriminating columns fails before any row is written; the default accepts every insert.
+     *
+     * @throws UnsupportedOperationException if the relation cannot write a typed pivot row
+     */
+    void requirePivotWritable() {
     }
 
     /**
@@ -379,6 +399,7 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
         if (rows.isEmpty()) {
             return;
         }
+        requirePivotWritable();
         PivotRecords.requireSameColumns(rows);
         if (usingClass() != null) {
             inTransactionIf(rows.size() > 1, () -> saveEach(rows));

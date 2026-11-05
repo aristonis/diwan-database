@@ -61,7 +61,8 @@ final class PivotColumns {
 
     /**
      * Builds the select entries that carry the pivot columns: the two keys first, then each extra
-     * column, each aliased with the pivot prefix and listed once.
+     * column, each aliased with the pivot prefix and listed once. A column written with the pivot table as a
+     * qualifier counts as its bare name.
      *
      * @param table the pivot table, never {@code null}
      * @param foreignKey the pivot column that holds the parent's key, never {@code null}
@@ -73,7 +74,10 @@ final class PivotColumns {
         Set<String> names = new LinkedHashSet<>();
         names.add(foreignKey);
         names.add(relatedKey);
-        names.addAll(columns);
+        String prefix = table + ".";
+        for (String column : columns) {
+            names.add(column.startsWith(prefix) ? column.substring(prefix.length()) : column);
+        }
         String[] aliased = new String[names.size()];
         int index = 0;
         for (String name : names) {

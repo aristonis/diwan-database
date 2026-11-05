@@ -242,7 +242,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code columns} or one of its elements is {@code null}
      * @throws IllegalArgumentException if a column contains a dot; nothing is added
      */
-    public final BelongsToMany<R> withPivot(String... columns) {
+    public BelongsToMany<R> withPivot(String... columns) {
         Objects.requireNonNull(columns, "columns");
         for (String column : columns) {
             PivotColumns.requireUndotted(column, describe());
@@ -258,7 +258,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      *
      * @return this relation
      */
-    public final BelongsToMany<R> withTimestamps() {
+    public BelongsToMany<R> withTimestamps() {
         return withTimestamps(null, null);
     }
 
@@ -273,7 +273,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws IllegalArgumentException if a name contains a dot; nothing is changed
      */
-    public final BelongsToMany<R> withTimestamps(String createdAt, String updatedAt) {
+    public BelongsToMany<R> withTimestamps(String createdAt, String updatedAt) {
         Model parent = getParent();
         String created = PivotColumns.timestampColumn(createdAt, parent.getCreatedAtColumn());
         String updated = PivotColumns.timestampColumn(updatedAt, parent.getUpdatedAtColumn());
@@ -295,7 +295,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code accessor} is {@code null}
      * @throws IllegalArgumentException if {@code accessor} is empty
      */
-    public final BelongsToMany<R> as(String accessor) {
+    public BelongsToMany<R> as(String accessor) {
         Objects.requireNonNull(accessor, "accessor");
         if (accessor.isEmpty()) {
             throw new IllegalArgumentException("The pivot accessor of " + describe() + " may not be empty");
@@ -316,7 +316,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException if the class
      *     has no registry entry
      */
-    public final BelongsToMany<R> using(Class<? extends Pivot> pivotClass) {
+    public BelongsToMany<R> using(Class<? extends Pivot> pivotClass) {
         Objects.requireNonNull(pivotClass, "pivotClass");
         Access.eloquent().newRegistered(pivotClass, null);
         this.pivotClass = pivotClass;
@@ -333,7 +333,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> wherePivot(String column, Object value) {
+    public BelongsToMany<R> wherePivot(String column, Object value) {
         return addPivotWhere(PivotClause.basic(qualifyPivotColumn(column), null, value, false));
     }
 
@@ -347,7 +347,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code operator} is {@code null}
      * @throws IllegalArgumentException if the query builder refuses the operator, when the query is built
      */
-    public final BelongsToMany<R> wherePivot(String column, String operator, Object value) {
+    public BelongsToMany<R> wherePivot(String column, String operator, Object value) {
         return addPivotWhere(PivotClause.basic(qualifyPivotColumn(column), operator, value, false));
     }
 
@@ -359,7 +359,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> orWherePivot(String column, Object value) {
+    public BelongsToMany<R> orWherePivot(String column, Object value) {
         return addPivotWhere(PivotClause.basic(qualifyPivotColumn(column), null, value, true));
     }
 
@@ -373,7 +373,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code operator} is {@code null}
      * @throws IllegalArgumentException if the query builder refuses the operator, when the query is built
      */
-    public final BelongsToMany<R> orWherePivot(String column, String operator, Object value) {
+    public BelongsToMany<R> orWherePivot(String column, String operator, Object value) {
         return addPivotWhere(PivotClause.basic(qualifyPivotColumn(column), operator, value, true));
     }
 
@@ -385,7 +385,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      */
-    public final BelongsToMany<R> wherePivotIn(String column, Collection<?> values) {
+    public BelongsToMany<R> wherePivotIn(String column, Collection<?> values) {
         return addPivotWhere(PivotClause.in(qualifyPivotColumn(column), values, false, false));
     }
 
@@ -397,7 +397,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      */
-    public final BelongsToMany<R> wherePivotNotIn(String column, Collection<?> values) {
+    public BelongsToMany<R> wherePivotNotIn(String column, Collection<?> values) {
         return addPivotWhere(PivotClause.in(qualifyPivotColumn(column), values, false, true));
     }
 
@@ -409,7 +409,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      */
-    public final BelongsToMany<R> orWherePivotIn(String column, Collection<?> values) {
+    public BelongsToMany<R> orWherePivotIn(String column, Collection<?> values) {
         return addPivotWhere(PivotClause.in(qualifyPivotColumn(column), values, true, false));
     }
 
@@ -421,7 +421,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      */
-    public final BelongsToMany<R> orWherePivotNotIn(String column, Collection<?> values) {
+    public BelongsToMany<R> orWherePivotNotIn(String column, Collection<?> values) {
         return addPivotWhere(PivotClause.in(qualifyPivotColumn(column), values, true, true));
     }
 
@@ -434,7 +434,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      * @throws IllegalArgumentException if the list does not hold exactly two values, when the query is built
      */
-    public final BelongsToMany<R> wherePivotBetween(String column, List<?> values) {
+    public BelongsToMany<R> wherePivotBetween(String column, List<?> values) {
         return addPivotWhere(PivotClause.between(qualifyPivotColumn(column), values, false, false));
     }
 
@@ -447,7 +447,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      * @throws IllegalArgumentException if the list does not hold exactly two values, when the query is built
      */
-    public final BelongsToMany<R> wherePivotNotBetween(String column, List<?> values) {
+    public BelongsToMany<R> wherePivotNotBetween(String column, List<?> values) {
         return addPivotWhere(PivotClause.between(qualifyPivotColumn(column), values, false, true));
     }
 
@@ -460,7 +460,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      * @throws IllegalArgumentException if the list does not hold exactly two values, when the query is built
      */
-    public final BelongsToMany<R> orWherePivotBetween(String column, List<?> values) {
+    public BelongsToMany<R> orWherePivotBetween(String column, List<?> values) {
         return addPivotWhere(PivotClause.between(qualifyPivotColumn(column), values, true, false));
     }
 
@@ -473,7 +473,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} or {@code values} is {@code null}
      * @throws IllegalArgumentException if the list does not hold exactly two values, when the query is built
      */
-    public final BelongsToMany<R> orWherePivotNotBetween(String column, List<?> values) {
+    public BelongsToMany<R> orWherePivotNotBetween(String column, List<?> values) {
         return addPivotWhere(PivotClause.between(qualifyPivotColumn(column), values, true, true));
     }
 
@@ -484,7 +484,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> wherePivotNull(String column) {
+    public BelongsToMany<R> wherePivotNull(String column) {
         return addPivotWhere(PivotClause.nullCheck(qualifyPivotColumn(column), false, false));
     }
 
@@ -495,7 +495,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> wherePivotNotNull(String column) {
+    public BelongsToMany<R> wherePivotNotNull(String column) {
         return addPivotWhere(PivotClause.nullCheck(qualifyPivotColumn(column), false, true));
     }
 
@@ -506,7 +506,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> orWherePivotNull(String column) {
+    public BelongsToMany<R> orWherePivotNull(String column) {
         return addPivotWhere(PivotClause.nullCheck(qualifyPivotColumn(column), true, false));
     }
 
@@ -517,7 +517,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> orWherePivotNotNull(String column) {
+    public BelongsToMany<R> orWherePivotNotNull(String column) {
         return addPivotWhere(PivotClause.nullCheck(qualifyPivotColumn(column), true, true));
     }
 
@@ -529,7 +529,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> orderByPivot(String column) {
+    public BelongsToMany<R> orderByPivot(String column) {
         return orderPivot(column, ASCENDING);
     }
 
@@ -543,7 +543,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws IllegalArgumentException if the direction is neither {@code asc} nor {@code desc}, when
      *     the query is built
      */
-    public final BelongsToMany<R> orderByPivot(String column, String direction) {
+    public BelongsToMany<R> orderByPivot(String column, String direction) {
         return orderPivot(column, direction);
     }
 
@@ -554,7 +554,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @return this relation
      * @throws NullPointerException if {@code column} is {@code null}
      */
-    public final BelongsToMany<R> orderByPivotDesc(String column) {
+    public BelongsToMany<R> orderByPivotDesc(String column) {
         return orderPivot(column, DESCENDING);
     }
 
@@ -568,7 +568,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalArgumentException if {@code value} is {@code null}; nothing is recorded
      */
-    public final BelongsToMany<R> withPivotValue(String column, Object value) {
+    public BelongsToMany<R> withPivotValue(String column, Object value) {
         PivotColumns.requireValue(column, value, describe());
         pivotValues.put(column, value);
         return wherePivot(column, EQUALS, value);
@@ -586,7 +586,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws NullPointerException if {@code values} or one of its keys is {@code null}
      * @throws IllegalArgumentException if a value is {@code null}; nothing is applied
      */
-    public final BelongsToMany<R> withPivotValue(Map<String, ?> values) {
+    public BelongsToMany<R> withPivotValue(Map<String, ?> values) {
         Objects.requireNonNull(values, "values");
         for (Map.Entry<String, ?> entry : values.entrySet()) {
             PivotColumns.requireValue(entry.getKey(), entry.getValue(), describe());
@@ -605,7 +605,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      *
      * @return this relation
      */
-    public final BelongsToMany<R> chaperone() {
+    public BelongsToMany<R> chaperone() {
         return chaperone(null, null);
     }
 
@@ -618,7 +618,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the pivot
      *     class declares no relation of the given name
      */
-    public final BelongsToMany<R> chaperone(String declaringInverse) {
+    public BelongsToMany<R> chaperone(String declaringInverse) {
         return chaperone(declaringInverse, null);
     }
 
@@ -633,7 +633,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the pivot
      *     class declares no relation of a given name
      */
-    public final BelongsToMany<R> chaperone(String declaringInverse, String relatedInverse) {
+    public BelongsToMany<R> chaperone(String declaringInverse, String relatedInverse) {
         if (pivotClass == null) {
             return self();
         }
@@ -648,7 +648,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      *
      * @return this relation
      */
-    public final BelongsToMany<R> withoutChaperone() {
+    public BelongsToMany<R> withoutChaperone() {
         declaringChaperone = null;
         relatedChaperone = null;
         return self();
@@ -683,7 +683,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      *
      * @return the entries, never {@code null}, never empty
      */
-    final String[] aliasedPivotColumns() {
+    String[] aliasedPivotColumns() {
         return PivotColumns.aliased(table, foreignPivotKey, relatedPivotKey, pivotColumns);
     }
 

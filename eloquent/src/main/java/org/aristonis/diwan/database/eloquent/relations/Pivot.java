@@ -283,6 +283,23 @@ public class Pivot extends Model {
     }
 
     /**
+     * Sets up a pivot built on the given instance, with the attributes set as
+     * {@code fromAttributes} does.
+     *
+     * @param <P> the pivot class
+     * @param blank the new instance to set up, never {@code null}
+     * @param parent the model the row was read through, never {@code null}
+     * @param attributes the row's columns, never {@code null}; copied
+     * @param table the join table, or {@code null} for the class's own table name
+     * @param exists whether the row is in the database
+     * @return {@code blank}, set up, never {@code null}
+     */
+    static <P extends Pivot> P fromAttributes(P blank, Model parent, Map<String, ?> attributes,
+            String table, boolean exists) {
+        return setUp(blank, parent, attributes, table, true, exists);
+    }
+
+    /**
      * Sets up a pivot built on the given instance, such as one of a custom class registered for
      * {@code using}. The attributes are set raw, as {@code fromRawAttributes} does.
      *

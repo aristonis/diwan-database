@@ -49,7 +49,7 @@ import org.aristonis.diwan.database.eloquent.internal.AliasCounter;
 public class BelongsToMany<R extends Model> extends PivotModelWrites<R> {
 
     /** A blank pivot of the {@code using} class, cloned for each row; {@code null} until first needed. */
-    private Pivot prototype;
+    private final Map<Class<? extends Pivot>, Pivot> prototypes = new HashMap<>();
 
     /** The hydrator shared by every chunk of one eager load, read again by {@link #match}. */
     private PivotHydrator eagerHydrator;
@@ -172,7 +172,7 @@ public class BelongsToMany<R extends Model> extends PivotModelWrites<R> {
         if (using == null) {
             return Pivot.fromAttributes(getParent(), merged, getTable(), exists);
         }
-        return Pivot.fromRawAttributes(freshUsing(using), getParent(), merged, getTable(), exists);
+        return Pivot.fromRawAttributes(freshPivotOf(using), getParent(), merged, getTable(), exists);
     }
 
     /**
@@ -317,9 +317,17 @@ public class BelongsToMany<R extends Model> extends PivotModelWrites<R> {
         target.join(getTable(), relatedColumn, "=", getQualifiedRelatedPivotKeyName());
     }
 
-    private Pivot freshUsing(Class<? extends Pivot> using) {
+    /**
+     * Returns a new blank pivot of the class, cloned from a prototype that is built once per class.
+     *
+     * @param type the pivot class, never {@code null}
+     * @return a blank pivot, never {@code null}
+     */
+    Pivot freshPivotOf(Class<? extends Pivot> type) {
+        Pivot prototype = prototypes.get(type);
         if (prototype == null) {
-            prototype = Access.eloquent().newRegistered(using, getParent());
+            prototype = Access.eloquent().newRegistered(type, getParent());
+            prototypes.put(type, prototype);
         }
         return (Pivot) Access.eloquent().newInstanceLike(prototype);
     }
