@@ -174,8 +174,11 @@ public final class Tag extends Model {
 - Each related model's pivot is a `MorphPivot` that carries the type column. Saving or deleting it
   touches only rows of its own type. A `using` class must extend `MorphPivot`.
 - `detach`, `updateExistingPivot` and `touch` act only on rows of the relation's type.
-- Inserting pivot rows (`attach`, and `sync`, `toggle`, `save` or `create` when they add a link)
-  is not supported yet and throws `UnsupportedOperationException`.
+- Every inserted pivot row carries the type: `attach`, `sync`, `toggle`, `save`, `create` and the
+  other writes work as on `belongsToMany`.
+- The type is always the relation's. Attach or update attributes, `withPivotValue`, or a pivot's own
+  `save` that name the type column (in any case) with another value throw
+  `IllegalArgumentException` before anything is written.
 - Chained pivot methods (`withPivot`, `wherePivot`, `as`, ...) return the `MorphToMany`.
 
 ## Differences from Laravel
@@ -192,6 +195,7 @@ public final class Tag extends Model {
 | `hasMorph` merges the `morphTo`'s own query constraints into each type | Each type gets a fresh query; put shared conditions in the constraint |
 | The morph class is read when the relation is built | It is read when the query runs |
 | A plain `Pivot` in `using` on a `morphToMany` saves and deletes without the type | The `using` class must extend `MorphPivot` |
+| Attach attributes can overwrite the pivot's type column | Another type value is refused |
 | The pivot-table name is guessed from the call stack when not given | The relation name is explicit; the table comes from the morph name |
 
 See [ADR 0027](../../adr/0027-morph-relations.md).

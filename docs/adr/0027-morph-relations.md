@@ -68,3 +68,6 @@ type must become a class without trusting the database to name one.
   parent type can never change another type's row. A `using` class must extend `MorphPivot`.
 - Fluent pivot methods are overridden with a `MorphToMany` return type, so chaining keeps the morph
   getters; changing the return type after release would break source.
+- Inserts add the type through the shared row builder, so bulk inserts and per-row pivot saves
+  carry it alike. A different type value in attributes, pivot values or a pivot's own save is
+  refused, because it would move a link to another parent type.
