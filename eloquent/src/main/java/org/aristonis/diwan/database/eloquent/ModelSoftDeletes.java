@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.query.Builder;
 
 /**
@@ -14,13 +15,14 @@ import org.aristonis.diwan.database.query.Builder;
  * the model keeps existing. {@link #forceDelete()} removes the row for good and {@link #restore()}
  * clears the column through {@code save()}.
  *
- * <p>The five protected hooks are the seams for model events: {@code forceDeleting} and
- * {@code restoring} may veto by returning {@code false}; {@code softDeleted}, {@code forceDeleted}
- * and {@code restored} run after the work. Each runs once per operation.
+ * <p>The five soft-delete hooks, declared in the event layer, are the seams for model events:
+ * {@code forceDeleting} and {@code restoring} may veto by returning {@code false};
+ * {@code softDeleted}, {@code forceDeleted} and {@code restored} run after the work. Each runs
+ * once per operation, and {@code softDeleted} also when the keyed update touched no row.
  *
  * <p>Instances are not safe to share across threads.
  */
-abstract class ModelSoftDeletes extends ModelGuards {
+abstract class ModelSoftDeletes extends ModelEventHooks {
 
     private boolean forceDeleteRun;
 
@@ -123,7 +125,7 @@ abstract class ModelSoftDeletes extends ModelGuards {
             throw failure;
         }
         syncOriginalAttributes(written.keySet().toArray(new String[0]));
-        softDeleted();
+        fire(ModelEvent.SOFT_DELETED);
         return true;
     }
 
@@ -142,7 +144,7 @@ abstract class ModelSoftDeletes extends ModelGuards {
      */
     public boolean forceDelete() {
         requireSoftDeletes("forceDelete");
-        if (!forceDeleting()) {
+        if (!fireHalting(ModelEvent.FORCE_DELETING)) {
             return false;
         }
         forceDeleteRun = true;
@@ -153,7 +155,7 @@ abstract class ModelSoftDeletes extends ModelGuards {
             forceDeleteRun = false;
         }
         if (deleted) {
-            forceDeleted();
+            fire(ModelEvent.FORCE_DELETED);
         }
         return deleted;
     }
@@ -172,16 +174,38 @@ abstract class ModelSoftDeletes extends ModelGuards {
      */
     public boolean restore() {
         requireSoftDeletes("restore");
-        if (!restoring()) {
+        if (!fireHalting(ModelEvent.RESTORING)) {
             return false;
         }
         putRawAttribute(getDeletedAtColumn(), null);
         markExisting();
         boolean saved = save();
         if (saved) {
-            restored();
+            fire(ModelEvent.RESTORED);
         }
         return saved;
+    }
+
+    /**
+     * Restores the model with the registered listeners silenced.
+     *
+     * @return as {@link #restore()}
+     * @throws IllegalStateException if the model does not soft-delete
+     */
+    public boolean restoreQuietly() {
+        Supplier<Boolean> work = this::restore;
+        return withoutEvents(work);
+    }
+
+    /**
+     * Deletes the row for good with the registered listeners silenced.
+     *
+     * @return as {@link #forceDelete()}
+     * @throws IllegalStateException if the model does not soft-delete, or has no primary key
+     */
+    public boolean forceDeleteQuietly() {
+        Supplier<Boolean> work = this::forceDelete;
+        return withoutEvents(work);
     }
 
     private void requireSoftDeletes(String operation) {
@@ -191,54 +215,7 @@ abstract class ModelSoftDeletes extends ModelGuards {
         }
     }
 
-    // ---- hooks ----
-
-    /**
-     * Runs at the start of {@code restore()}; returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean restoring() {
-        return true;
-    }
-
-    /** Runs after {@code restore()} saved the model. */
-    protected void restored() {
-    }
-
-    /** Runs after a soft delete wrote the deleted-at column and made it original. */
-    protected void softDeleted() {
-    }
-
-    /**
-     * Runs at the start of {@code forceDelete()}, before the force-deleting flag is set;
-     * returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean forceDeleting() {
-        return true;
-    }
-
-    /** Runs after {@code forceDelete()} removed the row and the flag was cleared. */
-    protected void forceDeleted() {
-    }
-
     // ---- implemented by Model ----
-
-    /**
-     * Deletes the model's row, as {@code Model.delete()}.
-     *
-     * @return {@code true} when deleted
-     */
-    public abstract boolean delete();
-
-    /**
-     * Saves the model, as {@code Model.save()}.
-     *
-     * @return {@code true} when saved or already clean
-     */
-    public abstract boolean save();
 
     /**
      * Returns whether this model writes timestamps now, as {@code Model.usesTimestamps()}.

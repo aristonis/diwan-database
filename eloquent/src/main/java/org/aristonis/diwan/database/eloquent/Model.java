@@ -25,7 +25,7 @@ import org.aristonis.diwan.database.query.QueryFactory;
  *
  * <p>Saving writes only dirty attributes, finds the row by the key as it was last read, and keeps
  * {@code created_at}/{@code updated_at} as {@link TimestampFormat} says. Before-hooks
- * ({@link #saving()}, {@link #creating()}, {@link #updating()}, {@link #deleting()}) can veto the
+ * ({@code saving()}, {@code creating()}, {@code updating()}, {@code deleting()}) can veto the
  * operation by returning {@code false}: no SQL runs and the method returns {@code false}. An
  * exception from a hook propagates; one thrown before the statement leaves the model unsaved.
  *
@@ -161,7 +161,7 @@ public abstract class Model extends ModelSoftDeletes {
     final void hydrateFrom(Map<String, Object> row) {
         setRawAttributes(row, true);
         exists = true;
-        retrieved();
+        fire(ModelEvent.RETRIEVED);
     }
 
     /**
@@ -259,7 +259,7 @@ public abstract class Model extends ModelSoftDeletes {
 
     // A non-null outer is the factory a saveOrFail() transaction was opened on.
     private boolean save(QueryFactory outer) {
-        if (!saving()) {
+        if (!fireHalting(ModelEvent.SAVING)) {
             return false;
         }
         boolean saved;
@@ -269,7 +269,7 @@ public abstract class Model extends ModelSoftDeletes {
             saved = performInsert(outer != null);
         }
         if (saved) {
-            saved();
+            fire(ModelEvent.SAVED);
             touchOwnersAfterSave(outer);
             syncOriginal();
         }
@@ -277,7 +277,7 @@ public abstract class Model extends ModelSoftDeletes {
     }
 
     private boolean performUpdate() {
-        if (!updating()) {
+        if (!fireHalting(ModelEvent.UPDATING)) {
             return false;
         }
         if (usesTimestamps()) {
@@ -287,7 +287,7 @@ public abstract class Model extends ModelSoftDeletes {
         if (!dirty.isEmpty()) {
             setKeysForSaveQuery(newBaseQuery()).update(dirty);
             syncChanges();
-            updated();
+            fire(ModelEvent.UPDATED);
         }
         return true;
     }
@@ -296,7 +296,7 @@ public abstract class Model extends ModelSoftDeletes {
         if (getUniqueIdKind() != UniqueIdKind.NONE) {
             setUniqueIds();
         }
-        if (!creating()) {
+        if (!fireHalting(ModelEvent.CREATING)) {
             return false;
         }
         if (usesTimestamps()) {
@@ -318,7 +318,7 @@ public abstract class Model extends ModelSoftDeletes {
         }
         exists = true;
         wasRecentlyCreated = true;
-        created();
+        fire(ModelEvent.CREATED);
         return true;
     }
 
@@ -387,7 +387,7 @@ public abstract class Model extends ModelSoftDeletes {
         if (getKeyName() == null) {
             throw new IllegalStateException("No primary key defined on model.");
         }
-        if (!exists || !deleting()) {
+        if (!exists || !fireHalting(ModelEvent.DELETING)) {
             return false;
         }
         touchOwnersBeforeDelete();
@@ -395,7 +395,7 @@ public abstract class Model extends ModelSoftDeletes {
             setKeysForSaveQuery(newBaseQuery()).delete();
             exists = false;
         }
-        deleted();
+        fire(ModelEvent.DELETED);
         return true;
     }
 
@@ -436,7 +436,7 @@ public abstract class Model extends ModelSoftDeletes {
      * @param column the column, never {@code null}; its stored value is added to, not its cast
      * @param amount the amount, never {@code null}
      * @param extra other columns to set, never {@code null}
-     * @return the affected rows, 0 when the {@link #updating()} hook vetoed it, in which case the
+     * @return the affected rows, 0 when the {@code updating()} hook vetoed it, in which case the
      *     attributes are put back
      * @throws IllegalStateException if the model does not exist; Laravel would update every row
      *     of the table instead
@@ -500,14 +500,14 @@ public abstract class Model extends ModelSoftDeletes {
         }
         putRawAttribute(column, ModelNumbers.add(getRawAttribute(column), amount, up));
         forceFill(written);
-        if (!updating()) {
+        if (!fireHalting(ModelEvent.UPDATING)) {
             setRawAttributes(before);
             return 0;
         }
         Builder query = setKeysForSaveQuery(newBaseQuery());
         int affected = up ? query.increment(column, amount, written) : query.decrement(column, amount, written);
         syncChanges();
-        updated();
+        fire(ModelEvent.UPDATED);
         String[] synced = written.keySet().toArray(new String[written.size() + 1]);
         synced[written.size()] = column;
         syncOriginalAttributes(synced);
@@ -580,7 +580,13 @@ public abstract class Model extends ModelSoftDeletes {
         }
         Model copy = newInstanceLike();
         copy.setRawAttributes(attributes);
+        copy.fire(ModelEvent.REPLICATING);
         return (M) copy;
+    }
+
+    @Override
+    final ModelQuery<?> eventSource() {
+        return source;
     }
 
     final Model newInstanceLike() {
@@ -725,66 +731,5 @@ public abstract class Model extends ModelSoftDeletes {
             return moment;
         }
         return DateTimeFormatter.ofPattern(getDateFormat(), Locale.ROOT).withZone(ZoneOffset.UTC).format(moment);
-    }
-
-    // ---- hooks ----
-
-    /**
-     * Runs before every save; returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean saving() {
-        return true;
-    }
-
-    /** Runs after a save that wrote or found nothing to write, before the originals sync. */
-    protected void saved() {
-    }
-
-    /**
-     * Runs before an insert, after unique ids are set; returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean creating() {
-        return true;
-    }
-
-    /** Runs after an insert. */
-    protected void created() {
-    }
-
-    /**
-     * Runs before an update of a dirty model; returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean updating() {
-        return true;
-    }
-
-    /** Runs after an update that wrote at least one column. */
-    protected void updated() {
-    }
-
-    /**
-     * Runs before a delete; returning {@code false} cancels it.
-     *
-     * @return whether to continue; {@code true} by default
-     */
-    protected boolean deleting() {
-        return true;
-    }
-
-    /** Runs after a delete. */
-    protected void deleted() {
-    }
-
-    /**
-     * Runs after the model is read from the database. An exception stops the read and
-     * propagates.
-     */
-    protected void retrieved() {
     }
 }

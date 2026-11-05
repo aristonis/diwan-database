@@ -93,6 +93,13 @@ public final class ModelQuery<T extends Model> {
     private final AtomicReference<Map<String, Scope>> scopes =
             new AtomicReference<>(Collections.<String, Scope>emptyMap());
 
+    /**
+     * The model event listeners of the class, replaced by compare-and-set, never changed. Reached
+     * only through {@link #eventSlot()}, which finds the registered entry's, so derived entries
+     * share the class's listeners.
+     */
+    private final AtomicReference<EventListeners> events = new AtomicReference<>(EventListeners.EMPTY);
+
     private ModelQuery(Class<T> type, Supplier<T> constructor, QueryFactory factory, ConnectionResolver resolver,
             ModelClock clock, AtomicReference<Object> relations, AtomicReference<Object> touches) {
         this.type = type;
@@ -208,6 +215,28 @@ public final class ModelQuery<T extends Model> {
     AtomicReference<Map<String, Scope>> scopeSlot() {
         ModelQuery<?> registered = REGISTRY.get(type);
         return registered != null ? registered.scopes : scopes;
+    }
+
+    /**
+     * Returns the event listener slot of the model class: the registered entry's, else this
+     * entry's when the class has none registered.
+     *
+     * @return the slot, never {@code null}
+     */
+    AtomicReference<EventListeners> eventSlot() {
+        ModelQuery<?> registered = REGISTRY.get(type);
+        return registered != null ? registered.events : events;
+    }
+
+    /**
+     * Returns the listener registrar of the model class. Listeners registered here apply to every
+     * instance of the class and to every entry derived from this one; the registrar of any entry of
+     * the class edits the same listeners.
+     *
+     * @return the registrar, never {@code null}
+     */
+    public ModelEvents<T> events() {
+        return new ModelEvents<>(eventSlot());
     }
 
     /**

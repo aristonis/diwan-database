@@ -79,13 +79,14 @@ class LayerGuardTest {
     }
 
     @Test
-    void relationLayerSitsBetweenSerializationAndGuards() {
+    void relationAndEventLayersSitBetweenSerializationAndGuards() {
         assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
         assertSame(ModelRelations.class, ModelManyRelations.class.getSuperclass());
         assertSame(ModelManyRelations.class, ModelThroughRelations.class.getSuperclass());
         assertSame(ModelThroughRelations.class, ModelRelationActions.class.getSuperclass());
         assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
-        assertSame(ModelGuards.class, ModelSoftDeletes.class.getSuperclass());
+        assertSame(ModelGuards.class, ModelEventHooks.class.getSuperclass());
+        assertSame(ModelEventHooks.class, ModelSoftDeletes.class.getSuperclass());
         assertSame(ModelSoftDeletes.class, Model.class.getSuperclass());
     }
 
