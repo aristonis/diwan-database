@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -17,7 +19,8 @@ import org.aristonis.diwan.database.jdbc.JdbcDriver;
  * <p>A name and exactly one driver source are required: {@link #driver(Driver)},
  * {@link #dataSource(DataSource)} or {@link #connectionProvider(JdbcConnectionProvider)}. The other settings have defaults: an empty
  * table prefix, bindings hidden in error messages, strict transactions on, and cleanup failures
- * logged as warnings through {@code java.util.logging}.
+ * logged as warnings through {@code java.util.logging}, no listeners and a query log limited to
+ * 1000 entries.
  *
  * <p>A builder is not thread-safe. The connection it builds keeps a snapshot of the settings, so
  * changing the builder afterwards does not affect it.
@@ -35,6 +38,8 @@ public final class ConnectionBuilder {
     private boolean showBindingsInErrors;
     private boolean strictTransactions = true;
     private Consumer<Throwable> cleanupFailureHandler = ConnectionBuilder::logCleanupFailure;
+    private int queryLogLimit = ConnectionEvents.DEFAULT_QUERY_LOG_LIMIT;
+    private final List<ConnectionListener> listeners = new ArrayList<ConnectionListener>();
 
     ConnectionBuilder() {
     }
@@ -165,6 +170,37 @@ public final class ConnectionBuilder {
     }
 
     /**
+     * Adds a listener for the query and transaction events of the connection family.
+     *
+     * @apiNote Call it once per listener; listeners run in the order they were added. More can be
+     *     added or removed later through {@link Connection#events()}.
+     * @param listener the listener, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if {@code listener} is {@code null}
+     */
+    public ConnectionBuilder listener(ConnectionListener listener) {
+        listeners.add(Objects.requireNonNull(listener, "listener"));
+        return this;
+    }
+
+    /**
+     * Sets how many statements the query log keeps.
+     *
+     * @apiNote The log is off until {@link ConnectionEvents#enableQueryLog()} is called; once full,
+     *     the oldest entry is dropped for each new one.
+     * @param queryLogLimit the most entries kept, greater than 0; the default is 1000
+     * @return this builder
+     * @throws IllegalArgumentException if {@code queryLogLimit} is 0 or negative
+     */
+    public ConnectionBuilder queryLogLimit(int queryLogLimit) {
+        if (queryLogLimit < 1) {
+            throw new IllegalArgumentException("queryLogLimit must be greater than 0");
+        }
+        this.queryLogLimit = queryLogLimit;
+        return this;
+    }
+
+    /**
      * Builds the root connection.
      *
      * @return a new connection, safe to share between threads, never {@code null}
@@ -178,7 +214,8 @@ public final class ConnectionBuilder {
             throw new IllegalStateException("a driver source is required");
         }
         return new RootConnection(driver, new ConnectionSettings(
-                name, tablePrefix, showBindingsInErrors, strictTransactions, cleanupFailureHandler, driver));
+                name, tablePrefix, showBindingsInErrors, strictTransactions, cleanupFailureHandler, driver,
+                queryLogLimit, new ArrayList<ConnectionListener>(listeners)));
     }
 
     private static void logCleanupFailure(Throwable failure) {

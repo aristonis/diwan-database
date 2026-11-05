@@ -15,6 +15,8 @@ import org.aristonis.diwan.database.driver.RowCursor;
  */
 class TransactionalConnection extends AbstractConnection {
 
+    private static final String EXTERNAL_MESSAGE = "afterCommit is refused inside a transaction opened outside"
+            + " this library: the commit of the caller is not known";
     private static final String ENDED_MESSAGE = "This transaction already ended; the connection passed to a"
             + " transaction callback may only be used inside that callback";
 
@@ -99,6 +101,28 @@ class TransactionalConnection extends AbstractConnection {
         return state.cursorGuard().closeQuietlyFrom(level);
     }
 
+    @Override
+    public final void afterCommit(Runnable callback) {
+        Objects.requireNonNull(callback, "callback");
+        ensureOpen();
+        if (state.isExternal()) {
+            throw new IllegalStateException(EXTERNAL_MESSAGE);
+        }
+        state.callbacks().onCommit(cursorLevel(), callback);
+    }
+
+    @Override
+    public final void afterRollback(Runnable callback) {
+        Objects.requireNonNull(callback, "callback");
+        ensureOpen();
+        state.callbacks().onRollback(cursorLevel(), callback);
+    }
+
+    /** Tells the listeners that {@code phase} happened at {@code level} of this transaction. */
+    final void fire(TransactionPhase phase, int level) {
+        TransactionState.fire(settings(), phase, level, level > 1 || state.isExternal());
+    }
+
     /** Runs a transaction command, translating its failure like a statement failure. */
     final void control(String description, Consumer<DriverSession> command) {
         state.cursorGuard().check();
@@ -119,9 +143,8 @@ class TransactionalConnection extends AbstractConnection {
     }
 
     /**
-     * Ends the outermost level successfully: commits, or keeps the savepoint of an external
-     * transaction. A commit failure is never recorded as a retryable concurrency failure, because the
-     * commit may have landed.
+     * Ends the outermost level successfully: commits, or releases the savepoint of an external
+     * transaction. A commit failure is never a retryable concurrency failure; the commit may have landed.
      */
     final void commitOutermost() {
         closeCursorsFrom(1);
@@ -129,6 +152,7 @@ class TransactionalConnection extends AbstractConnection {
             throw rollbackOnlyFailure();
         }
         state.cursorGuard().check();
+        fire(TransactionPhase.COMMITTING, 1);
         state.markCommitAttempted();
         if (state.isExternal()) {
             releaseSavepoint(TransactionState.OUTERMOST_SAVEPOINT);
@@ -151,6 +175,7 @@ class TransactionalConnection extends AbstractConnection {
             } else {
                 control("rollback", DriverSession::rollback);
             }
+            state.markRolledBack();
         } catch (RuntimeException | Error rollbackFailure) {
             if (cursorFailure != null) {
                 Sessions.suppress(rollbackFailure, cursorFailure);
@@ -168,13 +193,37 @@ class TransactionalConnection extends AbstractConnection {
         }
     }
 
-    /** Rolls back to a savepoint, attaching a failure to {@code original} instead of throwing it. */
-    final void rollbackToSavepoint(String name, Throwable original) {
+    /** Ends the savepoint of {@code level} successfully; its after-commit callbacks move up a level. */
+    final void commitLevel(String name, int level) {
+        fire(TransactionPhase.COMMITTING, level);
+        releaseSavepoint(name);
+        state.callbacks().releaseLevel(level);
+    }
+
+    /**
+     * Rolls back to the savepoint of {@code level} and queues the after-rollback callbacks of that level
+     * and deeper, whether or not the command worked. Returns the first failure, or {@code null}.
+     */
+    final Throwable rollbackLevelTo(String name, int level) {
+        Throwable failure = sendRollbackTo(name);
+        if (failure == null) {
+            try {
+                fire(TransactionPhase.ROLLED_BACK, level);
+            } catch (Throwable listenerFailure) {
+                failure = listenerFailure;
+            }
+        }
+        state.callbacks().rollbackLevel(level);
+        return failure;
+    }
+
+    private Throwable sendRollbackTo(String name) {
         try {
             control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
+            return null;
         } catch (Throwable rollbackFailure) {
             state.markRollbackOnly();
-            Sessions.suppress(original, rollbackFailure);
+            return rollbackFailure;
         }
     }
 
@@ -185,6 +234,16 @@ class TransactionalConnection extends AbstractConnection {
         String name = state.nextSavepointName(level);
         control("savepoint " + name, session -> session.savepoint(name));
         state.setDepth(level);
+        try {
+            fire(TransactionPhase.BEGINNING, level);
+        } catch (RuntimeException | Error failure) {
+            state.setDepth(level - 1);
+            Throwable undoFailure = sendRollbackTo(name);
+            if (undoFailure != null) {
+                Sessions.suppress(failure, undoFailure);
+            }
+            throw failure;
+        }
         return name;
     }
 
@@ -226,25 +285,35 @@ class TransactionalConnection extends AbstractConnection {
         }
         String savepoint = enterSavepoint();
         int level = state.depth();
+        boolean isCommitted = false;
+        T result;
         try {
-            T result = callback.run(this);
+            result = callback.run(this);
             closeOpenChildAbove(level);
             closeCursorsFrom(level);
             if (!state.isRollbackOnly()) {
-                releaseSavepoint(savepoint);
+                commitLevel(savepoint, level);
+                isCommitted = true;
             }
-            return result;
         } catch (RuntimeException | Error failure) {
             closeChildAfterFailure(level, failure);
             Throwable cursorFailure = closeCursorsQuietlyFrom(level);
             if (cursorFailure != null) {
                 Sessions.suppress(failure, cursorFailure);
             }
-            rollbackToSavepoint(savepoint, failure);
+            Throwable rollbackFailure = rollbackLevelTo(savepoint, level);
+            if (rollbackFailure != null) {
+                Sessions.suppress(failure, rollbackFailure);
+            }
             throw failure;
         } finally {
             state.setDepth(level - 1);
         }
+        // Outside the try, so a listener failure here cannot roll back a savepoint already released.
+        if (isCommitted) {
+            fire(TransactionPhase.COMMITTED, level);
+        }
+        return result;
     }
 
     private void closeChildAfterFailure(int level, Throwable failure) {

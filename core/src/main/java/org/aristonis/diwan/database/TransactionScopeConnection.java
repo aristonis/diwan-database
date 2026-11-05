@@ -59,14 +59,20 @@ final class TransactionScopeConnection extends TransactionalConnection implement
             } finally {
                 Sessions.closeAfterSuccess(state().session(), settings().cleanupFailureHandler());
             }
+            // The transaction is over and the thread has left it, so callbacks may use the root.
+            Throwable callbackFailure = TransactionState.finishOutermost(this, true);
+            if (callbackFailure != null) {
+                Sessions.rethrow(callbackFailure);
+            }
             return;
         }
         closeCursorsFrom(level);
         if (state().isRollbackOnly()) {
             throw rollbackOnlyFailure();
         }
-        releaseSavepoint(savepointName);
+        commitLevel(savepointName, level);
         markEnded();
+        fire(TransactionPhase.COMMITTED, level);
     }
 
     @Override
@@ -82,12 +88,15 @@ final class TransactionScopeConnection extends TransactionalConnection implement
         }
         Throwable cursorFailure = closeCursorsQuietlyFrom(level);
         if (cursorFailure != null) {
-            failure = combine(failure, cursorFailure);
+            failure = TransactionState.combine(failure, cursorFailure);
         }
         try {
             failure = rollBack(failure);
         } finally {
             failure = finish(failure);
+        }
+        if (isOutermost()) {
+            failure = TransactionState.combine(failure, TransactionState.finishOutermost(this, false));
         }
         if (failure != null) {
             Sessions.rethrow(failure);
@@ -100,7 +109,7 @@ final class TransactionScopeConnection extends TransactionalConnection implement
         try {
             markEnded();
         } catch (Throwable endFailure) {
-            result = combine(result, endFailure);
+            result = TransactionState.combine(result, endFailure);
         } finally {
             if (isOutermost()) {
                 closeSession(result);
@@ -110,28 +119,15 @@ final class TransactionScopeConnection extends TransactionalConnection implement
     }
 
     private Throwable rollBack(Throwable earlier) {
+        if (!isOutermost()) {
+            return TransactionState.combine(earlier, rollbackLevelTo(savepointName, level));
+        }
         try {
-            if (isOutermost()) {
-                rollbackOutermost();
-            } else {
-                String name = savepointName;
-                control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
-            }
+            rollbackOutermost();
             return earlier;
         } catch (Throwable rollbackFailure) {
-            if (!isOutermost()) {
-                state().markRollbackOnly();
-            }
-            return combine(earlier, rollbackFailure);
+            return TransactionState.combine(earlier, rollbackFailure);
         }
-    }
-
-    private static Throwable combine(Throwable earlier, Throwable later) {
-        if (earlier == null) {
-            return later;
-        }
-        Sessions.suppress(earlier, later);
-        return earlier;
     }
 
     private void closeSession(Throwable failure) {

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -92,17 +93,60 @@ final class SessionConnection extends AbstractConnection {
             throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
         }
         ensureOpen();
+        // After-rollback work of a failed attempt waits until the whole call is over, as on the root.
+        List<Runnable> deferred = new ArrayList<>();
+        T result = null;
+        Throwable failure = null;
+        try {
+            result = attempts(callback, attempts, deferred);
+        } catch (RuntimeException | Error attemptFailure) {
+            failure = attemptFailure;
+        }
+        Throwable deferredFailure = TransactionState.runAll(deferred);
+        if (failure != null) {
+            if (deferredFailure != null) {
+                Sessions.suppress(failure, deferredFailure);
+            }
+            Sessions.rethrow(failure);
+        } else if (deferredFailure != null) {
+            Sessions.rethrow(deferredFailure);
+        }
+        return result;
+    }
+
+    private <T> T attempts(TransactionCallback<T> callback, int attempts, List<Runnable> deferred) {
         for (int attempt = 1; ; attempt++) {
             TransactionState state = begin();
+            TransactionalConnection connection = new TransactionalConnection(settings(), state);
+            T result;
             try {
-                return runAttempt(new TransactionalConnection(settings(), state), callback);
+                result = runAttempt(connection, callback);
             } catch (RuntimeException | Error failure) {
+                // The event keeps its place in the order; the callbacks wait for the end of the call.
+                Throwable eventFailure = TransactionState.fireOutermostEnd(connection, false);
+                if (eventFailure != null) {
+                    Sessions.suppress(failure, eventFailure);
+                }
+                deferred.add(afterEnd(connection, false, false));
                 if (state.isExternal() || state.isCommitAttempted() || !state.hasOwnConcurrencyFailure()
                         || attempt >= attempts) {
                     throw failure;
                 }
+                continue;
             }
+            deferred.add(afterEnd(connection, true, true));
+            return result;
         }
+    }
+
+    private static Runnable afterEnd(TransactionalConnection connection, boolean isCommitted,
+            boolean isFiring) {
+        return () -> {
+            Throwable failure = TransactionState.finishOutermost(connection, isCommitted, isFiring);
+            if (failure != null) {
+                Sessions.rethrow(failure);
+            }
+        };
     }
 
     private TransactionState begin() {
@@ -114,7 +158,14 @@ final class SessionConnection extends AbstractConnection {
             } else {
                 session.begin();
             }
-            return new TransactionState(session, isExternal, canReleaseSavepoints, cursorGuard);
+            TransactionState state = new TransactionState(session, isExternal, canReleaseSavepoints, cursorGuard);
+            try {
+                TransactionState.fire(settings(), TransactionPhase.BEGINNING, 1, isExternal);
+            } catch (RuntimeException | Error listenerFailure) {
+                TransactionState.undoBegin(session, isExternal, listenerFailure);
+                throw listenerFailure;
+            }
+            return state;
         } catch (DriverException failure) {
             throw queryFailure("begin", Collections.<Object>emptyList(), failure);
         }

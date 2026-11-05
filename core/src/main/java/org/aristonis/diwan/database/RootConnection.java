@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -112,13 +113,30 @@ final class RootConnection extends AbstractConnection {
         if (isTracked) {
             enter(thread);
         }
+        // After-commit and after-rollback work waits until every attempt is over and the thread has
+        // left the transaction, so it may use this connection even in strict mode.
+        List<Runnable> deferred = new ArrayList<>();
+        T result = null;
+        Throwable failure = null;
         try {
-            return withRetries(callback, attempts);
+            result = withRetries(callback, attempts, deferred);
+        } catch (RuntimeException | Error attemptFailure) {
+            failure = attemptFailure;
         } finally {
             if (isTracked) {
                 leave(thread);
             }
         }
+        Throwable deferredFailure = TransactionState.runAll(deferred);
+        if (failure != null) {
+            if (deferredFailure != null) {
+                Sessions.suppress(failure, deferredFailure);
+            }
+            Sessions.rethrow(failure);
+        } else if (deferredFailure != null) {
+            Sessions.rethrow(deferredFailure);
+        }
+        return result;
     }
 
     private void enter(Thread thread) {
@@ -142,11 +160,11 @@ final class RootConnection extends AbstractConnection {
     // A retry runs the whole callback again, on a fresh session. Only a concurrency failure
     // raised on the attempt's own session before the commit was sent is retried: a failed commit
     // may have landed, and a concurrency failure from elsewhere says nothing about this transaction.
-    private <T> T withRetries(TransactionCallback<T> callback, int attempts) {
+    private <T> T withRetries(TransactionCallback<T> callback, int attempts, List<Runnable> deferred) {
         for (int attempt = 1; ; attempt++) {
             TransactionState state = openTransaction();
             try {
-                return runAttempt(new TransactionalConnection(settings(), state), callback);
+                return runAttempt(new TransactionalConnection(settings(), state), callback, deferred);
             } catch (RuntimeException | Error failure) {
                 if (!isRetryable(state) || attempt >= attempts) {
                     throw failure;
@@ -159,7 +177,8 @@ final class RootConnection extends AbstractConnection {
         return !state.isExternal() && !state.isCommitAttempted() && state.hasOwnConcurrencyFailure();
     }
 
-    private <T> T runAttempt(TransactionalConnection connection, TransactionCallback<T> callback) {
+    private <T> T runAttempt(TransactionalConnection connection, TransactionCallback<T> callback,
+            List<Runnable> deferred) {
         DriverSession session = connection.state().session();
         T result;
         try {
@@ -168,12 +187,30 @@ final class RootConnection extends AbstractConnection {
             connection.commitOutermost();
         } catch (RuntimeException | Error failure) {
             rollBackAfterFailure(connection, session, failure);
+            Throwable eventFailure = TransactionState.fireOutermostEnd(connection, false);
+            if (eventFailure != null) {
+                Sessions.suppress(failure, eventFailure);
+            }
+            deferred.add(afterEnd(connection, false, false));
             throw failure;
         } finally {
             connection.end();
         }
+        deferred.add(afterEnd(connection, true, true));
         Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
         return result;
+    }
+
+    // The work that runs once the call is over: the attempt's callbacks, and its end event unless
+    // it already fired; the first failure is rethrown.
+    private static Runnable afterEnd(TransactionalConnection connection, boolean isCommitted,
+            boolean isFiring) {
+        return () -> {
+            Throwable failure = TransactionState.finishOutermost(connection, isCommitted, isFiring);
+            if (failure != null) {
+                Sessions.rethrow(failure);
+            }
+        };
     }
 
     // An Error from the rollback is kept as context, and the session goes back to the driver whatever
@@ -202,7 +239,14 @@ final class RootConnection extends AbstractConnection {
                 session.begin();
             }
             boolean canRelease = driver.info().supports(DriverCapability.SAVEPOINT_RELEASE);
-            return new TransactionState(session, isExternal, canRelease);
+            TransactionState state = new TransactionState(session, isExternal, canRelease);
+            try {
+                TransactionState.fire(settings(), TransactionPhase.BEGINNING, 1, isExternal);
+            } catch (RuntimeException | Error listenerFailure) {
+                TransactionState.undoBegin(session, isExternal, listenerFailure);
+                throw listenerFailure;
+            }
+            return state;
         } catch (DriverException failure) {
             QueryException error = queryFailure(BEGIN, Collections.<Object>emptyList(), failure);
             Sessions.endAfterFailure(session, error, false);

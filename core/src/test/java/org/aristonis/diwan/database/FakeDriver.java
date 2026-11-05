@@ -22,6 +22,7 @@ final class FakeDriver implements Driver {
     private final Map<String, List<Map<String, Object>>> rows = new HashMap<>();
     private final Map<String, Integer> counts = new HashMap<>();
     private final Map<String, DriverException> failures = new HashMap<>();
+    private final Map<String, Long> delays = new HashMap<>();
     private final List<String> calls = Collections.synchronizedList(new ArrayList<String>());
     private final AtomicInteger open = new AtomicInteger();
     private final AtomicInteger opened = new AtomicInteger();
@@ -69,6 +70,12 @@ final class FakeDriver implements Driver {
 
     FakeDriver failsOn(String sql, DriverException failure) {
         failures.put(sql, failure);
+        return this;
+    }
+
+    /** Makes a statement take at least the given number of milliseconds, to exercise slow-query handlers. */
+    FakeDriver takes(String sql, long millis) {
+        delays.put(sql, millis);
         return this;
     }
 
@@ -195,6 +202,14 @@ final class FakeDriver implements Driver {
                 throw new AssertionError("session used after close");
             }
             calls.add(bindings == null ? call + " " + sql : call + " " + sql + " " + bindings);
+            Long delay = delays.get(sql);
+            if (delay != null) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             DriverException failure = failures.get(sql);
             if (failure != null) {
                 throw failure;

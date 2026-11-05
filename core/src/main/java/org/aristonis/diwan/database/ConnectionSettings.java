@@ -1,10 +1,11 @@
 package org.aristonis.diwan.database;
 
+import java.util.List;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverInfo;
 
-/** Holds the settings fixed by {@link ConnectionBuilder#build()}; immutable and safe to share. */
+/** Holds the settings fixed by {@link ConnectionBuilder#build()}, and the events shared by the connection family. */
 final class ConnectionSettings {
 
     private final String name;
@@ -13,15 +14,18 @@ final class ConnectionSettings {
     private final boolean strictTransactions;
     private final Consumer<Throwable> cleanupFailureHandler;
     private final Driver driver;
+    private final ConnectionEvents events;
 
     ConnectionSettings(String name, String tablePrefix, boolean showBindingsInErrors,
-            boolean strictTransactions, Consumer<Throwable> cleanupFailureHandler, Driver driver) {
+            boolean strictTransactions, Consumer<Throwable> cleanupFailureHandler, Driver driver,
+            int queryLogLimit, List<ConnectionListener> listeners) {
         this.name = name;
         this.tablePrefix = tablePrefix;
         this.showBindingsInErrors = showBindingsInErrors;
         this.strictTransactions = strictTransactions;
         this.cleanupFailureHandler = cleanupFailureHandler;
         this.driver = driver;
+        this.events = new ConnectionEvents(queryLogLimit, listeners, showBindingsInErrors);
     }
 
     String name() {
@@ -42,6 +46,11 @@ final class ConnectionSettings {
 
     Consumer<Throwable> cleanupFailureHandler() {
         return cleanupFailureHandler;
+    }
+
+    /** Returns the listeners, query log and slow-query handlers shared by the whole family. */
+    ConnectionEvents events() {
+        return events;
     }
 
     DriverInfo driverInfo() {

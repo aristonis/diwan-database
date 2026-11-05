@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +38,12 @@ class PretendConnection extends AbstractConnection {
             ended.set(true);
         }
         return Collections.unmodifiableList(new ArrayList<>(queries));
+    }
+
+    // Nothing runs in pretend mode, so every event reports zero time.
+    @Override
+    final Duration elapsedSince(long startNanos) {
+        return Duration.ZERO;
     }
 
     void ensureOpen() {

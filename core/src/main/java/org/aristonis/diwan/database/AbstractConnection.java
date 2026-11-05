@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -55,101 +56,102 @@ abstract class AbstractConnection implements Connection {
 
     @Override
     public final boolean statement(String sql, Object... bindings) {
-        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.STATEMENT);
     }
 
     @Override
     public final boolean statement(String sql, List<?> bindings) {
-        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.STATEMENT);
     }
 
     @Override
     public final int affectingStatement(String sql, Object... bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.AFFECTING);
     }
 
     @Override
     public final int affectingStatement(String sql, List<?> bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.AFFECTING);
     }
 
     @Override
     public final boolean insert(String sql, Object... bindings) {
-        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.INSERT);
     }
 
     @Override
     public final boolean insert(String sql, List<?> bindings) {
-        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return execute(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.INSERT);
     }
 
     @Override
     public final int update(String sql, Object... bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.UPDATE);
     }
 
     @Override
     public final int update(String sql, List<?> bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.UPDATE);
     }
 
     @Override
     public final int delete(String sql, Object... bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.DELETE);
     }
 
     @Override
     public final int delete(String sql, List<?> bindings) {
-        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return affect(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.DELETE);
     }
 
     @Override
     public final List<Map<String, Object>> select(String sql, Object... bindings) {
-        return query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SELECT);
     }
 
     @Override
     public final List<Map<String, Object>> select(String sql, List<?> bindings) {
-        return query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SELECT);
     }
 
     @Override
     public final Optional<Map<String, Object>> selectOne(String sql, Object... bindings) {
-        return first(query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
+        return first(query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SELECT_ONE));
     }
 
     @Override
     public final Optional<Map<String, Object>> selectOne(String sql, List<?> bindings) {
-        return first(query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
+        return first(query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SELECT_ONE));
     }
 
     @Override
     public final Optional<Object> scalar(String sql, Object... bindings) {
-        return onlyValue(sql, query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
+        return onlyValue(sql, query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SCALAR));
     }
 
     @Override
     public final Optional<Object> scalar(String sql, List<?> bindings) {
-        return onlyValue(sql, query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
+        return onlyValue(sql, query(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings), QueryKind.SCALAR));
     }
 
     @Override
     public final RowCursor cursor(String sql, Object... bindings) {
-        return openCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
     }
 
     @Override
     public final RowCursor cursor(String sql, List<?> bindings) {
-        return openCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+        return timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
     }
 
     @Override
     public final boolean unprepared(String sql) {
         Objects.requireNonNull(sql, "sql");
-        return run(new PendingStatement<Boolean>(sql, Collections.emptyList(), (session, text, values) -> {
-            session.executeUnprepared(text);
-            return Boolean.TRUE;
-        }, Boolean.TRUE));
+        return timed(QueryKind.STATEMENT, new PendingStatement<Boolean>(sql, Collections.emptyList(),
+                (session, text, values) -> {
+                    session.executeUnprepared(text);
+                    return Boolean.TRUE;
+                }, Boolean.TRUE));
     }
 
     @Override
@@ -171,23 +173,103 @@ abstract class AbstractConnection implements Connection {
         }
     }
 
-    private boolean execute(String sql, List<Object> bindings) {
+    private boolean execute(String sql, List<Object> bindings, QueryKind kind) {
         // The session's answer only says whether a result set came back; callers are told that the
         // statement ran.
-        return run(new PendingStatement<Boolean>(sql, bindings, (session, text, values) -> {
+        return timed(kind, new PendingStatement<Boolean>(sql, bindings, (session, text, values) -> {
             session.execute(text, values);
             return Boolean.TRUE;
         }, Boolean.TRUE));
     }
 
-    private int affect(String sql, List<Object> bindings) {
-        return run(new PendingStatement<Integer>(sql, bindings, (session, text, values) ->
+    private int affect(String sql, List<Object> bindings, QueryKind kind) {
+        return timed(kind, new PendingStatement<Integer>(sql, bindings, (session, text, values) ->
                 session.update(text, values), 0));
     }
 
-    private List<Map<String, Object>> query(String sql, List<Object> bindings) {
-        return run(new PendingStatement<List<Map<String, Object>>>(sql, bindings, (session, text, values) ->
-                frozenRows(session.query(text, values)), Collections.<Map<String, Object>>emptyList()));
+    private List<Map<String, Object>> query(String sql, List<Object> bindings, QueryKind kind) {
+        return timed(kind, new PendingStatement<List<Map<String, Object>>>(sql, bindings,
+                (session, text, values) -> frozenRows(session.query(text, values)),
+                Collections.<Map<String, Object>>emptyList()));
+    }
+
+    /** Returns the time since {@code startNanos}; a recorder that sends nothing reports zero. */
+    Duration elapsedSince(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos);
+    }
+
+    // Nothing is timed or allocated while no listener, log or slow-query handler is active, and a
+    // statement run by a listener itself fires nothing.
+    private <T> T timed(QueryKind kind, PendingStatement<T> statement) {
+        ConnectionEvents events = events();
+        if (!events.isActive() || events.isDispatching()) {
+            return run(statement);
+        }
+        long start = System.nanoTime();
+        T result;
+        try {
+            result = run(statement);
+        } catch (QueryException failure) {
+            if (events.hasListeners()) {
+                events.failed(new QueryFailed(settings.name(), kind, statement.sql(), statement.bindings(),
+                        elapsedSince(start), transactionLevel(), failure));
+            }
+            throw failure;
+        }
+        events.executed(this, new QueryExecuted(settings.name(), kind, statement.sql(), statement.bindings(),
+                elapsedSince(start), transactionLevel()));
+        return result;
+    }
+
+    // The event covers opening the cursor only, not reading its rows.
+    private RowCursor timedCursor(String sql, List<Object> bindings) {
+        ConnectionEvents events = events();
+        if (!events.isActive() || events.isDispatching()) {
+            return openCursor(sql, bindings);
+        }
+        long start = System.nanoTime();
+        RowCursor cursor;
+        try {
+            cursor = openCursor(sql, bindings);
+        } catch (QueryException failure) {
+            if (events.hasListeners()) {
+                events.failed(new QueryFailed(settings.name(), QueryKind.CURSOR, sql, bindings,
+                        elapsedSince(start), transactionLevel(), failure));
+            }
+            throw failure;
+        }
+        try {
+            events.executed(this, new QueryExecuted(settings.name(), QueryKind.CURSOR, sql, bindings,
+                    elapsedSince(start), transactionLevel()));
+        } catch (RuntimeException | Error listenerFailure) {
+            closeAfterListenerFailure(cursor, listenerFailure);
+            throw listenerFailure;
+        }
+        return cursor;
+    }
+
+    // A cursor the caller never received could not be closed by anyone else.
+    private static void closeAfterListenerFailure(RowCursor cursor, Throwable listenerFailure) {
+        try {
+            cursor.close();
+        } catch (Throwable closeFailure) {
+            Sessions.suppress(listenerFailure, closeFailure);
+        }
+    }
+
+    @Override
+    public final ConnectionEvents events() {
+        return settings.events();
+    }
+
+    @Override
+    public void afterCommit(Runnable callback) {
+        Objects.requireNonNull(callback, "callback").run();
+    }
+
+    @Override
+    public void afterRollback(Runnable callback) {
+        Objects.requireNonNull(callback, "callback");
     }
 
     // Copied because the driver contract lets drivers return mutable lists and maps.
