@@ -57,3 +57,14 @@ type must become a class without trusting the database to name one.
 - The map holds strong class references, so a container that redeploys pins the old class loader.
 - A user constraint on an eager `morphTo` runs on every type, so it may name only columns that every
   type has. Per-type constraints come with `constrain` and `morphWith`.
+
+## Addendum: many-to-many morph
+
+- `MorphToMany` extends `BelongsToMany`. The type filter is added where the pivot join is built,
+  the one step shared by lazy reads, eager loads and existence queries.
+- Every query on the pivot table built by the relation (detach, update, touch, the sync diff)
+  carries the type, through a hook on the pivot query.
+- Pivots are `MorphPivot`, whose save and delete keys include the type, so a pivot read for one
+  parent type can never change another type's row. A `using` class must extend `MorphPivot`.
+- Fluent pivot methods are overridden with a `MorphToMany` return type, so chaining keeps the morph
+  getters; changing the return type after release would break source.

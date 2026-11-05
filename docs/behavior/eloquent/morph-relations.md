@@ -147,6 +147,37 @@ Comment.QUERY.query()
 - `withMorph` and `with` on the same relation merge in any order without losing the options.
 - On loaded models: `loadMorph(relation, Map<Class, List<String>>)` and `loadMorphCount`, on a model or a `ModelCollection`. The `morphTo` is loaded first when it is not loaded yet.
 
+## morphToMany and morphedByMany
+
+One pivot table links one model to many parent types. A `taggables` table with `tag_id`,
+`taggable_id` and `taggable_type` lets posts and videos share tags.
+
+```java
+public final class Post extends Model {
+    public MorphToMany<Tag> tags() {
+        return morphToMany(Tag.class, "taggable");
+    }
+}
+
+public final class Tag extends Model {
+    public MorphToMany<Post> posts() {
+        return morphedByMany(Post.class, "taggable");
+    }
+}
+```
+
+- Defaults: the table is the plural of the last word of the name (`taggable` gives `taggables`),
+  the type column is `<name>_type`. On `morphToMany` the parent's key goes in `<name>_id` and the
+  related key in the related model's foreign key (`tag_id`); `morphedByMany` swaps the two.
+- The type value is the parent's morph class, or on `morphedByMany` the related model's. It is
+  bound, and it filters lazy reads, eager loads, `has`, `whereHas` and the aggregates.
+- Each related model's pivot is a `MorphPivot` that carries the type column. Saving or deleting it
+  touches only rows of its own type. A `using` class must extend `MorphPivot`.
+- `detach`, `updateExistingPivot` and `touch` act only on rows of the relation's type.
+- Inserting pivot rows (`attach`, and `sync`, `toggle`, `save` or `create` when they add a link)
+  is not supported yet and throws `UnsupportedOperationException`.
+- Chained pivot methods (`withPivot`, `wherePivot`, `as`, ...) return the `MorphToMany`.
+
 ## Differences from Laravel
 
 | Laravel | Diwan |
@@ -160,5 +191,7 @@ Comment.QUERY.query()
 | `morphWith` and friends are called on the relation in the eager closure | `withMorph(name, options)` |
 | `hasMorph` merges the `morphTo`'s own query constraints into each type | Each type gets a fresh query; put shared conditions in the constraint |
 | The morph class is read when the relation is built | It is read when the query runs |
+| A plain `Pivot` in `using` on a `morphToMany` saves and deletes without the type | The `using` class must extend `MorphPivot` |
+| The pivot-table name is guessed from the call stack when not given | The relation name is explicit; the table comes from the morph name |
 
 See [ADR 0027](../../adr/0027-morph-relations.md).
