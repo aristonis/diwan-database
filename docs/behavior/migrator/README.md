@@ -42,4 +42,77 @@ migrator.status();       // ran, pending, missing
   run.
 - Nothing stops two processes from migrating at once unless you plug in a lock.
 
+## Migration events
+
+A `MigrationListener` watches a migrator work, as Laravel's migration events do. Every method is
+optional.
+
+```java
+Migrator migrator = Migrator.builder(SQLiteSchema.of(db))
+        .add(new CreateUsersTable())
+        .listener(new MigrationListener() {
+            @Override
+            public void migrationStarted(MigrationEvent event) {
+                System.out.println("running " + event.name());
+            }
+
+            @Override
+            public void migrationFailed(MigrationEvent event, Throwable failure) {
+                System.err.println(event.name() + " failed: " + failure.getMessage());
+            }
+        })
+        .build();
+```
+
+Listeners are called in registration order, on the thread that runs the migrator. Through
+`DatabaseManager`, `migrationListener(...)` adds a listener to every migrator it hands out.
+
+### The events
+
+| Method | Event | When |
+|---|---|---|
+| `migrationsStarted` | `MigrationsEvent` | once, before the first migration of a run, rollback or reset, inside the lock |
+| `noPendingMigrations` | `MigrationsEvent` | instead of `migrationsStarted`, when there is nothing to run or undo |
+| `migrationStarted` | `MigrationEvent` | before one migration runs, before its transaction opens |
+| `migrationEnded` | `MigrationEvent` | after the migration ran and its record was written or removed |
+| `migrationSkipped` | `MigrationEvent` | going up, when the migration's `shouldRun()` is `false` |
+| `migrationFailed` | `MigrationEvent`, `Throwable` | when a migration or its record failed, just before the failure is thrown |
+| `migrationsEnded` | `MigrationsEvent` | once, after the last migration of a call that succeeded |
+
+`MigrationsEvent` gives the direction, the pretend flag and the connection name. `MigrationEvent`
+adds the migration name and its batch.
+
+- **Direction.** `UP` for `run`, `DOWN` for `rollback`, `rollbackSteps`, `rollbackBatch` and
+  `reset`.
+- **Batch.** The batch the migration is recorded in, or removed from. It is 0 for a skipped
+  migration and for one that is only pretended going up.
+- **Pretend.** The pretend calls fire the same events with the pretend flag set. They fire outside
+  the scope that collects SQL, so statements a listener runs are not collected.
+
+### When a listener fails
+
+| Event | What a throwing listener does |
+|---|---|
+| `migrationsStarted`, `migrationStarted` | The call stops before that work starts. Migrations already finished stay applied and recorded. |
+| `migrationEnded`, `migrationSkipped`, `noPendingMigrations`, `migrationsEnded` | The exception propagates after the work is done and recorded, so the migrations table and the result list stay correct. The call ends there. |
+| `migrationFailed` | The exception is added as suppressed to the `MigrationFailedException` that is thrown. The other listeners still run. |
+
+### A failed migration
+
+A failed migration fires `migrationFailed` and the call ends with `MigrationFailedException`;
+`migrationsEnded` does not fire. A failure to write or remove the record fires `migrationFailed`
+too. On SQLite a migration that fails on foreign keys is run again with enforcement off: the first
+attempt fires no failure, only the second can.
+
+### Differences from Laravel
+
+| Laravel | Here |
+|---|---|
+| Events go through the application's event dispatcher | Listeners register on the migrator builder; no dispatcher |
+| No event for a failure | `migrationFailed` |
+| The events carry the migration object | The events carry the name, direction, batch and pretend flag |
+| A listener failure is whatever the dispatcher does | The rules above: started stops, ended propagates after recording, failed is suppressed |
+
+Per-statement events are not part of this: `ConnectionListener.queryExecuted` already covers them.
+
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md).

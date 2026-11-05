@@ -229,6 +229,55 @@ The supplier runs when the connection is first built. A data source that impleme
 `AutoCloseable` is closed with the connection. A name that is not configured is refused when the
 manager is built.
 
+## Manager listeners and connection established
+
+```java
+DatabaseManager db = DatabaseManager.builder()
+        .config(config)
+        .connector(new PostgresConnector())
+        .listener(new SlowQueryLogger())             // every connection, now and after a rebuild
+        .managerListener(new ManagerListener() {
+            @Override
+            public void connectionEstablished(ConnectionEstablished event) {
+                log.info("connected " + event.connectionName() + " via " + event.driver());
+            }
+        })
+        .migrationListener(new MigrationProgressBar())
+        .build();
+```
+
+| Builder method | Takes | Effect |
+|---|---|---|
+| `listener(l)` | a `ConnectionListener` | attached to the events of every connection the manager builds |
+| `managerListener(l)` | a `ManagerListener` | told after each connection is built |
+| `migrationListener(l)` | a `MigrationListener` | added to every migrator builder `migrator(name)` returns |
+
+All three can be repeated and run in registration order. A null listener is refused with
+`NullPointerException`.
+
+### connectionEstablished
+
+- **Timing.** The connection is built, the manager's connection listeners are attached, and then
+  `connectionEstablished` fires, all before any caller can see the connection. The event gives the
+  connection name, the driver name and the new `Connection`, which the listener may use.
+- **Again after a rebuild.** It fires each time a connection is built, so also after `purge`,
+  `disconnect` and `reconnect`. Connection listeners attach again too, so a purge never loses them.
+- **Failure.** A listener that throws fails the build. The new connection is closed, the failure
+  reaches the caller that asked for the connection, and the name stays usable: the next call builds
+  again and fires the listeners again. A close that fails too is added as suppressed.
+- **Re-entry.** A listener that asks the manager for the connection being built, on the building
+  thread, gets `IllegalStateException` naming the connection. Use the connection in the event
+  instead. Asking for another name works, but a listener should not call the manager at all: two
+  connections whose listeners ask for each other on different threads can deadlock.
+- **Cost.** The listener runs while the connection is being built, so keep it short. Threads that
+  ask for the same name wait for it; other names are not blocked.
+
+### Migration listeners
+
+`migrator(name)` returns a builder that already carries the manager's migration listeners, after
+the connection and lock are set up. A listener you add on that builder with `listener(...)` runs
+after the manager's. See [Migration events](../migrator/README.md#migration-events).
+
 ## Passwords
 
 The password is passed to the JDBC driver as a property, never as part of the URL.
@@ -257,6 +306,7 @@ Change the manager instead.
 |---|---|---|
 | `config/database.php` array and `.env` | `ConfigSource` with map, properties and environment adapters | no PHP config; works without a file |
 | drivers found by name in the connection factory | connectors registered explicitly | R8 and no reflection |
+| `DatabaseManager` fires events through the dispatcher; there is no event when a connection is built | `connectionEstablished` on a `ManagerListener`, fired before the connection is published | no dispatcher; one place to attach listeners |
 | `usingConnection` changes the global default | changes the default for the calling thread | concurrent servers |
 | connections are PDO objects built from an array | `Connection` built by a `Connector` from a typed `ConnectionConfig` | typed, checked config |
 | `disconnect` drops the PDO and keeps the config | same; also closes an `AutoCloseable` data source | same |
@@ -278,3 +328,4 @@ Change the manager instead.
 - [Seeders](seeders.md)
 - [Connection](README.md)
 - [Decision record](../../adr/0024-database-manager-config-seeders.md)
+- [Decision: manager wiring](../../adr/0026-model-after-commit-migration-and-manager-events.md)

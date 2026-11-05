@@ -140,6 +140,97 @@ posts.events().saved(post -> {
 });
 ```
 
+## After-commit listeners and observers
+
+A listener normally runs inside the write, before the transaction commits. When it must act only
+on work that is really saved (send a mail, clear a cache, tell a search index), register it after
+commit:
+
+```java
+posts.events().afterCommit()
+        .created(post -> mailer.sendWelcome(post.getKey()))
+        .deleted(post -> cache.forget("post:" + post.getKey()));
+
+public final class PostIndexer implements ModelObserver<Post> {
+    @Override
+    public boolean afterCommit() {          // only the methods below that cannot halt wait
+        return true;
+    }
+
+    @Override
+    public void saved(Post post) {
+        search.reindex(post.getKey());      // runs after the commit
+    }
+
+    @Override
+    public boolean saving(Post post) {      // still runs inside the write and can halt
+        return !post.getBoolean("locked");
+    }
+}
+
+posts.events().observe(new PostIndexer());
+```
+
+### What waits
+
+| Registered through | Waits for the commit |
+|---|---|
+| `events().afterCommit().saved/created/updated/deleted/softDeleted/restored/forceDeleted` | yes |
+| `ModelObserver.afterCommit()` returning `true` | its seven methods above; every other method runs where it always did |
+
+The `ModelObserver.afterCommit()` answer is read once, when the observer is registered. A listener
+runs after the outermost commit of the connection that wrote the model, on the thread that
+committed, once the transaction has fully ended.
+
+### What is refused
+
+The after-commit view offers only the seven events that run after a write. `saving`, `creating`,
+`updating`, `deleting`, `restoring` and `forceDeleting` halt a write that has not happened yet, so
+they cannot wait. `retrieved` and `replicating` are not writes. Calling any of these on the view
+throws `UnsupportedOperationException` naming the event. An observer that opts in keeps its halting
+methods, `retrieved` and `replicating` running at their usual place.
+
+### When it runs
+
+- **Outside a transaction** the write is already committed, so the listener runs at once.
+- **A rollback drops it.** A listener queued by a write that rolled back never runs, and a
+  savepoint that rolls back drops its own.
+- **A retried transaction runs it once**, after the attempt that committed. Attempts that failed
+  queue nothing that survives.
+- **The callback sees the model as it is when it runs**, not as it was when the event fired. If
+  the code changes the model after `save()` returns, the listener sees the change, as in Laravel.
+- **`withoutEvents` queues nothing.** Muted events are skipped before anything is deferred, and
+  the quiet writes behave the same.
+- **A listener that throws** cannot undo the write; the transaction has ended. The failure follows
+  the rules of `afterCommit` on the connection, see [Connection events](../connection/events.md).
+- **A listener that throws inside `saveOrFail`** finds the row already committed, so the model
+  keeps its key, `exists` and attributes, and the exception propagates. A later `save()` updates
+  the row instead of inserting it again. The model is reset only when the transaction did not
+  commit. In a transaction the caller owns, the commit is not known, and the old restore rule
+  applies.
+- **A model with no connection** runs its after-commit listeners at once and is not checked for
+  a transaction it cannot have. Its write fails anyway.
+- **Each deferred callback holds its model** until the outermost commit. In a long import, commit
+  in batches so the models can be released.
+
+### Transactions you did not open
+
+When your own code, or a framework, opened the transaction on the JDBC connection, the library
+cannot know when it commits. A `save`, `delete`, `restore`, `forceDelete`, `increment` or
+`decrement` of a class that has after-commit listeners is then refused with
+`IllegalStateException` naming the model class, before any statement runs, so nothing is written.
+Remove the after-commit listeners, or bind the model to a connection that owns its transaction.
+A class without after-commit listeners is not affected, and neither is a write under
+`withoutEvents`.
+
+### Models bound to the root connection
+
+A model bound to the root connection while you run a transaction on that root writes on its own
+session. In strict mode that save is refused, as for every write. In lenient mode the row is
+committed on its own session, outside your transaction, so the listener runs at once, and that is
+correct because the row is already committed. To make the write and the listener join the
+transaction, bind the model to the transaction's factory, as for any other write (see "Writes made by a listener" above).
+
 ## Which class owns the listeners
 
 Listeners belong to the class registered with `ModelQuery.of`. A model finds them through the
@@ -170,11 +261,13 @@ no model, so no event fires, as in Laravel. To fire events, load the model and c
 | DL-6 | No dispatcher set means no events | Events are always on | There is no dispatcher to set |
 | DL-7 | `replicating` fires through the dispatcher on the copy | The same, on the copy after its attributes are set | Same result, a listener sees the copy |
 | DL-8 | `restored` fires even when the save inside `restore` was vetoed | `restored` fires only when `restore()` saved | A restore that did not happen reports no restore |
+| DL-9 | After-commit handling lives in `illuminate/events` (`ShouldHandleEventsAfterCommit`, `$afterCommit`) and is queued in the transaction manager | `events().afterCommit()` and `ModelObserver.afterCommit()`, run through the connection that wrote the model | The database package owns the transaction, so the model layer asks it directly |
+| DL-10 | A halting event can be marked after commit and its result is lost | The after-commit view does not offer halting events | A veto that cannot veto is a trap |
+| DL-11 | A callback inside a transaction the framework did not open is queued by the manager | The write is refused before any row changes | The library cannot know when that commit happens |
+| DL-12 | Ebean runs its after-commit persist listeners on a background thread | The caller's thread; no background thread is used | Thread policy belongs to the application |
 
 ## Not in this release
 
-- After-commit listeners (`ShouldHandleEventsAfterCommit`, `afterCommit`). A listener runs inside
-  the write, before the transaction commits.
 - Custom event classes through `$dispatchesEvents`.
 - The `ObservedBy` attribute. Register an observer with `observe`.
 - The `booting` and `booted` events.

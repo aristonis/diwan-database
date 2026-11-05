@@ -10,6 +10,7 @@ and a rollback undoes the last batch.
 |---|---|
 | Write a schema change | extend `Migration`: `name()`, `up(Schema)`, optionally `down(Schema)` |
 | Run, roll back and inspect migrations | `Migrator`; see [the migrator](../migrator/README.md) |
+| Watch a run, rollback or failure | `MigrationListener`; see [Migration events](../migrator/README.md#migration-events) |
 | Keep it out of a transaction, skip it, or point it at another connection | override `withinTransaction()`, `shouldRun()`, `connection()` |
 | Create, check or drop the migrations table | `createRepository()`, `repositoryExists()`, `deleteRepository()` |
 | See what ran | `getRan()`, `getMigrationBatches()` |

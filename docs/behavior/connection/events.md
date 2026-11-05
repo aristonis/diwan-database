@@ -329,10 +329,18 @@ and the values are gone.
 | A listener exception leaves the statement's result unclear. | It is a `ListenerFailedException` that says the statement succeeded. |
 | Statements run by a listener fire events again. | They fire nothing and are not logged. |
 
+## Wiring and other events
+
+- Model listeners that wait for the commit use the `afterCommit` described above. See
+  [After-commit listeners and observers](../eloquent/model-events.md#after-commit-listeners-and-observers).
+- Migration progress has its own listener. See
+  [Migration events](../migrator/README.md#migration-events).
+- To attach a `ConnectionListener` to every connection an application builds, register it on
+  the database manager. See
+  [Manager listeners](database-manager.md#manager-listeners-and-connection-established).
+
 ## Not in this release
 
-- Model `afterCommit` listeners, migration events and wiring listeners through the database
-  manager's configuration are coming next. Until then, register listeners on each connection.
 - Laravel's `StatementPrepared` and `DatabaseBusy` events do not exist.
 - Queued or asynchronous listeners do not exist; every listener runs on the caller's thread.
 - There is no read/write type on events, because connections have no read/write split yet.
@@ -342,3 +350,4 @@ and the values are gone.
 - [Connection](README.md)
 - [Database manager and configuration](database-manager.md)
 - Decision: [0025 Connection events](../../adr/0025-connection-events.md)
+- Decision: [0026 Model after-commit listeners, migration events and manager wiring](../../adr/0026-model-after-commit-migration-and-manager-events.md)
