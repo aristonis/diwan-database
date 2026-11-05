@@ -59,6 +59,8 @@ found.delete();
 | Link the joining row to both sides | `chaperone`, `withoutChaperone` on `BelongsToMany`, after `using` |
 | Run code on save, delete and restore | `ModelQuery.events()`, `observe`, `Model.withoutEvents`, `saveQuietly`, `deleteQuietly`; see [model events](model-events.md) |
 | Declare relations to many parent types | `morphOne`, `morphMany`, `morphTo`, `getMorphClass`, `MorphMap`; see [morph relations](morph-relations.md) |
+| Filter by a morph parent | `hasMorph`, `whereHasMorph`, `doesntHaveMorph`, `whereMorphRelation`, `whereMorphedTo`, `whereNotMorphedTo` and their `or` forms |
+| Eager load per parent class | `withMorph` with `morphWith`, `morphWithCount`, `constrain`; `loadMorph`, `loadMorphCount` |
 
 ## Casts, accessors and serialization
 

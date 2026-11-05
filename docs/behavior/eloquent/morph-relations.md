@@ -86,9 +86,66 @@ Writes (`make`, `save`, `saveMany`, `create`, `createMany`) set both the type an
 | `associate(model)` | Sets the id and `model.getMorphClass()` |
 | `dissociate()` | Sets both columns to null |
 | `touch()` | Does nothing unless the type and id are set |
-| `has` / `whereHas` | Refused; use `whereHasMorph` |
+| `has` / `whereHas` | Refused; use `whereHasMorph` (below) |
 
 An unknown type in an eager load throws before any query runs.
+
+## Filtering by a morphTo's parent
+
+`hasMorph` and its forms add one group with a branch per type. Each branch checks the type and
+whether a row of that type exists:
+
+```java
+Comment.QUERY.query()
+    .whereHasMorph("commentable", Arrays.asList(Post.class, "video"),
+        (q, type) -> q.where(type == Post.class ? "title" : "name", "like", "Java%"))
+    .get();
+```
+
+| Method | Matches |
+|---|---|
+| `hasMorph(relation, types)`, with an operator and count | Rows whose parent of a listed type exists, or whose count compares |
+| `doesntHaveMorph` | Rows with no parent of a listed type, and rows whose type is null |
+| `whereHasMorph(relation, types, constraint)` | As `hasMorph`, with a constraint on the parent query; it receives the parent class |
+| `whereDoesntHaveMorph` | As `doesntHaveMorph`, with a constraint |
+| `whereMorphRelation(relation, types, column, [operator,] value)` | A one-column `whereHasMorph` |
+| `whereMorphDoesntHaveRelation` | A one-column `whereDoesntHaveMorph` |
+| `or...` forms | The same, joined with `or` |
+
+- Types are model classes or aliases. An unknown alias throws `ClassMorphViolationException` before anything is added.
+- `"*"` stands for every type in the table. It runs a `select distinct` on the type column while the query is built, without global scopes, on the same connection. On an empty table the positive forms match nothing and the negative forms add nothing. The lookup
+  scans the type column each time the query is built, so on a large table keep the index `morphs()`
+  creates, or pass the list of types.
+- A dotted relation name, or a relation that is not a `morphTo`, is refused.
+
+## Filtering by what a morphTo points at
+
+| Call | SQL |
+|---|---|
+| `whereMorphedTo("commentable", post)` | `(type = ? and id = ?)`; the value is the model's owner key when the `morphTo` declares one |
+| `whereMorphedTo("commentable", Post.class)` or `"post"` | `type = ?` |
+| `whereMorphedTo("commentable", collection)` | One `(type = ? and id in (...))` group per class, joined with `or` |
+| `whereMorphedTo("commentable", null)` | `type is null` |
+| `whereNotMorphedTo(...)` | `(not (...) or type is null or id is null)`; for null, `type is not null` |
+
+An empty collection is refused. Every key is one bound value, so a very large collection can pass the
+driver's parameter limit (999 on old SQLite, 65535 on PostgreSQL); split it, or filter with a subquery.
+
+## Different eager loads per parent class
+
+```java
+Comment.QUERY.query()
+    .withMorph("commentable", m -> m
+        .morphWith(Post.class, "author")
+        .morphWithCount(Video.class, "likes")
+        .constrain(Post.class, q -> q.whereNotNull("published_at")))
+    .get();
+```
+
+- Keys are classes or aliases and are resolved when they are registered. An unknown alias throws at once.
+- Each class's options, and the loads its `constrain` sets, apply only to that class.
+- `withMorph` and `with` on the same relation merge in any order without losing the options.
+- On loaded models: `loadMorph(relation, Map<Class, List<String>>)` and `loadMorphCount`, on a model or a `ModelCollection`. The `morphTo` is loaded first when it is not loaded yet.
 
 ## Differences from Laravel
 
@@ -98,7 +155,10 @@ An unknown type in an eager load throws before any query runs.
 | An alias may be re-bound; a class may have two aliases | One alias per class, one class per alias |
 | The alias "0" falls back to the class name in `getMorphAlias` | "0" is a real alias |
 | `morphTo` guesses its name from the call stack | The name is passed explicitly |
-| Builder calls on a `morphTo` are replayed per type | Not supported; per-type constraints arrive with `constrain` |
+| Builder calls on a `morphTo` are replayed per type | Not supported; use `withMorph` with `constrain` |
+| `doesntHaveMorph` adds null-type rows only for `"*"` | Null-type rows match every negative form |
+| `morphWith` and friends are called on the relation in the eager closure | `withMorph(name, options)` |
+| `hasMorph` merges the `morphTo`'s own query constraints into each type | Each type gets a fresh query; put shared conditions in the constraint |
 | The morph class is read when the relation is built | It is read when the query runs |
 
 See [ADR 0027](../../adr/0027-morph-relations.md).
