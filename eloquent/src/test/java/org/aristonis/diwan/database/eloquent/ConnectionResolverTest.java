@@ -81,4 +81,22 @@ class ConnectionResolverTest {
 
         assertFalse(ConnectionResolver.getDefault().isPresent());
     }
+
+    @Test
+    void aManagerBackedResolverKnowsConfiguredNamesBeforeTheyAreBuilt() {
+        org.aristonis.diwan.database.manager.DatabaseConfig config = org.aristonis.diwan.database.manager.DatabaseConfig
+                .builder().defaultConnection("a")
+                .connection(org.aristonis.diwan.database.manager.ConnectionConfig.builder("a").driver("sqlite")
+                        .database(":memory:").build())
+                .build();
+        try (org.aristonis.diwan.database.manager.DatabaseManager manager =
+                org.aristonis.diwan.database.manager.DatabaseManager.builder().config(config)
+                        .connector(new org.aristonis.diwan.database.sqlite.SQLiteConnector()).build()) {
+            ConnectionResolver resolver = ConnectionResolver.of(manager);
+
+            assertTrue(manager.getConnections().isEmpty());
+            assertTrue(resolver.hasConnection("a"));
+            assertFalse(resolver.hasConnection("zzz"));
+        }
+    }
 }

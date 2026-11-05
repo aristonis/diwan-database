@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
+import org.aristonis.diwan.database.manager.DatabaseManager;
 import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
@@ -22,11 +23,39 @@ public final class ConnectionResolver {
 
     private final ConcurrentMap<String, QueryFactory> factories = new ConcurrentHashMap<>();
     private volatile String defaultConnection = "default";
+    private final DatabaseManager manager;
 
     /**
      * Creates an empty resolver whose default connection name is {@code default}.
      */
     public ConnectionResolver() {
+        this.manager = null;
+    }
+
+    private ConnectionResolver(DatabaseManager manager) {
+        this.manager = manager;
+    }
+
+    /**
+     * Creates a resolver that reads its connections from a database manager.
+     *
+     * <p>A name is resolved with {@link DatabaseManager#query(String)}, so a connection is built
+     * the first time a model uses it; {@code null} takes the manager's default connection. The
+     * resolver owns no state: {@link #register(String, QueryFactory)} and
+     * {@link #setDefaultConnection(String)} throw {@link UnsupportedOperationException}; change
+     * the manager instead.
+     *
+     * @param manager the database manager, never {@code null}
+     * @return the manager-backed resolver, never {@code null}
+     * @throws NullPointerException if {@code manager} is {@code null}
+     */
+    public static ConnectionResolver of(DatabaseManager manager) {
+        return new ConnectionResolver(Objects.requireNonNull(manager, "manager"));
+    }
+
+    private UnsupportedOperationException managed(String operation) {
+        return new UnsupportedOperationException(
+                operation + " is not supported: this resolver reads from " + manager + "; change the manager instead");
     }
 
     /**
@@ -36,8 +65,12 @@ public final class ConnectionResolver {
      * @param factory the query factory, never {@code null}
      * @return this resolver
      * @throws NullPointerException if an argument is {@code null}
+     * @throws UnsupportedOperationException if this resolver is backed by a database manager
      */
     public ConnectionResolver register(String name, QueryFactory factory) {
+        if (manager != null) {
+            throw managed("register");
+        }
         factories.put(Objects.requireNonNull(name, "name"), Objects.requireNonNull(factory, "factory"));
         return this;
     }
@@ -46,10 +79,13 @@ public final class ConnectionResolver {
      * Returns whether a factory is registered under a name.
      *
      * @param name the connection name, never {@code null}
-     * @return whether it is registered
+     * @return whether it is registered; for a manager-backed resolver, whether the manager has it configured, built or not
      * @throws NullPointerException if {@code name} is {@code null}
      */
     public boolean hasConnection(String name) {
+        if (manager != null) {
+            return manager.hasConnection(name);
+        }
         return factories.containsKey(Objects.requireNonNull(name, "name"));
     }
 
@@ -62,6 +98,9 @@ public final class ConnectionResolver {
      *     {@code "No connection is registered as [name]"}
      */
     public QueryFactory resolve(String name) {
+        if (manager != null) {
+            return name != null ? manager.query(name) : manager.query(manager.getDefaultConnection());
+        }
         String key = name != null ? name : defaultConnection;
         QueryFactory factory = factories.get(key);
         if (factory == null) {
@@ -76,6 +115,9 @@ public final class ConnectionResolver {
      * @return the default connection name, never {@code null}
      */
     public String getDefaultConnection() {
+        if (manager != null) {
+            return manager.getDefaultConnection();
+        }
         return defaultConnection;
     }
 
@@ -84,8 +126,12 @@ public final class ConnectionResolver {
      *
      * @param name the default connection name, never {@code null}
      * @throws NullPointerException if {@code name} is {@code null}
+     * @throws UnsupportedOperationException if this resolver is backed by a database manager
      */
     public void setDefaultConnection(String name) {
+        if (manager != null) {
+            throw managed("setDefaultConnection");
+        }
         defaultConnection = Objects.requireNonNull(name, "name");
     }
 
