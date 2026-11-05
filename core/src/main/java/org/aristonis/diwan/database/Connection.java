@@ -480,6 +480,22 @@ public interface Connection {
     void afterCommit(Runnable callback);
 
     /**
+     * Tells whether {@link #afterCommit(Runnable)} can wait for a commit on this connection.
+     *
+     * <p>A caller of a model event or a similar feature asks before it writes, so it can refuse the
+     * write instead of failing after the rows are already changed. Inside a transaction the caller
+     * opened outside this library the commit is not known, so a callback cannot wait for it.
+     *
+     * @implSpec The default returns {@code true}. An implementation whose {@code afterCommit} refuses
+     *     registration for a reason that does not depend on the callback must return {@code false}.
+     * @return {@code true} when {@code afterCommit} accepts a callback on this connection now,
+     *     {@code false} when it refuses it because the surrounding transaction belongs to the caller
+     */
+    default boolean canDeferUntilCommit() {
+        return true;
+    }
+
+    /**
      * Runs a callback once the current transaction has rolled back.
      *
      * <p>Outside a transaction there is nothing to roll back, so the callback is dropped and never

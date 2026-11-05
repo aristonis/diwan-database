@@ -112,6 +112,11 @@ class TransactionalConnection extends AbstractConnection {
     }
 
     @Override
+    public final boolean canDeferUntilCommit() {
+        return !state.isExternal();
+    }
+
+    @Override
     public final void afterRollback(Runnable callback) {
         Objects.requireNonNull(callback, "callback");
         ensureOpen();

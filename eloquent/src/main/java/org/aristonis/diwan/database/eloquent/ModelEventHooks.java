@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
+import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
  * The event layer of {@link Model}: the protected hooks a model class overrides, and the dispatch
@@ -53,18 +54,43 @@ abstract class ModelEventHooks extends ModelGuards {
     }
 
     private boolean dispatch(ModelEvent event) {
-        ModelQuery<?> entry = eventSource();
-        if (entry == null) {
-            entry = ModelQuery.registered(getClass());
-        }
-        if (entry == null) {
-            return true;
-        }
-        EventListeners listeners = entry.eventSlot().get();
+        EventListeners listeners = listeners();
         if (listeners.isEmpty() || EventMute.isMuted()) {
             return true;
         }
         return listeners.fire(event, (Model) this);
+    }
+
+    // The entry the model was made from, else the one registered for its class; none has no listener.
+    private EventListeners listeners() {
+        ModelQuery<?> entry = eventSource();
+        if (entry == null) {
+            entry = ModelQuery.registered(getClass());
+        }
+        return entry == null ? EventListeners.EMPTY : entry.eventSlot().get();
+    }
+
+    /**
+     * Refuses a write that has after-commit listeners and no commit to wait for.
+     *
+     * <p>Called before the first write of save, delete, restore and force delete. It does nothing
+     * while events are muted on the thread, when the class has no after-commit listener, or when
+     * the model has no connection to ask: that write fails on its own, so there is nothing to
+     * refuse first.
+     *
+     * @throws IllegalStateException if the class has after-commit listeners and the model's
+     *     connection runs inside a transaction opened outside this library
+     */
+    final void requireDeferrable() {
+        if (EventMute.isMuted() || !listeners().hasDeferred() || !hasConnection()) {
+            return;
+        }
+        if (!getQueryFactory().connection().canDeferUntilCommit()) {
+            throw new IllegalStateException("Model [" + getClass().getName() + "] has after-commit listeners,"
+                    + " but its connection runs inside a transaction opened outside this library, so the"
+                    + " commit is not known; nothing was written. Bind the model to a connection that owns"
+                    + " its transaction, or remove the after-commit listeners");
+        }
     }
 
     private boolean runOwnHalting(ModelEvent event) {
@@ -330,6 +356,16 @@ abstract class ModelEventHooks extends ModelGuards {
      * @return the entry, or {@code null} when the model was built by hand
      */
     abstract ModelQuery<?> eventSource();
+
+    abstract boolean hasConnection();
+
+    /**
+     * Returns the query factory this model uses, as {@code Model.getQueryFactory()}.
+     *
+     * @return the factory, never {@code null}
+     * @throws IllegalStateException if the model has no connection
+     */
+    public abstract QueryFactory getQueryFactory();
 
     /**
      * Saves the model, as {@code Model.save()}.

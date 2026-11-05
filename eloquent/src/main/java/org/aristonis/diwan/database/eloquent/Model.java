@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
@@ -154,6 +155,12 @@ public abstract class Model extends ModelSoftDeletes {
         exists = true;
     }
 
+    // Whether getQueryFactory() has something to resolve from; it does not check the name resolves.
+    @Override
+    final boolean hasConnection() {
+        return isBound() || ConnectionResolver.getDefault().isPresent();
+    }
+
     final boolean isBound() {
         return factory != null || resolver != null;
     }
@@ -226,6 +233,11 @@ public abstract class Model extends ModelSoftDeletes {
      * nested model must be bound to {@link #getConnection()} as seen inside the hook; one bound to
      * the root connection is refused while strict transactions are on.
      *
+     * <p>A failure after the commit, such as an after-commit listener that throws, is rethrown
+     * without that restore: the row is committed, so the model keeps its key, attributes and
+     * {@link #exists()}, and a later {@link #save()} updates the row instead of inserting it again.
+     * When the connection cannot report its commit, the failure is treated as a rollback.
+     *
      * @return {@code true} when saved or already clean, {@code false} when a hook vetoed it
      * @throws IllegalStateException if the model has no connection, or it is a new
      *     non-incrementing model with no attributes and no key
@@ -237,8 +249,14 @@ public abstract class Model extends ModelSoftDeletes {
         boolean existed = exists;
         boolean wasCreated = wasRecentlyCreated;
         Snapshot before = snapshotAttributes();
+        AtomicBoolean isCommitted = new AtomicBoolean();
         try {
             return outer.connection().transaction(c -> {
+                // Registered before the save, so it runs ahead of every listener callback that
+                // follows the commit and tells the catch below which of the two failed.
+                if (c.canDeferUntilCommit()) {
+                    c.afterCommit(() -> isCommitted.set(true));
+                }
                 // Strict transactions refuse the root connection, so the save runs on the callback's.
                 factory = QueryFactory.of(c, outer.grammar(), outer.processor());
                 try {
@@ -248,17 +266,20 @@ public abstract class Model extends ModelSoftDeletes {
                 }
             });
         } catch (RuntimeException | Error e) {
-            // The rows were rolled back, so the model must not keep a key, timestamps or an
-            // exists flag the database no longer backs.
-            exists = existed;
-            wasRecentlyCreated = wasCreated;
-            restoreAttributes(before);
+            // A committed row stays backed by the database, so only a rollback undoes the model:
+            // it must not keep a key, timestamps or an exists flag the database no longer backs.
+            if (!isCommitted.get()) {
+                exists = existed;
+                wasRecentlyCreated = wasCreated;
+                restoreAttributes(before);
+            }
             throw e;
         }
     }
 
     // A non-null outer is the factory a saveOrFail() transaction was opened on.
     private boolean save(QueryFactory outer) {
+        requireDeferrable();
         if (!fireHalting(ModelEvent.SAVING)) {
             return false;
         }
@@ -387,7 +408,11 @@ public abstract class Model extends ModelSoftDeletes {
         if (getKeyName() == null) {
             throw new IllegalStateException("No primary key defined on model.");
         }
-        if (!exists || !fireHalting(ModelEvent.DELETING)) {
+        if (!exists) {
+            return false;
+        }
+        requireDeferrable();
+        if (!fireHalting(ModelEvent.DELETING)) {
             return false;
         }
         touchOwnersBeforeDelete();
@@ -493,6 +518,7 @@ public abstract class Model extends ModelSoftDeletes {
         if (!exists) {
             throw new IllegalStateException("Cannot increment or decrement a model that is not in the database");
         }
+        requireDeferrable();
         Map<String, Object> before = getAttributes();
         Map<String, Object> written = new LinkedHashMap<>(extra);
         if (usesTimestamps() && getUpdatedAtColumn() != null && !written.containsKey(getUpdatedAtColumn())) {

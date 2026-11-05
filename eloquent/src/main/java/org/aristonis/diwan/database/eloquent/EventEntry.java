@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import org.aristonis.diwan.database.Connection;
 
 /**
  * One registered listener: a callback that sees every event and reacts to the ones it was
@@ -19,6 +20,117 @@ interface EventEntry {
      * @return {@code false} to halt a halting event, otherwise {@code true}
      */
     boolean handle(ModelEvent e, Model m);
+
+    /**
+     * Tells whether this entry waits for the commit of the model's connection before it runs.
+     *
+     * @return {@code true} for an entry made by {@link #afterCommit(EventEntry)} or an observer entry
+     *     that defers its non-halting methods, otherwise {@code false}
+     */
+    default boolean isDeferred() {
+        return false;
+    }
+
+    /**
+     * Wraps an entry so that it runs after the commit of the connection that wrote the model.
+     *
+     * <p>The wrapper asks {@code model.getQueryFactory().connection()} for its connection, which
+     * inside {@code saveOrFail} is the transaction's, and hands the call to its
+     * {@code afterCommit}; outside a transaction that runs the call at once. A model with no factory,
+     * no resolver and no default resolver ({@code hasConnection()} is {@code false}) runs the call
+     * at once. A resolver that fails for the model's connection name throws instead. The wrapped entry sees the model as it is
+     * when the call runs, and its result is ignored, so the wrapper never halts.
+     *
+     * @param inner the entry to defer, never {@code null}
+     * @return the deferred entry; {@link #isDeferred()} is {@code true}
+     * @throws NullPointerException if {@code inner} is {@code null}
+     */
+    static EventEntry afterCommit(EventEntry inner) {
+        Objects.requireNonNull(inner, "inner");
+        return new Deferred(inner);
+    }
+
+    /**
+     * Tells whether an event can wait for the commit: the seven events that run after a write.
+     *
+     * @param event the event, never {@code null}
+     * @return {@code true} for saved, created, updated, deleted, soft deleted, restored and force
+     *     deleted
+     */
+    static boolean canDefer(ModelEvent event) {
+        switch (event) {
+            case SAVED:
+            case CREATED:
+            case UPDATED:
+            case DELETED:
+            case SOFT_DELETED:
+            case RESTORED:
+            case FORCE_DELETED:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Makes an observer entry that defers the events that can wait for the commit and runs every
+     * other event directly, halting ones in the transaction.
+     *
+     * @param <T> the model class
+     * @param o the observer
+     * @return the entry; {@link #isDeferred()} is {@code true}
+     */
+    static <T extends Model> EventEntry deferredObserver(ModelObserver<? super T> o) {
+        EventEntry direct = EventEntry.<T>observer(o);
+        EventEntry deferred = afterCommit(direct);
+        return new Routed(direct, deferred);
+    }
+
+    /** The wrapper made by {@link #afterCommit(EventEntry)}. */
+    final class Deferred implements EventEntry {
+        private final EventEntry inner;
+
+        private Deferred(EventEntry inner) {
+            this.inner = inner;
+        }
+
+        @Override
+        public boolean handle(ModelEvent e, Model m) {
+            if (!m.hasConnection()) {
+                inner.handle(e, m);
+            } else {
+                Connection connection = m.getQueryFactory().connection();
+                connection.afterCommit(() -> inner.handle(e, m));
+            }
+            return true;
+        }
+
+        @Override
+        public boolean isDeferred() {
+            return true;
+        }
+    }
+
+    /** The entry made by {@link #deferredObserver(ModelObserver)}. */
+    final class Routed implements EventEntry {
+        private final EventEntry direct;
+        private final EventEntry deferred;
+
+        private Routed(EventEntry direct, EventEntry deferred) {
+            this.direct = direct;
+            this.deferred = deferred;
+        }
+
+        @Override
+        public boolean handle(ModelEvent e, Model m) {
+            return EventEntry.canDefer(e) ? deferred.handle(e, m) : direct.handle(e, m);
+        }
+
+        @Override
+        public boolean isDeferred() {
+            return true;
+        }
+    }
 
     /**
      * Makes an entry that tests one event and halts when the predicate returns {@code false}.

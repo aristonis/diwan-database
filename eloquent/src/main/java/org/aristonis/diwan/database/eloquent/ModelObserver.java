@@ -152,4 +152,20 @@ public interface ModelObserver<T extends Model> {
      */
     default void replicating(T model) {
     }
+
+    /**
+     * Tells whether the observer's non-halting methods wait for the commit.
+     *
+     * <p>When {@code true}, {@link ModelEvents#observe} runs {@code saved}, {@code created},
+     * {@code updated}, {@code deleted}, {@code softDeleted}, {@code restored} and
+     * {@code forceDeleted} after the outermost commit of the connection that wrote the model, as
+     * {@link ModelEvents#afterCommit()} does; outside a transaction they run at once, and a rolled
+     * back write never calls them. The halting methods, {@code retrieved} and {@code replicating}
+     * keep running at their usual place. The answer is read once, when the observer is registered.
+     *
+     * @return {@code true} to defer the non-halting methods; the default is {@code false}
+     */
+    default boolean afterCommit() {
+        return false;
+    }
 }

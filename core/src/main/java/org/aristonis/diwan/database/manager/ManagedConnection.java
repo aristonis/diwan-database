@@ -7,6 +7,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.ConnectionListener;
 import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
@@ -15,7 +16,8 @@ import org.aristonis.diwan.database.schema.Schema;
  * Holds one named connection of a {@link DatabaseManager}: built on first use, closed once.
  *
  * <p>Each holder has its own lock, so building one connection never blocks another name and the
- * manager's map is never locked while a connector runs. After {@code retire()} the holder never
+ * manager's map is never locked while a connector runs. A build that fails closes what it opened and
+ * leaves the holder buildable, so the next call tries again. After {@code retire()} the holder never
  * builds again; the manager then drops it and starts a fresh one.
  */
 final class ManagedConnection {
@@ -71,7 +73,11 @@ final class ManagedConnection {
     private final ConnectionConfig config;
     private final Connector connector;
     private final Supplier<? extends DataSource> dataSourceSupplier;
+    private final ManagerListeners listeners;
     private final ReentrantLock lock = new ReentrantLock();
+
+    /** The thread running {@code build()}, so a listener asking for this name again is refused. */
+    private volatile Thread builder;
 
     /** The built parts; {@code null} before the first build and after retiring. */
     private volatile Parts parts;
@@ -82,10 +88,12 @@ final class ManagedConnection {
     /** The data source taken from the user's supplier, kept to close it. */
     private DataSource userDataSource;
 
-    ManagedConnection(ConnectionConfig config, Connector connector, Supplier<? extends DataSource> supplier) {
+    ManagedConnection(ConnectionConfig config, Connector connector, Supplier<? extends DataSource> supplier,
+            ManagerListeners listeners) {
         this.config = Objects.requireNonNull(config, "config");
         this.connector = Objects.requireNonNull(connector, "connector");
         this.dataSourceSupplier = supplier;
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
     }
 
     /** Returns whether a build has succeeded and the holder was not retired since. */
@@ -98,6 +106,8 @@ final class ManagedConnection {
      *
      * @return the parts, or {@code null} when the holder was retired and the caller must ask the
      *     manager for a fresh one
+     * @throws IllegalStateException if a listener running inside the build asks for this same
+     *     connection on the building thread
      */
     Parts parts() {
         Parts ready = parts;
@@ -106,11 +116,16 @@ final class ManagedConnection {
         }
         lock.lock();
         try {
+            // The lock is reentrant, so without this check the listener's call would build a second time.
+            if (builder == Thread.currentThread()) {
+                throw new IllegalStateException("A listener asked for connection [" + config.name()
+                        + "] while it was being built; use the connection of the event instead");
+            }
             if (isRetired) {
                 return null;
             }
             if (parts == null) {
-                parts = build();
+                parts = buildMarked();
             }
             return parts;
         } finally {
@@ -143,6 +158,17 @@ final class ManagedConnection {
         }
     }
 
+    private Parts buildMarked() {
+        builder = Thread.currentThread();
+        try {
+            return build();
+        } finally {
+            builder = null;
+        }
+    }
+
+    // Listeners attach and connectionEstablished fires before the parts are published, so no caller
+    // sees a connection without them; a failure here is handled like a failing connector.
     private Parts build() {
         DataSource source = null;
         Connection connection = null;
@@ -156,11 +182,19 @@ final class ManagedConnection {
                 userDataSource = source;
             }
             connection = Objects.requireNonNull(connector.connect(config, source), "connector returned no connection");
+            for (ConnectionListener listener : listeners.connection()) {
+                connection.events().addListener(listener);
+            }
             QueryFactory query = connector.query(connection);
             Schema schema = connector.schema(connection);
             DataSource lockSource = source;
-            return new Parts(connection, query, schema, connector::query, connector::schema,
+            Parts built = new Parts(connection, query, schema, connector::query, connector::schema,
                     () -> connector.lock(config, lockSource));
+            ConnectionEstablished event = new ConnectionEstablished(config.name(), connector.driver(), connection);
+            for (ManagerListener listener : listeners.manager()) {
+                listener.connectionEstablished(event);
+            }
+            return built;
         } catch (RuntimeException | Error failure) {
             userDataSource = null;
             RuntimeException closing = release(connection, source);

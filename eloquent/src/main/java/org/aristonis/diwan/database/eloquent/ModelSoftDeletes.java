@@ -144,6 +144,7 @@ abstract class ModelSoftDeletes extends ModelEventHooks {
      */
     public boolean forceDelete() {
         requireSoftDeletes("forceDelete");
+        requireDeferrable();
         if (!fireHalting(ModelEvent.FORCE_DELETING)) {
             return false;
         }
@@ -174,6 +175,7 @@ abstract class ModelSoftDeletes extends ModelEventHooks {
      */
     public boolean restore() {
         requireSoftDeletes("restore");
+        requireDeferrable();
         if (!fireHalting(ModelEvent.RESTORING)) {
             return false;
         }

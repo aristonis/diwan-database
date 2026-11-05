@@ -14,9 +14,24 @@ final class EventListeners {
     static final EventListeners EMPTY = new EventListeners(Collections.<EventEntry>emptyList());
 
     private final List<EventEntry> entries;
+    private final boolean hasDeferred;
 
     private EventListeners(List<EventEntry> entries) {
         this.entries = entries;
+        boolean isAnyDeferred = false;
+        for (EventEntry entry : entries) {
+            isAnyDeferred |= entry.isDeferred();
+        }
+        this.hasDeferred = isAnyDeferred;
+    }
+
+    /**
+     * Returns whether any entry waits for the commit of the model's connection.
+     *
+     * @return {@code true} when at least one entry is deferred
+     */
+    boolean hasDeferred() {
+        return hasDeferred;
     }
 
     /**

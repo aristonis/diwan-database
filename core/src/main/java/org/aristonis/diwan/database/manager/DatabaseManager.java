@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.ConnectionListener;
+import org.aristonis.diwan.database.migrations.MigrationListener;
 import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.migrations.Migrator;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -47,6 +49,7 @@ public final class DatabaseManager implements AutoCloseable {
     private final Map<String, Supplier<? extends DataSource>> dataSources;
     private final ConcurrentMap<String, ManagedConnection> holders = new ConcurrentHashMap<>();
     private final ThreadLocal<Deque<String>> overrides = new ThreadLocal<>();
+    private final ManagerListeners listeners;
     private final AtomicBoolean isClosed = new AtomicBoolean();
     private volatile String defaultName;
 
@@ -54,6 +57,7 @@ public final class DatabaseManager implements AutoCloseable {
         this.config = builder.config;
         this.connectors = Collections.unmodifiableMap(new LinkedHashMap<>(builder.connectors));
         this.dataSources = Collections.unmodifiableMap(new LinkedHashMap<>(builder.dataSources));
+        this.listeners = builder.listeners.copy();
         this.defaultName = config.defaultConnection();
     }
 
@@ -142,7 +146,8 @@ public final class DatabaseManager implements AutoCloseable {
      * {@code Migration.connection()} runs there.
      *
      * @param name the connection name, never {@code null}
-     * @return a migrator builder to add migrations to, never {@code null}
+     * @return a migrator builder to add migrations to, already carrying the manager's migration
+     *     listeners, never {@code null}
      * @throws NullPointerException if {@code name} is {@code null}
      * @throws IllegalArgumentException if no connection or no connector matches
      * @throws IllegalStateException if the manager is closed
@@ -150,6 +155,7 @@ public final class DatabaseManager implements AutoCloseable {
     public Migrator.Builder migrator(String name) {
         ManagedConnection.Parts parts = parts(name);
         Migrator.Builder builder = Migrator.builder(parts.schema()).connection(name, parts.schema());
+        listeners.migration().forEach(builder::listener);
         Optional<MigrationLock> lock = parts.lock();
         return lock.isPresent() ? builder.lock(lock.get()) : builder;
     }
@@ -377,7 +383,7 @@ public final class DatabaseManager implements AutoCloseable {
         Connector connector = connectorOf(connectionConfig);
         while (true) {
             ManagedConnection holder = holders.computeIfAbsent(connectionConfig.name(),
-                    key -> new ManagedConnection(connectionConfig, connector, dataSources.get(key)));
+                    key -> new ManagedConnection(connectionConfig, connector, dataSources.get(key), listeners));
             ManagedConnection.Parts parts = holder.parts();
             if (parts == null) {
                 // Retired between the lookup and the build: drop it if it is still mapped, and retry.
@@ -435,6 +441,7 @@ public final class DatabaseManager implements AutoCloseable {
 
         private final Map<String, Connector> connectors = new LinkedHashMap<>();
         private final Map<String, Supplier<? extends DataSource>> dataSources = new LinkedHashMap<>();
+        private final ManagerListeners listeners = new ManagerListeners();
         private DatabaseConfig config;
 
         private Builder() {
@@ -491,6 +498,42 @@ public final class DatabaseManager implements AutoCloseable {
             if (dataSources.putIfAbsent(name, supplier) != null) {
                 throw new IllegalArgumentException("A data source is already registered for [" + name + "]");
             }
+            return this;
+        }
+
+        /**
+         * Attaches a listener to every connection the manager builds or rebuilds, before it is published.
+         *
+         * @param listener the listener, never {@code null}
+         * @return this builder
+         * @throws NullPointerException if {@code listener} is {@code null}
+         */
+        public Builder listener(ConnectionListener listener) {
+            listeners.addConnection(listener);
+            return this;
+        }
+
+        /**
+         * Registers a listener told, before it is published, of each connection the manager builds.
+         *
+         * @param listener the listener, never {@code null}
+         * @return this builder
+         * @throws NullPointerException if {@code listener} is {@code null}
+         */
+        public Builder managerListener(ManagerListener listener) {
+            listeners.addManager(listener);
+            return this;
+        }
+
+        /**
+         * Adds a listener to every migrator builder that {@link #migrator(String)} returns.
+         *
+         * @param listener the listener, never {@code null}
+         * @return this builder
+         * @throws NullPointerException if {@code listener} is {@code null}
+         */
+        public Builder migrationListener(MigrationListener listener) {
+            listeners.addMigration(listener);
             return this;
         }
 

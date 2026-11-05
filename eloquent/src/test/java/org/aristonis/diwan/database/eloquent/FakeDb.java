@@ -49,6 +49,9 @@ final class FakeDb {
                             return proxy == args[0];
                         case "transactionLevel":
                             return level;
+                        case "canDeferUntilCommit":
+                            // The fake cannot report a commit, so saveOrFail keeps its restore rule.
+                            return false;
                         case "transaction":
                             return transaction((TransactionCallback<?>) args[0], (Connection) proxy);
                         default:

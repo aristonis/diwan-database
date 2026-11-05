@@ -58,6 +58,7 @@ public final class Migrator {
     private final DatabaseMigrationRepository repository;
     private final MigrationLock lock;
     private final boolean isMissingAllowed;
+    private final MigrationNotifier notifier;
 
     private Migrator(Builder builder, Map<String, Migration> named) {
         this.defaultSchema = builder.defaultSchema;
@@ -74,6 +75,7 @@ public final class Migrator {
         this.repository = new DatabaseMigrationRepository(defaultSchema, table);
         this.lock = builder.lock;
         this.isMissingAllowed = builder.isMissingAllowed;
+        this.notifier = new MigrationNotifier(builder.listeners, defaultSchema.connection().getName());
     }
 
     /**
@@ -141,22 +143,29 @@ public final class Migrator {
         }
         List<String> pending = pending(new HashSet<>(repository.getRan()));
         List<MigrationResult> results = new ArrayList<>();
+        MigrationsEvent whole = notifier.whole(Direction.UP, false);
         if (pending.isEmpty()) {
-            return Collections.unmodifiableList(results);
+            return nothingPending(whole);
         }
+        notifier.migrationsStarted(whole);
         int batch = repository.getNextBatchNumber();
         for (String name : pending) {
             Migration migration = byName.get(name);
             if (migration.shouldRun()) {
-                apply(name, migration, Direction.UP, batch, results);
+                MigrationEvent event = event(name, migration, Direction.UP, batch, false);
+                notifier.migrationStarted(event);
+                apply(migration, event, results);
                 results.add(new MigrationResult(name, Outcome.RAN, batch, noQueries()));
+                notifier.migrationEnded(event);
             } else {
                 results.add(new MigrationResult(name, Outcome.SKIPPED, 0, noQueries()));
+                notifier.migrationSkipped(event(name, migration, Direction.UP, 0, false));
             }
             if (step) {
                 batch++;
             }
         }
+        notifier.migrationsEnded(whole);
         return Collections.unmodifiableList(results);
     }
 
@@ -172,7 +181,7 @@ public final class Migrator {
      */
     public List<MigrationResult> rollback() {
         ensureNoOpenTransaction();
-        return locked(() -> repository.repositoryExists() ? rollBack(repository.getLast()) : noResults());
+        return locked(() -> rollBack(recorded(repository::getLast)));
     }
 
     /**
@@ -192,7 +201,7 @@ public final class Migrator {
             throw new IllegalArgumentException("Steps must be at least 1");
         }
         ensureNoOpenTransaction();
-        return locked(() -> repository.repositoryExists() ? rollBack(repository.getMigrations(steps)) : noResults());
+        return locked(() -> rollBack(recorded(() -> repository.getMigrations(steps))));
     }
 
     /**
@@ -208,7 +217,7 @@ public final class Migrator {
      */
     public List<MigrationResult> rollbackBatch(int batch) {
         ensureNoOpenTransaction();
-        return locked(() -> repository.repositoryExists() ? rollBack(repository.getMigrationsByBatch(batch)) : noResults());
+        return locked(() -> rollBack(recorded(() -> repository.getMigrationsByBatch(batch))));
     }
 
     /**
@@ -223,7 +232,7 @@ public final class Migrator {
      */
     public List<MigrationResult> reset() {
         ensureNoOpenTransaction();
-        return locked(() -> repository.repositoryExists() ? rollBack(allNewestFirst()) : noResults());
+        return locked(() -> rollBack(recorded(this::allNewestFirst)));
     }
 
     /**
@@ -269,9 +278,16 @@ public final class Migrator {
         Set<String> ran = repository.repositoryExists()
                 ? new HashSet<>(repository.getRan()) : Collections.<String>emptySet();
         List<MigrationResult> results = new ArrayList<>();
-        for (String name : pending(ran)) {
-            results.add(pretend(name, byName.get(name), Direction.UP, results));
+        List<String> pending = pending(ran);
+        MigrationsEvent whole = notifier.whole(Direction.UP, true);
+        if (pending.isEmpty()) {
+            return nothingPending(whole);
         }
+        notifier.migrationsStarted(whole);
+        for (String name : pending) {
+            pretendOne(name, byName.get(name), Direction.UP, 0, results);
+        }
+        notifier.migrationsEnded(whole);
         return Collections.unmodifiableList(results);
     }
 
@@ -285,7 +301,7 @@ public final class Migrator {
      */
     public List<MigrationResult> pretendRollback() {
         ensureNoOpenTransaction();
-        return repository.repositoryExists() ? pretendBack(repository.getLast()) : noResults();
+        return pretendBack(recorded(repository::getLast));
     }
 
     /**
@@ -298,7 +314,7 @@ public final class Migrator {
      */
     public List<MigrationResult> pretendReset() {
         ensureNoOpenTransaction();
-        return repository.repositoryExists() ? pretendBack(allNewestFirst()) : noResults();
+        return pretendBack(recorded(this::allNewestFirst));
     }
 
     private List<String> pending(Set<String> ran) {
@@ -352,46 +368,69 @@ public final class Migrator {
             }
         }
         List<MigrationResult> results = new ArrayList<>();
+        MigrationsEvent whole = notifier.whole(Direction.DOWN, false);
+        if (entries.isEmpty()) {
+            return nothingPending(whole);
+        }
+        notifier.migrationsStarted(whole);
         for (MigrationEntry entry : entries) {
             Migration migration = byName.get(entry.name());
             if (migration == null) {
                 results.add(new MigrationResult(entry.name(), Outcome.NOT_FOUND, entry.batch(), noQueries()));
                 continue;
             }
-            apply(entry.name(), migration, Direction.DOWN, entry.batch(), results);
+            MigrationEvent event = event(entry.name(), migration, Direction.DOWN, entry.batch(), false);
+            notifier.migrationStarted(event);
+            apply(migration, event, results);
             results.add(new MigrationResult(entry.name(), Outcome.ROLLED_BACK, entry.batch(), noQueries()));
+            notifier.migrationEnded(event);
         }
+        notifier.migrationsEnded(whole);
         return Collections.unmodifiableList(results);
     }
 
     private List<MigrationResult> pretendBack(List<MigrationEntry> entries) {
         List<MigrationResult> results = new ArrayList<>();
+        MigrationsEvent whole = notifier.whole(Direction.DOWN, true);
+        if (entries.isEmpty()) {
+            return nothingPending(whole);
+        }
+        notifier.migrationsStarted(whole);
         for (MigrationEntry entry : entries) {
             Migration migration = byName.get(entry.name());
-            results.add(migration == null
-                    ? new MigrationResult(entry.name(), Outcome.NOT_FOUND, entry.batch(), noQueries())
-                    : pretend(entry.name(), migration, Direction.DOWN, results));
+            if (migration == null) {
+                results.add(new MigrationResult(entry.name(), Outcome.NOT_FOUND, entry.batch(), noQueries()));
+            } else {
+                pretendOne(entry.name(), migration, Direction.DOWN, entry.batch(), results);
+            }
         }
+        notifier.migrationsEnded(whole);
         return Collections.unmodifiableList(results);
     }
 
-    private MigrationResult pretend(String name, Migration migration, Direction direction,
-            List<MigrationResult> completed) {
+    // Events fire around the pretend scope, never inside it, so a listener's SQL is not collected.
+    private void pretendOne(String name, Migration migration, Direction direction, int batch,
+            List<MigrationResult> results) {
         if (direction == Direction.UP && !migration.shouldRun()) {
-            return new MigrationResult(name, Outcome.SKIPPED, 0, noQueries());
+            results.add(new MigrationResult(name, Outcome.SKIPPED, 0, noQueries()));
+            notifier.migrationSkipped(event(name, migration, direction, 0, true));
+            return;
         }
-        Schema target = schemaFor(migration);
+        MigrationEvent event = event(name, migration, direction, batch, true);
+        notifier.migrationStarted(event);
         try {
-            List<LoggedQuery> queries = target.pretend(schema -> invoke(migration, direction, schema));
-            return new MigrationResult(name, Outcome.PRETENDED, 0, queries);
+            List<LoggedQuery> queries = schemaFor(migration).pretend(schema -> invoke(migration, direction, schema));
+            results.add(new MigrationResult(name, Outcome.PRETENDED, 0, queries));
         } catch (RuntimeException failure) {
-            throw new MigrationFailedException(name, direction, Phase.MIGRATION, completed, failure);
+            throw failed(event, Phase.MIGRATION, results, failure);
         }
+        notifier.migrationEnded(event);
     }
 
     /** Runs one migration and records it, undoing both together where the database allows. */
-    private void apply(String name, Migration migration, Direction direction, int batch,
-            List<MigrationResult> completed) {
+    private void apply(Migration migration, MigrationEvent event, List<MigrationResult> completed) {
+        String name = event.name();
+        Direction direction = event.direction();
         Schema target = schemaFor(migration);
         boolean isRepositoryConnection = target.connection() == defaultSchema.connection();
         boolean isRecordedInside = false;
@@ -402,15 +441,16 @@ public final class Migrator {
                     invoke(migration, direction, Schema.of(tx, target.grammar()));
                     if (isRepositoryConnection) {
                         record(new DatabaseMigrationRepository(Schema.of(tx, defaultSchema.grammar()), table),
-                                name, direction, batch);
+                                name, direction, event.batch());
                     }
                     return null;
                 };
                 try {
                     target.connection().transaction(work);
                 } catch (ForeignKeysOffRequiredException needsSwitch) {
-                    // The attempt was rolled back. Run it again with enforcement off, so a table rebuild
-                    // cannot fire other tables' delete actions; every table is checked before commit.
+                    // The attempt was rolled back and is not a failure, so no failed event fires. Run it again
+                    // with enforcement off, so a table rebuild cannot fire other tables' delete actions;
+                    // every table is checked before commit.
                     target.grammar().withoutForeignKeyConstraints(target.connection(), tx -> {
                         work.run(tx);
                         target.grammar().checkForeignKeys(tx);
@@ -421,15 +461,32 @@ public final class Migrator {
                 invoke(migration, direction, target);
             }
         } catch (RuntimeException failure) {
-            throw new MigrationFailedException(name, direction, Phase.MIGRATION, completed, failure);
+            throw failed(event, Phase.MIGRATION, completed, failure);
         }
         if (!isRecordedInside) {
             try {
-                record(repository, name, direction, batch);
+                record(repository, name, direction, event.batch());
             } catch (RuntimeException failure) {
-                throw new MigrationFailedException(name, direction, Phase.RECORD, completed, failure);
+                throw failed(event, Phase.RECORD, completed, failure);
             }
         }
+    }
+
+    /** Builds the failure, tells the listeners about it, and returns it for the caller to throw. */
+    private MigrationFailedException failed(MigrationEvent event, Phase phase, List<MigrationResult> completed,
+            RuntimeException cause) {
+        MigrationFailedException failure = new MigrationFailedException(event.name(), event.direction(), phase,
+                completed, cause);
+        notifier.migrationFailed(event, failure);
+        return failure;
+    }
+
+    private List<MigrationEntry> recorded(Supplier<List<MigrationEntry>> entries) {
+        return repository.repositoryExists() ? entries.get() : Collections.<MigrationEntry>emptyList();
+    }
+
+    private MigrationEvent event(String name, Migration migration, Direction direction, int batch, boolean pretend) {
+        return new MigrationEvent(direction, name, batch, pretend, schemaFor(migration).connection().getName());
     }
 
     private static boolean usesTransaction(Migration migration, Schema target) {
@@ -472,7 +529,8 @@ public final class Migrator {
         return Collections.emptyList();
     }
 
-    private static List<MigrationResult> noResults() {
+    private List<MigrationResult> nothingPending(MigrationsEvent whole) {
+        notifier.noPendingMigrations(whole);
         return Collections.emptyList();
     }
 
@@ -489,6 +547,7 @@ public final class Migrator {
         private String table = DatabaseMigrationRepository.DEFAULT_TABLE;
         private MigrationLock lock = MigrationLock.NONE;
         private boolean isMissingAllowed;
+        private final List<MigrationListener> listeners = new ArrayList<>();
 
         private Builder(Schema defaultSchema) {
             this.defaultSchema = defaultSchema;
@@ -563,6 +622,21 @@ public final class Migrator {
          */
         public Builder lock(MigrationLock lock) {
             this.lock = Objects.requireNonNull(lock, "lock");
+            return this;
+        }
+
+        /**
+         * Adds a listener for migration events; call it again to add more.
+         *
+         * <p>Listeners are called in the order they were added. See {@link MigrationListener} for
+         * what a listener that throws does.
+         *
+         * @param listener the listener, never {@code null}
+         * @return this builder
+         * @throws NullPointerException if {@code listener} is {@code null}
+         */
+        public Builder listener(MigrationListener listener) {
+            listeners.add(Objects.requireNonNull(listener, "listener"));
             return this;
         }
 
