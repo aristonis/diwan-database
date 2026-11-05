@@ -94,10 +94,10 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      */
     public final R make(Map<String, ?> attributes) {
         Objects.requireNonNull(attributes, "attributes");
-        Object parentKey = requireParentKey();
+        requireParentKey();
         R instance = getRelated().newInstance();
         instance.fill(attributes);
-        instance.setAttribute(foreignKeyName, parentKey);
+        setForeignAttributes(instance);
         linkInverse(instance, getParent());
         return instance;
     }
@@ -115,7 +115,8 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      */
     public final R save(R model) {
         Objects.requireNonNull(model, "model");
-        model.setAttribute(foreignKeyName, requireParentKey());
+        requireParentKey();
+        setForeignAttributes(model);
         // Linked before the save, as Laravel's setForeignAttributesForCreate, so hooks see the parent.
         linkInverse(model, getParent());
         model.save();
@@ -299,6 +300,18 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
         for (R result : results) {
             linkInverse(result, parent);
         }
+    }
+
+    /**
+     * Sets the attributes that tie a child to the parent: the foreign key holds the parent's
+     * local key. A polymorphic relation adds its type. Laravel's
+     * {@code setForeignAttributesForCreate}.
+     *
+     * @param child the related model to fill, never {@code null}
+     * @throws IllegalStateException if the parent has no local key value
+     */
+    void setForeignAttributes(Model child) {
+        child.setAttribute(foreignKeyName, requireParentKey());
     }
 
     private Object requireParentKey() {

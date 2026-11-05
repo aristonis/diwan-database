@@ -83,7 +83,8 @@ class LayerGuardTest {
         assertSame(ModelSerialization.class, ModelRelations.class.getSuperclass());
         assertSame(ModelRelations.class, ModelManyRelations.class.getSuperclass());
         assertSame(ModelManyRelations.class, ModelThroughRelations.class.getSuperclass());
-        assertSame(ModelThroughRelations.class, ModelRelationActions.class.getSuperclass());
+        assertSame(ModelThroughRelations.class, ModelMorphRelations.class.getSuperclass());
+        assertSame(ModelMorphRelations.class, ModelRelationActions.class.getSuperclass());
         assertSame(ModelRelationActions.class, ModelGuards.class.getSuperclass());
         assertSame(ModelGuards.class, ModelEventHooks.class.getSuperclass());
         assertSame(ModelEventHooks.class, ModelSoftDeletes.class.getSuperclass());

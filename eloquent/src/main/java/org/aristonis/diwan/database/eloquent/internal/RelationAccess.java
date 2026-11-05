@@ -150,6 +150,30 @@ public interface RelationAccess {
     Relation<?, ?> resolve(Model model, String name);
 
     /**
+     * Returns the type string a model class writes into a morph type column.
+     *
+     * @param type the model class, never {@code null}
+     * @return the alias or the class name, never {@code null}
+     * @throws NullPointerException if {@code type} is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the class has
+     *     no alias and the morph map is required
+     */
+    String aliasOf(Class<? extends Model> type);
+
+    /**
+     * Returns the model class a stored morph type string names.
+     *
+     * @param type the stored type string, never {@code null}
+     * @param loader the class loader to load a class name through, or {@code null} for the
+     *     bootstrap loader
+     * @return the model class, never {@code null}
+     * @throws NullPointerException if {@code type} is {@code null}
+     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the string
+     *     cannot be resolved
+     */
+    Class<? extends Model> resolveMorph(String type, ClassLoader loader);
+
+    /**
      * Builds a {@code BelongsToMany} for the model layer; called by {@code belongsToMany(...)}
      * factories. All arguments are already resolved; none is {@code null} except {@code relation}.
      *

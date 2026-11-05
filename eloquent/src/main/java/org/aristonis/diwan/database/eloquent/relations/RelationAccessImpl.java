@@ -66,6 +66,16 @@ final class RelationAccessImpl implements RelationAccess {
     }
 
     @Override
+    public String aliasOf(Class<? extends Model> type) {
+        return MorphMap.aliasOf(type);
+    }
+
+    @Override
+    public Class<? extends Model> resolveMorph(String type, ClassLoader loader) {
+        return MorphMap.resolve(type, loader);
+    }
+
+    @Override
     public <R extends Model> BelongsToMany<R> newBelongsToMany(EloquentBuilder<R> query, Model parent,
             String table, String foreignPivotKey, String relatedPivotKey, String parentKey,
             String relatedKey, String relation) {

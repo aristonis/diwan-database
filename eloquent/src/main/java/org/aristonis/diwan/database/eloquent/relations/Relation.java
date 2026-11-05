@@ -304,6 +304,14 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
     }
 
     /**
+     * Marks the query as already constrained, so the lazy constraints are not added again. Used by
+     * a relation built over another relation's constrained query.
+     */
+    final void skipLazyConstraints() {
+        isConstrained = true;
+    }
+
+    /**
      * Adds the lazy constraints and then replays the recorded clauses the first time it is
      * called; later calls do nothing.
      */

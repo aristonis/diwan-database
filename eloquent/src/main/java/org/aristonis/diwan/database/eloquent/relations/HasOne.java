@@ -106,22 +106,12 @@ public final class HasOne<R extends Model> extends HasOneOrMany<R, HasOne<R>> {
 
     @Override
     void initRelation(List<? extends Model> parents, String name) {
-        for (Model parent : parents) {
-            parent.setRelation(name, defaultFor(parent));
-        }
+        OneMatcher.initRelation(parents, name, this::defaultFor);
     }
 
     @Override
     void match(List<? extends Model> parents, List<R> results, String name) {
-        Map<Object, List<R>> dictionary = dictionary(results);
-        for (Model parent : parents) {
-            List<R> matches = matchesOf(dictionary, parent);
-            if (matches != null) {
-                R match = matches.get(0);
-                parent.setRelation(name, match);
-                linkInverse(match, parent);
-            }
-        }
+        OneMatcher.match(this, parents, results, name);
     }
 
     private R defaultFor(Model parent) {

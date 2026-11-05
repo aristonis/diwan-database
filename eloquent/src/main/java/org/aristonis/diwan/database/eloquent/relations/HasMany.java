@@ -1,7 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
 import java.util.List;
-import java.util.Map;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
@@ -52,22 +51,11 @@ public final class HasMany<R extends Model> extends HasOneOrMany<R, HasMany<R>> 
 
     @Override
     void initRelation(List<? extends Model> parents, String name) {
-        for (Model parent : parents) {
-            parent.setRelation(name, emptyCollection());
-        }
+        ManyMatcher.initRelation(this, parents, name);
     }
 
     @Override
     void match(List<? extends Model> parents, List<R> results, String name) {
-        Map<Object, List<R>> dictionary = dictionary(results);
-        for (Model parent : parents) {
-            List<R> matches = matchesOf(dictionary, parent);
-            if (matches != null) {
-                parent.setRelation(name, collectionOf(matches));
-                for (R match : matches) {
-                    linkInverse(match, parent);
-                }
-            }
-        }
+        ManyMatcher.match(this, parents, results, name);
     }
 }
