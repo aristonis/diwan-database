@@ -107,7 +107,7 @@ table's key.
 | Area | Laravel | Here |
 |---|---|---|
 | Through key | A visible attribute, so it reaches `toArray`, dirty tracking and `save` | Read by a row hook and kept out of the attributes |
-| Soft-deleted through parents | Filtered by the `SoftDeletes` marker, with `withTrashedParents` | Not filtered; soft deletes are not supported yet |
+| Soft-deleted through parents | A removable global scope; `withTrashedParents` drops it | A plain `where`, so `withoutGlobalScopes()` keeps it; only `withTrashedParents()` drops it |
 | `limit` when the parent key is null | A per-parent group limit | A plain limit on the whole query |
 | `limit` on an eager load | A per-parent group limit | Refused, as for every other relation kind |
 | `firstOrCreate` and its siblings | Create a row not linked to the far parent | Same; the Javadoc says so |
@@ -118,6 +118,6 @@ table's key.
 ## Not in this release
 
 `ofMany`, `latestOfMany` and `oldestOfMany` are not available on `hasOne` or `hasOneThrough`.
-Soft-deleted through parents are not filtered. The methods `chunkByIdDesc`, `eachById`,
+The methods `chunkByIdDesc`, `eachById`,
 `lazyByIdDesc`, `chunkMap`, `incrementOrCreate`, `one`, `is`, `through` and the relation's `touch`
 are not added.

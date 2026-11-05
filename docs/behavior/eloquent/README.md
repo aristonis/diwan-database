@@ -318,3 +318,5 @@ See [user stories](user-stories.md) and [user scenarios](user-scenarios.md). The
 [ADR 0018](../../adr/0018-relations-s2.md), and for many-to-many relations
 [ADR 0019](../../adr/0019-relations-s3a.md). Through relations: [through-relations.md](through-relations.md) and
 [ADR 0021](../../adr/0021-relations-s4a.md).
+Scopes and soft deletes: [scopes-and-soft-deletes.md](scopes-and-soft-deletes.md) and
+[ADR 0022](../../adr/0022-scopes-and-soft-deletes.md).
