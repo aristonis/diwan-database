@@ -61,6 +61,8 @@ found.delete();
 | Declare relations to many parent types | `morphOne`, `morphMany`, `morphTo`, `getMorphClass`, `MorphMap`; see [morph relations](morph-relations.md) |
 | Filter by a morph parent | `hasMorph`, `whereHasMorph`, `doesntHaveMorph`, `whereMorphRelation`, `whereMorphedTo`, `whereNotMorphedTo` and their `or` forms |
 | Eager load per parent class | `withMorph` with `morphWith`, `morphWithCount`, `constrain`; `loadMorph`, `loadMorphCount` |
+| Share one joining table across parent types | `morphToMany`, `morphedByMany`, `MorphPivot`; see [morph relations](morph-relations.md) |
+| Pick one related row per parent | `latestOfMany`, `oldestOfMany`, `ofMany`, `one()`; see [one of many](one-of-many.md) |
 
 ## Casts, accessors and serialization
 
