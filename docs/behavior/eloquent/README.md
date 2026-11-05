@@ -58,6 +58,7 @@ found.delete();
 | Find, iterate and page many-to-many rows | `find`, `findMany`, `findOrFail`, `first`, `firstWhere`, `sole`, `chunk`, `each`, `lazy`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` on `BelongsToMany` |
 | Link the joining row to both sides | `chaperone`, `withoutChaperone` on `BelongsToMany`, after `using` |
 | Run code on save, delete and restore | `ModelQuery.events()`, `observe`, `Model.withoutEvents`, `saveQuietly`, `deleteQuietly`; see [model events](model-events.md) |
+| Declare relations to many parent types | `morphOne`, `morphMany`, `morphTo`, `getMorphClass`, `MorphMap`; see [morph relations](morph-relations.md) |
 
 ## Casts, accessors and serialization
 
