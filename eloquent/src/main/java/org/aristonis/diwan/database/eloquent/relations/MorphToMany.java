@@ -23,8 +23,10 @@ import org.aristonis.diwan.database.support.Inflector;
  *
  * <p>The pivot queries that delete or update (detach, updateExistingPivot, touch) are limited to
  * the type, and the pivots are {@link MorphPivot}s, so a {@code using} class must extend
- * {@link MorphPivot}. Writing a new pivot row is refused for now, because the row needs the type
- * column; it throws {@link UnsupportedOperationException} instead of storing a row without a type.
+ * {@link MorphPivot}. A new pivot row carries the type column, written right after the foreign
+ * pivot key. A write that sets the type column to another value, through an attach attribute, an
+ * update, {@code withPivotValue} or a pivot save, is refused with {@link IllegalArgumentException}
+ * and nothing is written.
  *
  * <p>The fluent methods return this same instance, typed as {@code MorphToMany}. Single use, not
  * safe to share across threads (see {@link Relation}).
@@ -161,15 +163,53 @@ public final class MorphToMany<R extends Model> extends BelongsToMany<R> {
     }
 
     /**
-     * Refuses writing a new pivot row, which would need the type column.
+     * Returns the columns every new row carries after the related key, with the type column right
+     * after the foreign pivot key, so an insert carries the type.
      *
-     * @throws UnsupportedOperationException always
+     * @return a new map in column order
+     * @throws IllegalStateException if the parent has no key value
      */
     @Override
-    void requirePivotWritable() {
-        String name = getRelationName() != null ? getRelationName() : getTable();
-        throw new UnsupportedOperationException("Inserting rows into the pivot of morph-to-many relation ["
-                + name + "] is not supported yet; it needs the type column [" + morphType + "]");
+    Map<String, Object> recordTail() {
+        Map<String, Object> base = super.recordTail();
+        Map<String, Object> tail = new LinkedHashMap<>();
+        String foreign = getForeignPivotKeyName();
+        tail.put(foreign, base.get(foreign));
+        tail.put(morphType, getMorphClass());
+        for (Map.Entry<String, Object> entry : base.entrySet()) {
+            if (!entry.getKey().equals(foreign)) {
+                tail.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return tail;
+    }
+
+    /**
+     * Refuses a write that sets the type column to a value other than this relation's morph class,
+     * so an attach or an update never stores or moves a row under another type.
+     *
+     * @param attributes the columns and values being written, never {@code null}
+     * @throws IllegalArgumentException if the type column holds another value; the message names the
+     *     column, the value and the expected type
+     */
+    @Override
+    void checkPivotAttributes(Map<String, ?> attributes) {
+        for (Map.Entry<String, ?> entry : attributes.entrySet()) {
+            if (morphType.equalsIgnoreCase(entry.getKey())) {
+                requireOwnType(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private void requireOwnType(String column, Object value) {
+        String expected = getMorphClass();
+        // A differently cased name is refused even with the right value: the row would carry the
+        // column twice, once from the relation and once from the attributes.
+        if (!morphType.equals(column) || !Objects.equals(expected, value)) {
+            throw new IllegalArgumentException("Cannot set pivot column [" + column + "] to [" + value
+                    + "] on morph-to-many relation [" + (getRelationName() != null ? getRelationName() : getTable())
+                    + "]; the type of the relation is [" + expected + "]");
+        }
     }
 
     /**
@@ -349,6 +389,7 @@ public final class MorphToMany<R extends Model> extends BelongsToMany<R> {
 
     @Override
     public MorphToMany<R> withPivotValue(String column, Object value) {
+        requireOwnType(column, value);
         super.withPivotValue(column, value);
         return this;
     }

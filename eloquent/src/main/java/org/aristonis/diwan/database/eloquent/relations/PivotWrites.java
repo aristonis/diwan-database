@@ -278,12 +278,14 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
     }
 
     /**
-     * Refuses an insert a subclass cannot type, so a relation that cannot fill the pivot's
-     * discriminating columns fails before any row is written; the default accepts every insert.
+     * Checks the pivot columns a write is about to set, so a subclass can refuse a value that would
+     * break the discriminating columns of its pivot table before any statement runs; the default
+     * accepts every column.
      *
-     * @throws UnsupportedOperationException if the relation cannot write a typed pivot row
+     * @param attributes the columns and values being written, never {@code null}
+     * @throws IllegalArgumentException if the relation refuses one of the values
      */
-    void requirePivotWritable() {
+    void checkPivotAttributes(Map<String, ?> attributes) {
     }
 
     /**
@@ -393,13 +395,16 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
      * Inserts rows built by {@link PivotRecords#record}. More than one statement runs in a transaction.
      *
      * @param rows the rows, all with the same columns; an empty list writes nothing
-     * @throws IllegalArgumentException if two rows name different columns
+     * @throws IllegalArgumentException if two rows name different columns, or the relation refuses a
+     *     value through {@link #checkPivotAttributes}
      */
     void attachInternal(List<Map<String, Object>> rows) {
         if (rows.isEmpty()) {
             return;
         }
-        requirePivotWritable();
+        for (Map<String, Object> row : rows) {
+            checkPivotAttributes(row);
+        }
         PivotRecords.requireSameColumns(rows);
         if (usingClass() != null) {
             inTransactionIf(rows.size() > 1, () -> saveEach(rows));
@@ -420,6 +425,7 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
      */
     int updateInternal(Object id, Map<String, ?> attributes) {
         Map<String, Object> values = checked(attributes);
+        checkPivotAttributes(values);
         List<Object> ids = PivotRecords.parse(id, getRelatedKeyName()).ids();
         if (ids.isEmpty()) {
             return 0;

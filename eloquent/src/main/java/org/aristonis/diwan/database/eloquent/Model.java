@@ -297,6 +297,16 @@ public abstract class Model extends ModelSoftDeletes {
         return saved;
     }
 
+    /**
+     * Runs after every halting event and listener, just before an INSERT or UPDATE statement is
+     * built, so a check here sees the attributes that will be written and no hook or listener can
+     * change them afterwards. It does nothing by default; a model that must refuse certain
+     * attributes overrides it, and may mark the override {@code final}. An exception it throws
+     * aborts the write.
+     */
+    protected void beforeWrite() {
+    }
+
     private boolean performUpdate() {
         if (!fireHalting(ModelEvent.UPDATING)) {
             return false;
@@ -306,6 +316,7 @@ public abstract class Model extends ModelSoftDeletes {
         }
         Map<String, Object> dirty = getDirty();
         if (!dirty.isEmpty()) {
+            beforeWrite();
             setKeysForSaveQuery(newBaseQuery()).update(dirty);
             syncChanges();
             fire(ModelEvent.UPDATED);
@@ -323,6 +334,7 @@ public abstract class Model extends ModelSoftDeletes {
         if (usesTimestamps()) {
             updateTimestamps();
         }
+        beforeWrite();
         Map<String, Object> attributes = getAttributes();
         if (getIncrementing()) {
             Object id = newBaseQuery().insertGetId(attributes, getKeyName());
@@ -530,6 +542,7 @@ public abstract class Model extends ModelSoftDeletes {
             setRawAttributes(before);
             return 0;
         }
+        beforeWrite();
         Builder query = setKeysForSaveQuery(newBaseQuery());
         int affected = up ? query.increment(column, amount, written) : query.decrement(column, amount, written);
         syncChanges();

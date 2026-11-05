@@ -117,6 +117,30 @@ class SQLiteMorphToManyTest {
         assertEquals(0, count(fx.real, "taggable_type = 'post' and taggable_id = 1 and tag_id = 1"));
     }
 
+    @Test
+    void writesRoundTrip() {
+        // Arrange: post 1 has php and java, video 1 has php and go
+        Post post = Post.QUERY.on(fx.db).findOrFail(1);
+
+        // Act and Assert: attach writes the post type and leaves the video rows alone
+        post.tags().attach(3);
+        assertEquals(1, count(fx.real, "taggable_type = 'post' and taggable_id = 1 and tag_id = 3"));
+        assertEquals(2, count(fx.real, "taggable_type = 'video' and taggable_id = 1"));
+
+        // sync drops php, keeps java and go
+        post.tags().sync(Arrays.asList(2, 3));
+        assertEquals(Arrays.asList("go", "java"), sortedValues(post.tags().get(), "name"));
+        assertEquals(1, count(fx.real, "taggable_type = 'video' and taggable_id = 1 and tag_id = 1"));
+        assertEquals(1, count(fx.real, "taggable_type = 'video' and taggable_id = 1 and tag_id = 3"));
+
+        // detach removes the post row of go and not the video row with the same ids
+        int removed = post.tags().detach(3);
+        assertEquals(1, removed);
+        assertEquals(0, count(fx.real, "taggable_type = 'post' and taggable_id = 1 and tag_id = 3"));
+        assertEquals(1, count(fx.real, "taggable_type = 'video' and taggable_id = 1 and tag_id = 3"));
+        assertEquals(Collections.singletonList("java"), sortedValues(post.tags().get(), "name"));
+    }
+
     private static void createTables(Connection real) {
         SQLiteSchema.of(real).create("mm_posts", t -> {
             t.id();

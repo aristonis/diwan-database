@@ -37,7 +37,7 @@ final class MorphToManyModels {
     /** Initialises every model class, so each {@link ModelQuery} entry is registered. */
     static void register() {
         List<ModelQuery<?>> entries = Arrays.asList(Post.QUERY, Video.QUERY, Tag.QUERY, TouchingPost.QUERY,
-                TaggablePivot.QUERY, PlainPivot.QUERY);
+                TaggablePivot.QUERY, EventTaggablePivot.QUERY, PlainPivot.QUERY);
         if (entries.contains(null)) {
             throw new IllegalStateException("a model entry is not initialised");
         }
@@ -319,6 +319,50 @@ final class MorphToManyModels {
         @Override
         protected boolean timestamps() {
             return false;
+        }
+    }
+
+    /** A morph pivot class on {@code taggables} that records its hooks in {@link #EVENTS}. */
+    static final class EventTaggablePivot extends MorphPivot {
+        static final ModelQuery<EventTaggablePivot> QUERY =
+                ModelQuery.of(EventTaggablePivot.class, EventTaggablePivot::new);
+
+        /** The hooks that ran, in order; a test clears it before and after. */
+        static final List<String> EVENTS = Collections.synchronizedList(new java.util.ArrayList<>());
+
+        public EventTaggablePivot() {
+        }
+
+        @Override
+        protected String table() {
+            return "taggables";
+        }
+
+        @Override
+        protected boolean timestamps() {
+            return false;
+        }
+
+        @Override
+        protected boolean creating() {
+            EVENTS.add("creating");
+            return super.creating();
+        }
+
+        @Override
+        protected void created() {
+            EVENTS.add("created");
+        }
+
+        @Override
+        protected boolean deleting() {
+            EVENTS.add("deleting");
+            return super.deleting();
+        }
+
+        @Override
+        protected void deleted() {
+            EVENTS.add("deleted");
         }
     }
 

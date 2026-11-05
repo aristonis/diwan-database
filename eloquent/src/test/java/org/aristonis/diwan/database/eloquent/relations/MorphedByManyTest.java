@@ -3,7 +3,6 @@ package org.aristonis.diwan.database.eloquent.relations;
 import static org.aristonis.diwan.database.eloquent.relations.MorphToManyModels.ids;
 import static org.aristonis.diwan.database.eloquent.relations.MorphToManyModels.sortedKeys;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,13 +116,5 @@ class MorphedByManyTest {
         MorphMap.enforceMorphMap(onlyTags);
 
         assertThrows(ClassMorphViolationException.class, () -> php.posts().get());
-    }
-
-    @Test
-    void inverseWritesStayRefused() {
-        Tag go = tag(3);
-
-        assertThrows(UnsupportedOperationException.class, () -> go.posts().attach(1));
-        assertFalse(db.sql().stream().anyMatch(sql -> sql.startsWith("insert")));
     }
 }

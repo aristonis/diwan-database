@@ -176,18 +176,6 @@ class MorphToManyTest {
     }
 
     @Test
-    void insertsRefusedUntilSupported() {
-        Post third = post(3);
-        Post first = post(1);
-
-        assertThrows(UnsupportedOperationException.class, () -> third.tags().attach(1));
-        assertThrows(UnsupportedOperationException.class, () -> first.tags().sync(Arrays.asList(1, 2, 3)));
-
-        assertEquals(ALL_LINKS, linkCount(db, "1 = 1"));
-        assertEquals(0, linkCount(db, "taggable_id = 3 and taggable_type = 'post'"));
-    }
-
-    @Test
     void emptyAttachDoesNothing() {
         Post third = post(3);
         db.clearLog();
@@ -196,48 +184,6 @@ class MorphToManyTest {
 
         assertEquals(0, db.sql().stream().filter(sql -> sql.toLowerCase().startsWith("insert")).count());
         assertEquals(ALL_LINKS, linkCount(db, "1 = 1"));
-    }
-
-    @Test
-    void syncWithDetachAndAttachRollsBack() {
-        Post first = post(1);
-
-        assertThrows(UnsupportedOperationException.class, () -> first.tags().sync(Arrays.asList(2, 3)));
-
-        assertEquals(2, linkCount(db, "taggable_id = 1 and taggable_type = 'post'"));
-        assertEquals(1, linkCount(db, "taggable_id = 1 and taggable_type = 'post' and tag_id = 1"));
-        assertEquals(1, linkCount(db, "taggable_id = 1 and taggable_type = 'post' and tag_id = 2"));
-        assertEquals(ALL_LINKS, linkCount(db, "1 = 1"));
-    }
-
-    @Test
-    void createRefusedLeavesNoTag() {
-        Post first = post(1);
-        int before = tagCount();
-        Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put("name", "kotlin");
-
-        assertThrows(UnsupportedOperationException.class, () -> first.tags().create(attributes));
-
-        assertEquals(before, tagCount());
-        assertEquals(ALL_LINKS, linkCount(db, "1 = 1"));
-    }
-
-    @Test
-    void firstOrCreateRefusedLeavesNoTag() {
-        Post first = post(1);
-        int before = tagCount();
-        Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put("name", "kotlin");
-
-        assertThrows(UnsupportedOperationException.class, () -> first.tags().firstOrCreate(attributes));
-
-        assertEquals(before, tagCount());
-        assertEquals(ALL_LINKS, linkCount(db, "1 = 1"));
-    }
-
-    private int tagCount() {
-        return ((Number) db.real.scalar("select count(*) from mm_tags").orElseThrow()).intValue();
     }
 
     @Test

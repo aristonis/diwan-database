@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import java.util.Map;
+import java.util.Objects;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.query.Builder;
 
@@ -12,6 +14,11 @@ import org.aristonis.diwan.database.query.Builder;
  * it never touches the row of another type that holds the same keys. A pivot with a key value
  * writes by that key alone. The relation sets the type and the class; a pivot built any other way
  * has neither, and then writes as a plain {@link Pivot}.
+ *
+ * <p>A write that sets the type column to a value other than the pivot's own type is refused, so a
+ * row never moves to another type, whatever a hook or listener does. Writing a row whose type
+ * column holds the pivot's own type is fine. The check applies only when a morph relation built the
+ * pivot; one built any other way has no morph type and is unchecked.
  *
  * <p>Not safe to share across threads, like every model.
  */
@@ -69,6 +76,37 @@ public class MorphPivot extends Pivot {
     MorphPivot setMorphClass(String morphClass) {
         this.morphClass = morphClass;
         return this;
+    }
+
+    /**
+     * Refuses a write that sets the type column to a value other than this pivot's morph class.
+     * It runs after every saving, creating and updating hook and listener, just before the
+     * statement is built, so neither can change the type past it, and a subclass cannot skip it.
+     * A column named like the type column in another letter case is refused too, even with the
+     * right value, since the row would carry the column twice. A pivot not built by a morph
+     * relation, with no morph type set, is not checked.
+     *
+     * @throws IllegalArgumentException if the type column holds another value; the message names the
+     *     column, the value and the expected type
+     */
+    @Override
+    protected final void beforeWrite() {
+        requireOwnType();
+    }
+
+    private void requireOwnType() {
+        if (morphType == null) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : getAttributes().entrySet()) {
+            String column = entry.getKey();
+            if (morphType.equalsIgnoreCase(column)
+                    && (!morphType.equals(column) || !Objects.equals(morphClass, entry.getValue()))) {
+                throw new IllegalArgumentException("Cannot save a pivot of class [" + getClass().getName()
+                        + "] with [" + column + "] set to [" + entry.getValue() + "]; the type of its"
+                        + " relation is [" + morphClass + "]");
+            }
+        }
     }
 
     /**
