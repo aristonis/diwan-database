@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.eloquent;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -446,6 +447,141 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
         }
         Object value = out.containsKey(column) ? out.remove(column) : model.freshTimestampValue();
         out.put(column, value);
+        return out;
+    }
+
+    // ---- upsert and insert or ignore ----
+
+    /**
+     * Inserts the rows, and where a row conflicts on the unique columns, sets every column of the
+     * first row from the row that was refused, plus {@code updated_at}.
+     *
+     * <p>Like Laravel, it goes straight to the database: no model events run and no casts apply.
+     * Rows without the key of a model that generates unique ids get one. A model that keeps
+     * timestamps gets {@code created_at} and {@code updated_at} on every row, one moment for all
+     * of them, unless the row names the column; {@code updated_at} joins the columns that are
+     * updated, {@code created_at} does not.
+     *
+     * @param rows the rows, never {@code null}, all with the same columns
+     * @param uniqueBy the columns of the unique index that decides a conflict, never {@code null}
+     *     or empty
+     * @return the number of rows written, as the database reports it; 0 for no rows
+     * @throws NullPointerException if an argument or a row is {@code null}
+     * @throws IllegalArgumentException if {@code uniqueBy} is empty or the rows are not alike
+     * @throws UnsupportedOperationException if the database cannot upsert, as SQLite before 3.24
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     */
+    public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy) {
+        return upsert(rows, uniqueBy, null);
+    }
+
+    /**
+     * Inserts the rows, and where a row conflicts on the unique columns, sets the named columns
+     * from the row that was refused, plus {@code updated_at} when the model keeps timestamps; see
+     * {@link EloquentBuilder#upsert(List, List)}.
+     *
+     * @param rows the rows, never {@code null}, all with the same columns
+     * @param uniqueBy the columns of the unique index that decides a conflict, never {@code null}
+     *     or empty
+     * @param update the columns to take from the refused row; {@code null} for every column of
+     *     the first row as given; an empty list leaves a conflicting row as it is, with no
+     *     {@code updated_at} either
+     * @return the number of rows written, as the database reports it; 0 for no rows
+     * @throws NullPointerException if {@code rows}, {@code uniqueBy} or a row is {@code null}
+     * @throws IllegalArgumentException if {@code uniqueBy} is empty or the rows are not alike
+     * @throws UnsupportedOperationException if the database cannot upsert, as SQLite before 3.24
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     */
+    public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy, List<String> update) {
+        Objects.requireNonNull(rows, "rows");
+        List<String> columns = update;
+        if (columns == null) {
+            columns = rows.isEmpty()
+                    ? new ArrayList<>()
+                    : new ArrayList<>(Objects.requireNonNull(rows.get(0), "row").keySet());
+        }
+        return toBase().upsert(withTimestamps(withUniqueIds(rows)), uniqueBy, withUpdatedAt(columns));
+    }
+
+    /**
+     * Inserts one row, skipping it when it would break a unique or primary key constraint, with
+     * the key and timestamps filled as for {@link EloquentBuilder#upsert(List, List)}.
+     *
+     * @param row the columns and values, never {@code null}
+     * @return the number of rows inserted, 0 or 1
+     * @throws NullPointerException if {@code row} is {@code null}
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     */
+    public final int insertOrIgnore(Map<String, ?> row) {
+        return insertOrIgnore(Collections.singletonList(Objects.requireNonNull(row, "row")));
+    }
+
+    /**
+     * Inserts the rows in one statement, skipping each that would break a unique or primary key
+     * constraint. No model events run. Rows without the key of a model that generates unique ids
+     * get one, and a model that keeps timestamps gets them, one moment for all rows, unless a row
+     * names the column.
+     *
+     * @param rows the rows, never {@code null}, all with the same columns
+     * @return the number of rows inserted, as the database reports it; 0 for no rows
+     * @throws NullPointerException if {@code rows} or a row is {@code null}
+     * @throws IllegalArgumentException if the rows are not alike
+     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     */
+    public final int insertOrIgnore(List<? extends Map<String, ?>> rows) {
+        Objects.requireNonNull(rows, "rows");
+        return toBase().insertOrIgnore(withTimestamps(withUniqueIds(rows)));
+    }
+
+    // The key goes first, as in Laravel; a row that names the key keeps its value.
+    private List<Map<String, Object>> withUniqueIds(List<? extends Map<String, ?>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        boolean generates = model.getUniqueIdKind() != UniqueIdKind.NONE;
+        for (Map<String, ?> row : rows) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            if (generates && !Objects.requireNonNull(row, "row").containsKey(model.getKeyName())) {
+                copy.put(model.getKeyName(), model.newUniqueId());
+            }
+            copy.putAll(Objects.requireNonNull(row, "row"));
+            out.add(copy);
+        }
+        return out;
+    }
+
+    // One moment for every row and both columns; a column the row names keeps the row's value.
+    private List<Map<String, Object>> withTimestamps(List<Map<String, Object>> rows) {
+        if (!model.usesTimestamps()) {
+            return rows;
+        }
+        Object moment = model.freshTimestampValue();
+        List<String> columns = new ArrayList<>(2);
+        for (String column : new String[] {model.getCreatedAtColumn(), model.getUpdatedAtColumn()}) {
+            if (column != null) {
+                columns.add(column);
+            }
+        }
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            for (String column : columns) {
+                if (!row.containsKey(column)) {
+                    copy.put(column, moment);
+                }
+            }
+            copy.putAll(row);
+            out.add(copy);
+        }
+        return out;
+    }
+
+    // An empty list stays empty: the caller asked for conflicting rows to be left alone.
+    private List<String> withUpdatedAt(List<String> update) {
+        String column = model.getUpdatedAtColumn();
+        if (!model.usesTimestamps() || column == null || update.isEmpty() || update.contains(column)) {
+            return update;
+        }
+        List<String> out = new ArrayList<>(update);
+        out.add(column);
         return out;
     }
 }

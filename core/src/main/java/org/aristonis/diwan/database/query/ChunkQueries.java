@@ -407,11 +407,13 @@ abstract class ChunkQueries extends WriteQueries {
      * }</pre>
      *
      * @return the open cursor, never {@code null}
-     * @throws IllegalStateException if a cursor is already open on the connection's session
+     * @throws IllegalStateException if a cursor is already open on the connection's session, or the
+     *     query has a row lock that needs a transaction and none is open
      * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
      */
     public final QueryCursor<Map<String, Object>> cursor() {
+        checkLockTransaction();
         return connection.cursor(toSql(), grammar.prepareBindings(getBindings()));
     }
 

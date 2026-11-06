@@ -53,6 +53,7 @@ abstract class BuilderState {
     List<Order> unionOrders = new ArrayList<>();
     Integer unionLimit;
     Integer unionOffset;
+    RowLock lock;
 
     /** Creates the shared state; every argument is checked for {@code null}. */
     BuilderState(Connection connection, QueryGrammar grammar, Processor processor) {
@@ -418,6 +419,24 @@ abstract class BuilderState {
     @Internal
     public final OptionalInt getUnionOffset() {
         return unionOffset == null ? OptionalInt.empty() : OptionalInt.of(unionOffset);
+    }
+
+    /**
+     * Returns the row lock of the select.
+     *
+     * @return the lock, empty if none
+     * @apiNote Internal: read by dialect grammars; may change without notice.
+     */
+    @Internal
+    public final Optional<RowLock> getLock() {
+        return Optional.ofNullable(lock);
+    }
+
+    /** Returns a clone without the row lock, for queries a lock cannot apply to. */
+    Builder withoutLock() {
+        Builder copy = self().clone();
+        copy.lock = null;
+        return copy;
     }
 
     /** Sets the aggregate; the execution methods set it on a clone and never on the caller's builder. */

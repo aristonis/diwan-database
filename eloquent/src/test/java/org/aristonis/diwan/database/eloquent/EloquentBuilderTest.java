@@ -17,6 +17,8 @@ import org.aristonis.diwan.database.eloquent.ScopeFixtures.Tag;
 import org.aristonis.diwan.database.eloquent.TestModels.Note;
 import org.aristonis.diwan.database.eloquent.TestModels.User;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.LockStrength;
+import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.internal.MappingCursor;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,19 @@ class EloquentBuilderTest {
         assertEquals(base.toSql(), model.toSql());
         assertEquals(base.getBindings(), model.getBindings());
         assertEquals(fake.db.table("users").forPage(3, 10).toSql(), users.query().forPage(3, 10).toSql());
+    }
+
+    @Test
+    void lockForwardersReturnTheEloquentBuilderAndSetTheLock() {
+        EloquentBuilder<User> query = users.query();
+
+        assertSame(query, query.lockForUpdate());
+        assertSame(query, query.sharedLock());
+        assertSame(query, query.lock(LockStrength.UPDATE));
+        assertSame(query, query.lock(LockStrength.UPDATE, LockWait.WAIT));
+        assertEquals("select * from \"users\"", query.toSql());
+        assertThrows(UnsupportedOperationException.class, () -> users.query().lock(LockStrength.KEY_SHARE).toSql());
+        assertTrue(query.toBase().getLock().isPresent());
     }
 
     @Test

@@ -9,6 +9,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Row locks on the query builder and the model query: `lockForUpdate()`, `sharedLock()` and
+  `lock(LockStrength[, LockWait])`, with `UPDATE`, `NO_KEY_UPDATE`, `SHARE` and `KEY_SHARE`, and
+  `WAIT`, `NOWAIT` and `SKIP_LOCKED`. PostgreSQL writes `for update`, `for share` and the others
+  after the offset; SQLite ignores the plain locks and refuses the PostgreSQL-only ones. A locked
+  select outside a transaction on PostgreSQL throws `IllegalStateException`. Aggregates, `exists`
+  and the pagination count leave the lock out; a union with a lock is refused. Unlike Laravel,
+  there is no raw string lock.
+- `insertOrIgnore`, `upsert` and `updateOrInsert` on the query builder, and `upsert` and
+  `insertOrIgnore` on the model query. SQLite writes `insert or ignore` and
+  `on conflict (...) do update set "c" = "excluded"."c"`; PostgreSQL writes `on conflict do nothing`
+  and the same upsert form. `upsert` takes the unique columns and an optional list of columns or
+  map of column to value. Unlike Laravel, an empty update list leaves a conflicting row as it is.
+  `upsert` is refused with `UnsupportedOperationException` on SQLite older than 3.24 (Android
+  before API 30). `updateOrInsert` reads, then writes, and is not atomic. Model upserts fill
+  unique ids, one timestamp for all rows and `updated_at` in the updated columns, and run no events.
 - Eloquent models in a new module, `diwan-database-eloquent`: `Model` configured by overridable
   methods, a static `ModelQuery` entry per model built from a constructor reference (no
   reflection, works on Android), `EloquentBuilder` with Laravel's finders, creators, chunking,
@@ -191,6 +206,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `pivot_` prefix is moved into the joining row, `cursorPaginate` refuses an order on a
   joining-table column, and a joining row with no key refuses `update` and `delete`. Writes through
   the relation (`attach`, `detach`, `sync`) are not available yet.
+- Migration checksums. `Migration.checksum()` (empty by default) lets a migration declare a value
+  that is recorded when it runs and compared on later runs; `MigrationChecksum.of(String)` gives
+  the SHA-256 of a text with line endings and Unicode form normalized. A run (and a pretend run)
+  stops before anything runs with a `MigrationChecksumException` that lists every migration whose
+  recorded and declared checksums differ. A migration with no checksum on either side is never
+  checked, and one that starts declaring a checksum gets it recorded on the next run.
+  `Migrator.repairChecksums(List)` accepts the current values and `clearChecksums()` removes them,
+  both under the migration lock. The migrations table gains a nullable `checksum varchar(64)`
+  column, `MigrationEntry.checksum()`, and `MigrationRepository.log` takes the checksum. A
+  migrations table created before this release has no such column and is not altered at runtime:
+  run `alter table migrations add column checksum varchar(64)` once (SQLite and PostgreSQL), or the
+  first migrator call fails with a message that says so.
 
 ### Changed
 

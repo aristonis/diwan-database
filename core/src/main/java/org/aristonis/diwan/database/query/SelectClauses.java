@@ -103,6 +103,59 @@ abstract class SelectClauses extends SubqueryWheres {
     }
 
     /**
+     * Locks the selected rows for update, as {@code lockForUpdate()} does in Laravel:
+     * {@code lock(LockStrength.UPDATE)}.
+     *
+     * <p>Laravel also takes a raw string for the lock; here only the enums are accepted.
+     *
+     * @return this builder
+     */
+    public final Builder lockForUpdate() {
+        return lock(LockStrength.UPDATE);
+    }
+
+    /**
+     * Locks the selected rows for sharing, as {@code sharedLock()} does in Laravel:
+     * {@code lock(LockStrength.SHARE)}.
+     *
+     * @return this builder
+     */
+    public final Builder sharedLock() {
+        return lock(LockStrength.SHARE);
+    }
+
+    /**
+     * Locks the selected rows and waits for a conflicting lock to be released.
+     *
+     * @param strength the strength, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if {@code strength} is {@code null}
+     */
+    public final Builder lock(LockStrength strength) {
+        return lock(strength, LockWait.WAIT);
+    }
+
+    /**
+     * Locks the selected rows. The lock replaces an earlier one, applies to the select only, and is
+     * left out of aggregates, {@code exists} and the count of a pagination. A union with a lock on
+     * any part is refused when compiled.
+     *
+     * <p>PostgreSQL renders every combination and holds the lock until the transaction ends, so a
+     * locked select outside a transaction throws {@link IllegalStateException}. SQLite has no row
+     * locks: it ignores {@link LockStrength#UPDATE} and {@link LockStrength#SHARE} with
+     * {@link LockWait#WAIT}, and refuses any other combination.
+     *
+     * @param strength the strength, never {@code null}
+     * @param lockWait what to do when the rows are locked, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    public final Builder lock(LockStrength strength, LockWait lockWait) {
+        this.lock = new RowLock(strength, lockWait);
+        return self();
+    }
+
+    /**
      * Sets the table. A subquery or raw SQL set before by {@link Builder#fromSub} or
      * {@link Builder#fromRaw} is dropped with its bindings; Laravel keeps those bindings, which then
      * no longer match the SQL.

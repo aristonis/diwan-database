@@ -15,7 +15,8 @@ and a rollback undoes the last batch.
 | Create, check or drop the migrations table | `createRepository()`, `repositoryExists()`, `deleteRepository()` |
 | See what ran | `getRan()`, `getMigrationBatches()` |
 | Pick what to roll back | `getLast()`, `getMigrations(steps)`, `getMigrationsByBatch(batch)` |
-| Record or forget a run | `log(name, batch)`, `delete(name)`, `getNextBatchNumber()` |
+| Record or forget a run | `log(name, batch, checksum)`, `delete(name)`, `getNextBatchNumber()` |
+| Protect a migration from edits after it ran | override `checksum()`; see [Checksums](#checksums) |
 
 ## How it behaves
 
@@ -27,5 +28,29 @@ and a rollback undoes the last batch.
 - Create and drop the table outside a transaction: MySQL commits any open transaction on DDL.
 - In pretend mode reads come back empty, so read the table outside the pretend callback.
 - Inside one batch, order follows the database's collation.
+
+## Checksums
+
+A migration can declare a checksum with `checksum()`. The default is empty, which means the
+migration is never checked. Return a version label you bump on purpose, or a hash of a canonical
+description of the change with `MigrationChecksum.of(String)`. That helper gives the SHA-256 in hex
+of the text after line endings become `\n` and accents are put in Unicode form NFC, so how the file
+was saved does not matter. The library never hashes compiled code, because that changes between
+compilers and code shrinkers.
+
+- A run records the declared checksum in the table's `checksum` column, which is nullable and last.
+- Before a run (and a pretend run) the migrator compares every migration that already ran and has
+  both a recorded and a declared checksum. If any differ, it throws one `MigrationChecksumException`
+  that lists each migration with its recorded and current value, and nothing runs.
+- A null on either side is never checked. A migration that declares nothing never blocks.
+- A migration that ran with no checksum and later declares one gets it recorded on the next run.
+- To accept an intended edit, call `migrator.repairChecksums(migrator.migrations())`. To drop every
+  recorded checksum, call `migrator.clearChecksums()`. Both take the migration lock and fire no
+  events.
+- A table created before this release has no `checksum` column. The library does not alter tables
+  at runtime: the first call that needs the column throws an `IllegalStateException` that gives the
+  one statement to run, `alter table migrations add column checksum varchar(64)`.
+
+See [ADR 0029](../../adr/0029-migration-checksums.md).
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md).

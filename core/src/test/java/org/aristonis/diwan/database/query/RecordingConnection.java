@@ -2,11 +2,14 @@ package org.aristonis.diwan.database.query;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.driver.DriverCapability;
+import org.aristonis.diwan.database.driver.DriverInfo;
 
 /** A stub connection that records each statement and answers selects from a script. */
 final class RecordingConnection {
@@ -20,6 +23,7 @@ final class RecordingConnection {
     private RuntimeException failure;
     private int affected = 1;
     private int level;
+    private String version = "1";
     final Connection connection;
 
     RecordingConnection() {
@@ -37,6 +41,8 @@ final class RecordingConnection {
                             return System.identityHashCode(proxy);
                         case "equals":
                             return proxy == args[0];
+                        case "getDriverInfo":
+                            return new DriverInfo("recording", version, EnumSet.noneOf(DriverCapability.class));
                         case "transactionLevel":
                             return level;
                         case "transaction":
@@ -99,6 +105,11 @@ final class RecordingConnection {
         return this;
     }
 
+    RecordingConnection reportsVersion(String databaseVersion) {
+        version = databaseVersion;
+        return this;
+    }
+
     RecordingConnection failsWith(RuntimeException error) {
         failure = error;
         return this;
@@ -106,6 +117,10 @@ final class RecordingConnection {
 
     QueryFactory db() {
         return QueryFactory.of(connection, new TestQueries.TestGrammar(""), new Processor());
+    }
+
+    QueryFactory db(QueryGrammar grammar) {
+        return QueryFactory.of(connection, grammar, new Processor());
     }
 
     Call last() {

@@ -3,6 +3,8 @@ package org.aristonis.diwan.database.eloquent;
 import java.util.List;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.LockStrength;
+import org.aristonis.diwan.database.query.LockWait;
 
 /**
  * The order, select, join and limit forwarders of {@link EloquentBuilder}, and the ways to reach
@@ -373,6 +375,51 @@ abstract class EloquentClauses<T extends Model> extends EloquentScopes<T> {
      */
     public final EloquentBuilder<T> forPage(int page, int perPage) {
         query.forPage(page, perPage);
+        return self();
+    }
+
+    /**
+     * Locks the selected rows for update, as {@link Builder#lockForUpdate()}.
+     *
+     * @return this builder
+     */
+    public final EloquentBuilder<T> lockForUpdate() {
+        query.lockForUpdate();
+        return self();
+    }
+
+    /**
+     * Locks the selected rows for sharing, as {@link Builder#sharedLock()}.
+     *
+     * @return this builder
+     */
+    public final EloquentBuilder<T> sharedLock() {
+        query.sharedLock();
+        return self();
+    }
+
+    /**
+     * Locks the selected rows, waiting for a conflicting lock.
+     *
+     * @param strength the strength, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if {@code strength} is {@code null}
+     */
+    public final EloquentBuilder<T> lock(LockStrength strength) {
+        query.lock(strength);
+        return self();
+    }
+
+    /**
+     * Locks the selected rows, as {@link Builder#lock(LockStrength, LockWait)}.
+     *
+     * @param strength the strength, never {@code null}
+     * @param lockWait what to do when the rows are locked, never {@code null}
+     * @return this builder
+     * @throws NullPointerException if an argument is {@code null}
+     */
+    public final EloquentBuilder<T> lock(LockStrength strength, LockWait lockWait) {
+        query.lock(strength, lockWait);
         return self();
     }
 }

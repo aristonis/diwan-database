@@ -82,4 +82,22 @@ public abstract class Migration {
     public Optional<String> connection() {
         return Optional.empty();
     }
+
+    /**
+     * Returns a checksum that detects an edit made after the migration ran.
+     *
+     * <p>The migrator records it when the migration runs and compares it on later runs; a
+     * difference stops the run with a {@link MigrationChecksumException}. Return a hash of a
+     * canonical description of the change through {@link MigrationChecksum#of(String)}, or a
+     * version label you bump on purpose. The library never hashes the compiled class, because that
+     * differs between compilers and code shrinkers.
+     *
+     * @implSpec The default returns an empty optional, which means the migration is not checked.
+     *     The value must be stable between runs of the same code.
+     *
+     * @return the checksum, at most 64 characters, or empty for no check
+     */
+    public Optional<String> checksum() {
+        return Optional.empty();
+    }
 }

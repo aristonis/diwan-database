@@ -1,7 +1,9 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Records which migrations ran and in which batch.
@@ -9,12 +11,15 @@ import java.util.Map;
  * <p>A batch groups the migrations of one run, so a rollback can undo the last run as a unit.
  * Batch numbers start at 1.
  *
- * <p>Methods added to this interface after version 0.1 are default methods, so implementations
- * outside this library keep compiling.
+ * <p>Methods added to this interface after version 0.1 are default methods, so an implementation
+ * written against an earlier version keeps compiling.
  *
  * @implNote Order among entries of the same batch follows the database's collation, so names that
  *     differ only in letter case may sort differently on different databases.
+ * @apiNote Internal: not an extension point; {@link Migrator} works with
+ *     {@link DatabaseMigrationRepository}; may change without notice.
  */
+@Internal
 public interface MigrationRepository {
 
     /**
@@ -64,12 +69,43 @@ public interface MigrationRepository {
      * @param name the migration name, never {@code null}; non-blank, at most 191 characters, without
      *     control characters
      * @param batch the batch number, at least 1
+     * @param checksum the checksum the migration declared, or {@code null} to record none, which
+     *     the migrator never checks
      * @throws NullPointerException if {@code name} is {@code null}
      * @throws IllegalArgumentException if the name is invalid or {@code batch} is below 1
      * @throws org.aristonis.diwan.database.UniqueConstraintViolationException if the name is
      *     already recorded
      */
-    void log(String name, int batch);
+    void log(String name, int batch, String checksum);
+
+    /**
+     * Returns the checksum recorded for every migration that ran.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}, so implementations
+     *     written before checksums existed keep compiling.
+     *
+     * @return an unmodifiable map from name to checksum, iterated in {@link #getRan()} order; the
+     *     value is empty for a migration that has none; never {@code null}
+     * @throws UnsupportedOperationException if the implementation does not keep checksums
+     */
+    default Map<String, Optional<String>> checksums() {
+        throw new UnsupportedOperationException("This repository does not keep checksums");
+    }
+
+    /**
+     * Replaces the checksum recorded for a migration.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}.
+     *
+     * @param name the migration name, never {@code null}; a name that is not recorded changes
+     *     nothing
+     * @param checksum the new checksum, never {@code null}; empty to clear it
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws UnsupportedOperationException if the implementation does not keep checksums
+     */
+    default void setChecksum(String name, Optional<String> checksum) {
+        throw new UnsupportedOperationException("This repository does not keep checksums");
+    }
 
     /**
      * Removes the record of a migration.

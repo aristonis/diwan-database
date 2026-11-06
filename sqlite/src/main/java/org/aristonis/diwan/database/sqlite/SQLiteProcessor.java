@@ -76,16 +76,11 @@ public class SQLiteProcessor extends Processor {
     /**
      * Returns whether a SQLite version has {@code returning} (3.35.0 or later), comparing each
      * part as a whole number; a version that cannot be read counts as older.
+     *
+     * @param version the version the database reports, may be {@code null}
+     * @return {@code true} if {@code returning} is available; see {@link SqliteVersion}
      */
     static boolean supportsReturning(String version) {
-        String[] parts = version == null ? new String[0] : version.trim().split("\\.");
-        try {
-            int major = Integer.parseInt(parts[0]);
-            int minor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
-            return major > RETURNING_MAJOR || (major == RETURNING_MAJOR && minor >= RETURNING_MINOR);
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-            // An unreadable version takes the rowid path, which every SQLite version supports.
-            return false;
-        }
+        return SqliteVersion.atLeast(version, RETURNING_MAJOR, RETURNING_MINOR, 0);
     }
 }

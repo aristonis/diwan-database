@@ -27,3 +27,11 @@
 | E14 | The database is not SQLite, PostgreSQL or MySQL | The table check is refused | `UpperCaseDriverTest#tableCheckIsRefusedOnDatabasesWithoutAKnownQuery` |
 | E15 | Work runs in pretend mode | Nothing reaches the database; reads are empty | `DatabaseMigrationRepositorySqliteTest#pretendModeReachesNoDatabase` |
 | E16 | Two processes migrate at the same time | Not handled yet | out of scope |
+| E17 | A migration that already ran is edited and its checksum changes | The run stops before anything runs; the message lists each migration with its recorded and current checksum and how to fix it | `MigrationChecksumTest#anEditedMigrationIsRefusedBeforeAnythingRunsAndTheMessageListsEveryOne` |
+| E18 | A migration declares no checksum | It never blocks, and its stored checksum is kept | `MigrationChecksumTest#aMigrationWithoutAChecksumNeverBlocks` |
+| E19 | A migration that ran without a checksum starts declaring one | The next run records it and checks it from then on | `MigrationChecksumTest#aMigrationThatStartsDeclaringAChecksumAdoptsItAndIsCheckedAfterwards` |
+| E20 | The same text is saved with Windows line endings or decomposed accents | The same checksum | `MigrationChecksumTest#sameTextWithDifferentLineEndingsHasTheSameChecksum`, `MigrationChecksumTest#composedAndDecomposedAccentsHaveTheSameChecksum` |
+| E21 | An edit was intended | `repairChecksums` accepts the current values; `clearChecksums` removes them | `MigrationChecksumTest#repairAcceptsTheCurrentChecksumsAndReportsHowManyChanged`, `MigrationChecksumTest#clearRemovesEveryChecksumAndTheNextRunAdoptsThemAgain` |
+| E22 | The table was created before checksums existed | A clear error with the one `alter table` statement; nothing is altered | `MigrationChecksumTest#aTableFromBeforeChecksumsFailsWithTheStatementToRun` |
+| E23 | Two instances migrate at once on PostgreSQL | Validation, repair and clear run under the migration lock | `PostgresMigrationChecksumTest#repairAndClearRunUnderTheLockAndTheLockIsFreeAfterwards` |
+| E24 | An Android app runs and validates a checksum | Same behavior through the Android driver | `AndroidMigrationChecksumTest#aRunRecordsTheChecksumAndAnEditedMigrationIsRefused` |

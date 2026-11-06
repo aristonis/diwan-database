@@ -130,6 +130,20 @@ class PostgresModelTest {
     }
 
     @Test
+    void lockForUpdateRendersAndNeedsATransaction() {
+        seed(2);
+
+        assertEquals("select * from \"accounts\" where \"votes\" = ? for update",
+                accounts.query().where("votes", 1).lockForUpdate().toSql());
+        assertEquals("select * from \"accounts\" for share", accounts.query().sharedLock().toSql());
+        assertThrows(IllegalStateException.class, () -> accounts.query().lockForUpdate().get());
+
+        int locked = db.connection().transaction(c ->
+                Account.QUERY.on(PostgresQuery.of(c)).query().lockForUpdate().get().size());
+        assertEquals(2, locked);
+    }
+
+    @Test
     void massAssignmentAndFinderFailures() {
         seed(2);
 

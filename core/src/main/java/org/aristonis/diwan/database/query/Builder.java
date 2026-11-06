@@ -105,6 +105,7 @@ public class Builder extends PageQueries {
         copy.unionOrders = new ArrayList<>(unionOrders);
         copy.unionLimit = unionLimit;
         copy.unionOffset = unionOffset;
+        copy.lock = lock;
         return copy;
     }
 

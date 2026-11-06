@@ -115,7 +115,7 @@ abstract class AggregateQueries extends ReadQueries {
      * and offset: {@code select count(*) as "aggregate" from (...) as "aggregate_table"}; a grouped
      * join that selects nothing selects its table's columns there. A query with unions is counted
      * whole, without the union's own orders, limit and offset; each part keeps its own. Any other
-     * query is counted without its columns, orders, limit and offset.
+     * query is counted without its columns, orders, limit and offset. The row lock is left out.
      *
      * <p>A {@link Builder#distinct()} query without unions is counted as a subquery too, like a
      * grouped one, so the total is the number of distinct rows. This departs from Laravel, which
@@ -154,7 +154,7 @@ abstract class AggregateQueries extends ReadQueries {
 
     private Builder countQueryForPagination() {
         if (!groups.isEmpty() || !havings.isEmpty() || (distinct && unions.isEmpty())) {
-            Builder inner = withoutPaging(self().clone());
+            Builder inner = withoutPaging(withoutLock());
             if (inner.columns.isEmpty() && !joins.isEmpty() && from != null) {
                 // Laravel appends ".*" to the whole from text; the alias, when there is one, is
                 // what the select can name. A distinct join needs it too: "select distinct *"
@@ -164,7 +164,7 @@ abstract class AggregateQueries extends ReadQueries {
             return newInstance().fromRaw("(" + inner.toSql() + ") as " + grammar.wrap("aggregate_table"),
                     inner.getBindings());
         }
-        Builder copy = self().clone();
+        Builder copy = withoutLock();
         if (!unions.isEmpty()) {
             copy.unionOrders.clear();
             copy.unionLimit = null;
@@ -200,14 +200,15 @@ abstract class AggregateQueries extends ReadQueries {
     }
 
     /**
-     * Runs an aggregate on a copy only, so the builder is untouched even when the query fails.
+     * Runs an aggregate on a copy only, so the builder is untouched even when the query fails. The
+     * copy has no row lock.
      * Laravel drops the columns and select bindings, and the orders when there are no groups. With
      * no havings or unions the limit and offset are dropped too, since Laravel's kept offset makes
      * {@code count()} on a later page return nothing. With havings or unions everything else is
      * kept: the query becomes a subquery, where the limit and offset apply before rows are counted.
      */
     private Optional<Object> aggregate(String function, String column) {
-        Builder copy = self().clone();
+        Builder copy = withoutLock();
         boolean isWrapped = !havings.isEmpty() || !unions.isEmpty();
         if (!isWrapped) {
             copy.columns.clear();

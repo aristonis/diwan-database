@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
@@ -113,6 +114,8 @@ public final class Migrator {
      *
      * @return one result per pending migration, in order; empty when nothing is pending
      * @throws IllegalStateException if a connection is inside a transaction
+     * @throws MigrationChecksumException if a migration that ran declares a different checksum than
+     *     the one recorded; nothing runs then
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.diwan.database.QueryException if reading or creating the migrations
      *     table fails
@@ -128,6 +131,8 @@ public final class Migrator {
      *     each can be rolled back alone
      * @return one result per pending migration, in order; empty when nothing is pending
      * @throws IllegalStateException if a connection is inside a transaction
+     * @throws MigrationChecksumException if a migration that ran declares a different checksum than
+     *     the one recorded; nothing runs then
      * @throws MigrationFailedException if a migration fails
      * @throws org.aristonis.diwan.database.QueryException if reading or creating the migrations
      *     table fails
@@ -140,7 +145,12 @@ public final class Migrator {
     private List<MigrationResult> runPending(boolean step) {
         if (!repository.repositoryExists()) {
             repository.createRepository();
+        } else {
+            repository.requireChecksumColumn();
         }
+        Map<String, Optional<String>> stored = repository.checksums();
+        MigrationChecksums.validate(stored, migrations);
+        MigrationChecksums.adopt(repository, stored, migrations);
         List<String> pending = pending(new HashSet<>(repository.getRan()));
         List<MigrationResult> results = new ArrayList<>();
         MigrationsEvent whole = notifier.whole(Direction.UP, false);
@@ -181,7 +191,10 @@ public final class Migrator {
      */
     public List<MigrationResult> rollback() {
         ensureNoOpenTransaction();
-        return locked(() -> rollBack(recorded(repository::getLast)));
+        return locked(() -> {
+            requireCurrentTable();
+            return rollBack(recorded(repository::getLast));
+        });
     }
 
     /**
@@ -201,7 +214,10 @@ public final class Migrator {
             throw new IllegalArgumentException("Steps must be at least 1");
         }
         ensureNoOpenTransaction();
-        return locked(() -> rollBack(recorded(() -> repository.getMigrations(steps))));
+        return locked(() -> {
+            requireCurrentTable();
+            return rollBack(recorded(() -> repository.getMigrations(steps)));
+        });
     }
 
     /**
@@ -217,7 +233,10 @@ public final class Migrator {
      */
     public List<MigrationResult> rollbackBatch(int batch) {
         ensureNoOpenTransaction();
-        return locked(() -> rollBack(recorded(() -> repository.getMigrationsByBatch(batch))));
+        return locked(() -> {
+            requireCurrentTable();
+            return rollBack(recorded(() -> repository.getMigrationsByBatch(batch)));
+        });
     }
 
     /**
@@ -232,7 +251,10 @@ public final class Migrator {
      */
     public List<MigrationResult> reset() {
         ensureNoOpenTransaction();
-        return locked(() -> rollBack(recorded(this::allNewestFirst)));
+        return locked(() -> {
+            requireCurrentTable();
+            return rollBack(recorded(this::allNewestFirst));
+        });
     }
 
     /**
@@ -240,9 +262,11 @@ public final class Migrator {
      *
      * @return the given migrations in name order, then entries of the migrations table that the
      *     migrator was not given; unmodifiable, never {@code null}
+     * @throws IllegalStateException if the migrations table exists without a {@code checksum} column
      * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
      */
     public List<MigrationStatus> status() {
+        requireCurrentTable();
         Map<String, Integer> batches = repository.repositoryExists()
                 ? repository.getMigrationBatches() : Collections.<String, Integer>emptyMap();
         List<MigrationStatus> statuses = new ArrayList<>();
@@ -270,13 +294,19 @@ public final class Migrator {
      * @return one result per pending migration, in order: {@link Outcome#PRETENDED} with its SQL,
      *     or {@link Outcome#SKIPPED}
      * @throws IllegalStateException if a connection is inside a transaction
+     * @throws MigrationChecksumException if a migration that ran declares a different checksum than
+     *     the one recorded
      * @throws MigrationFailedException if a migration throws while its SQL is collected
      * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> pretendRun() {
         ensureNoOpenTransaction();
-        Set<String> ran = repository.repositoryExists()
-                ? new HashSet<>(repository.getRan()) : Collections.<String>emptySet();
+        Set<String> ran = Collections.<String>emptySet();
+        if (repository.repositoryExists()) {
+            repository.requireChecksumColumn();
+            MigrationChecksums.validate(repository.checksums(), migrations);
+            ran = new HashSet<>(repository.getRan());
+        }
         List<MigrationResult> results = new ArrayList<>();
         List<String> pending = pending(ran);
         MigrationsEvent whole = notifier.whole(Direction.UP, true);
@@ -317,6 +347,14 @@ public final class Migrator {
         return pretendBack(recorded(this::allNewestFirst));
     }
 
+    // Fails with the upgrade guidance before a read can fail inside a PostgreSQL transaction that the
+    // error would leave aborted. A missing table is fine: nothing ran yet.
+    private void requireCurrentTable() {
+        if (repository.repositoryExists()) {
+            repository.requireChecksumColumn();
+        }
+    }
+
     private List<String> pending(Set<String> ran) {
         List<String> pending = new ArrayList<>();
         for (String name : byName.keySet()) {
@@ -338,9 +376,79 @@ public final class Migrator {
         return entries;
     }
 
-    private List<MigrationResult> locked(Supplier<List<MigrationResult>> work) {
+    /**
+     * Rewrites the recorded checksum of every migration that ran to the one it declares now.
+     *
+     * <p>Use it after an intended edit of a migration that already ran. Only migrations in the given
+     * list that ran and declare a checksum are touched; a migration that declares none keeps its
+     * recorded value. No migration event fires, and the call runs under the migration lock.
+     *
+     * @param migrations the migrations to repair, never {@code null}; usually {@link #migrations()}
+     * @return how many records were rewritten, 0 when the migrations table does not exist
+     * @throws NullPointerException if the list or an element is {@code null}
+     * @throws IllegalStateException if a connection is inside a transaction, or the migrations
+     *     table has no {@code checksum} column
+     * @throws org.aristonis.diwan.database.QueryException if reading or writing the migrations table
+     *     fails
+     */
+    public int repairChecksums(List<Migration> migrations) {
+        List<Migration> given = new ArrayList<>(Objects.requireNonNull(migrations, "migrations"));
+        for (Migration migration : given) {
+            MigrationNames.checkName(Objects.requireNonNull(migration, "migration").name());
+        }
+        ensureNoOpenTransaction();
+        return locked(() -> {
+            if (!repository.repositoryExists()) {
+                return 0;
+            }
+            repository.requireChecksumColumn();
+            Map<String, Optional<String>> stored = repository.checksums();
+            int changed = 0;
+            for (Migration migration : given) {
+                Optional<String> recorded = stored.get(migration.name());
+                Optional<String> current = MigrationChecksums.declared(migration);
+                if (recorded != null && current.isPresent() && !current.equals(recorded)) {
+                    repository.setChecksum(migration.name(), current);
+                    changed++;
+                }
+            }
+            return changed;
+        });
+    }
+
+    /**
+     * Removes every recorded checksum, so no migration is checked until the next run records or
+     * adopts one again.
+     *
+     * <p>No migration event fires, and the call runs under the migration lock.
+     *
+     * @return how many records held a checksum, 0 when the migrations table does not exist
+     * @throws IllegalStateException if a connection is inside a transaction, or the migrations
+     *     table has no {@code checksum} column
+     * @throws org.aristonis.diwan.database.QueryException if reading or writing the migrations table
+     *     fails
+     */
+    public int clearChecksums() {
+        ensureNoOpenTransaction();
+        return locked(() -> {
+            if (!repository.repositoryExists()) {
+                return 0;
+            }
+            repository.requireChecksumColumn();
+            int changed = 0;
+            for (Map.Entry<String, Optional<String>> entry : repository.checksums().entrySet()) {
+                if (entry.getValue().isPresent()) {
+                    repository.setChecksum(entry.getKey(), Optional.<String>empty());
+                    changed++;
+                }
+            }
+            return changed;
+        });
+    }
+
+    private <T> T locked(Supplier<T> work) {
         lock.acquire();
-        List<MigrationResult> results;
+        T results;
         try {
             results = work.get();
         } catch (RuntimeException | Error failure) {
@@ -429,7 +537,6 @@ public final class Migrator {
 
     /** Runs one migration and records it, undoing both together where the database allows. */
     private void apply(Migration migration, MigrationEvent event, List<MigrationResult> completed) {
-        String name = event.name();
         Direction direction = event.direction();
         Schema target = schemaFor(migration);
         boolean isRepositoryConnection = target.connection() == defaultSchema.connection();
@@ -441,7 +548,7 @@ public final class Migrator {
                     invoke(migration, direction, Schema.of(tx, target.grammar()));
                     if (isRepositoryConnection) {
                         record(new DatabaseMigrationRepository(Schema.of(tx, defaultSchema.grammar()), table),
-                                name, direction, event.batch());
+                                migration, direction, event.batch());
                     }
                     return null;
                 };
@@ -465,7 +572,7 @@ public final class Migrator {
         }
         if (!isRecordedInside) {
             try {
-                record(repository, name, direction, event.batch());
+                record(repository, migration, direction, event.batch());
             } catch (RuntimeException failure) {
                 throw failed(event, Phase.RECORD, completed, failure);
             }
@@ -502,11 +609,11 @@ public final class Migrator {
         }
     }
 
-    private static void record(MigrationRepository target, String name, Direction direction, int batch) {
+    private static void record(MigrationRepository target, Migration migration, Direction direction, int batch) {
         if (direction == Direction.UP) {
-            target.log(name, batch);
+            target.log(migration.name(), batch, MigrationChecksums.declared(migration).orElse(null));
         } else {
-            target.delete(name);
+            target.delete(migration.name());
         }
     }
 

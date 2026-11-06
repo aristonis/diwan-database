@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.LockStrength;
+import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.Test;
 
@@ -256,5 +258,26 @@ class PostgresQueryGrammarTest {
 
         assertEquals(10_000, grammar.eagerKeyChunkSize());
         assertEquals(50_000, grammar.inlineKeyChunkSize());
+    }
+
+    @Test
+    void everyLockStrengthAndWaitIsWrittenLast() {
+        assertEquals("select * from \"users\" order by \"id\" asc limit 2 offset 4 for update",
+                db().table("users").orderBy("id").limit(2).offset(4).lockForUpdate().toSql());
+        assertEquals("select * from \"users\" for share", db().table("users").sharedLock().toSql());
+        assertEquals("select * from \"users\" for no key update",
+                db().table("users").lock(LockStrength.NO_KEY_UPDATE).toSql());
+        assertEquals("select * from \"users\" for key share nowait",
+                db().table("users").lock(LockStrength.KEY_SHARE, LockWait.NOWAIT).toSql());
+        assertEquals("select * from \"users\" for update skip locked",
+                db().table("users").lock(LockStrength.UPDATE, LockWait.SKIP_LOCKED).toSql());
+    }
+
+    @Test
+    void aUnionWithALockIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> db().table("a").lockForUpdate().union(db().table("b")).toSql());
+        assertThrows(IllegalArgumentException.class,
+                () -> db().table("a").union(db().table("b").sharedLock()).toSql());
     }
 }

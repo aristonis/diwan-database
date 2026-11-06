@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.QueryException;
 import org.aristonis.diwan.database.UniqueConstraintViolationException;
@@ -68,10 +69,10 @@ class DatabaseMigrationRepositorySqliteTest {
     @Test
     void readsComeBackInLaravelsOrder() {
         repository.createRepository();
-        repository.log("2026_01_02_b", 2);
-        repository.log("2026_01_01_b", 1);
-        repository.log("2026_01_02_a", 2);
-        repository.log("2026_01_01_a", 1);
+        repository.log("2026_01_02_b", 2, null);
+        repository.log("2026_01_01_b", 1, null);
+        repository.log("2026_01_02_a", 2, null);
+        repository.log("2026_01_01_a", 1, null);
 
         assertEquals(Arrays.asList("2026_01_01_a", "2026_01_01_b", "2026_01_02_a", "2026_01_02_b"),
                 repository.getRan());
@@ -92,7 +93,7 @@ class DatabaseMigrationRepositorySqliteTest {
     @Test
     void returnedListsCannotBeChanged() {
         repository.createRepository();
-        repository.log("a", 1);
+        repository.log("a", 1, null);
 
         List<String> ran = repository.getRan();
         List<MigrationEntry> last = repository.getLast();
@@ -106,9 +107,9 @@ class DatabaseMigrationRepositorySqliteTest {
     @Test
     void loggingTwiceIsAUniqueViolationAndDeletingAnAbsentNameIsANoOp() {
         repository.createRepository();
-        repository.log("a", 1);
+        repository.log("a", 1, null);
 
-        assertThrows(UniqueConstraintViolationException.class, () -> repository.log("a", 2));
+        assertThrows(UniqueConstraintViolationException.class, () -> repository.log("a", 2, null));
 
         repository.delete("missing");
         repository.delete("a");
@@ -118,8 +119,8 @@ class DatabaseMigrationRepositorySqliteTest {
     @Test
     void refusesBadArgumentsBeforeTheDatabase() {
         assertThrows(IllegalArgumentException.class, () -> repository.getMigrations(0));
-        assertThrows(IllegalArgumentException.class, () -> repository.log(" ", 1));
-        assertThrows(IllegalArgumentException.class, () -> repository.log("a", 0));
+        assertThrows(IllegalArgumentException.class, () -> repository.log(" ", 1, null));
+        assertThrows(IllegalArgumentException.class, () -> repository.log("a", 0, null));
         assertThrows(NullPointerException.class, () -> repository.delete(null));
         assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository((org.aristonis.diwan.database.schema.Schema) null));
         assertThrows(NullPointerException.class, () -> new DatabaseMigrationRepository(SQLiteSchema.of(db), null));
@@ -142,13 +143,13 @@ class DatabaseMigrationRepositorySqliteTest {
     @Test
     void pretendModeReachesNoDatabase() {
         repository.createRepository();
-        repository.log("a", 1);
+        repository.log("a", 1, null);
 
         List<?> recorded = db.pretend(pretend -> {
             DatabaseMigrationRepository inPretend = new DatabaseMigrationRepository(SQLiteSchema.of(pretend));
             assertEquals(0, inPretend.getLastBatchNumber());
             assertFalse(inPretend.repositoryExists());
-            inPretend.log("b", 2);
+            inPretend.log("b", 2, null);
         });
 
         assertEquals(3, recorded.size());

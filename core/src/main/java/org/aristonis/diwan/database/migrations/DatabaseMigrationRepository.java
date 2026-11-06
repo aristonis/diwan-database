@@ -6,14 +6,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.QueryException;
 import org.aristonis.diwan.database.schema.Schema;
 
 /**
  * Keeps the migrations table through a {@link Schema} and its connection.
  *
  * <p>The table has Laravel's layout: an auto-increment {@code id}, a unique {@code migration}
- * name of up to 191 characters and a {@code batch} number. The schema builder creates, checks and
+ * name of up to 191 characters, a {@code batch} number and a nullable {@code checksum} of up to 64
+ * characters, last. The schema builder creates, checks and
  * drops it; reads and writes are plain SQL with every value sent as a binding, and only the checked
  * table name is part of the SQL text.
  *
@@ -107,17 +111,17 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
         if (steps < 1) {
             throw new IllegalArgumentException("Steps must be at least 1");
         }
-        return entries(connection.select(sql.latest(), steps));
+        return entries(guarded(() -> connection.select(sql.latest(), steps)));
     }
 
     @Override
     public List<MigrationEntry> getMigrationsByBatch(int batch) {
-        return entries(connection.select(sql.byBatch(), batch));
+        return entries(guarded(() -> connection.select(sql.byBatch(), batch)));
     }
 
     @Override
     public List<MigrationEntry> getLast() {
-        return entries(connection.select(sql.last()));
+        return entries(guarded(() -> connection.select(sql.last())));
     }
 
     @Override
@@ -129,10 +133,45 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
         return Collections.unmodifiableMap(batches);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws IllegalStateException if the table has no {@code checksum} column because it was
+     *     created before checksums existed; the message gives the one statement to run
+     */
     @Override
-    public void log(String name, int batch) {
-        MigrationEntry entry = new MigrationEntry(name, batch);
-        connection.insert(sql.log(), entry.name(), entry.batch());
+    public void log(String name, int batch, String checksum) {
+        MigrationEntry entry = new MigrationEntry(name, batch, Optional.ofNullable(checksum));
+        guarded(() -> connection.insert(sql.log(), entry.name(), entry.batch(), entry.checksum().orElse(null)));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @throws IllegalStateException if the table has no {@code checksum} column because it was
+     *     created before checksums existed; the message gives the one statement to run
+     */
+    @Override
+    public Map<String, Optional<String>> checksums() {
+        Map<String, Optional<String>> checksums = new LinkedHashMap<>();
+        for (Map<String, Object> row : guarded(() -> connection.select(sql.checksums()))) {
+            Object stored = column(row, 1);
+            checksums.put(text(column(row, 0)), Optional.ofNullable(stored == null ? null : stored.toString()));
+        }
+        return Collections.unmodifiableMap(checksums);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @throws IllegalStateException if the table has no {@code checksum} column because it was
+     *     created before checksums existed; the message gives the one statement to run
+     */
+    @Override
+    public void setChecksum(String name, Optional<String> checksum) {
+        Objects.requireNonNull(name, "name");
+        String value = Objects.requireNonNull(checksum, "checksum").orElse(null);
+        guarded(() -> connection.update(sql.setChecksum(), value, name));
     }
 
     @Override
@@ -156,6 +195,7 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
             table.id();
             table.string("migration", MigrationNames.MAX_NAME_LENGTH).unique();
             table.integer("batch");
+            table.string("checksum", MigrationChecksum.LENGTH).nullable();
         });
     }
 
@@ -176,10 +216,49 @@ public final class DatabaseMigrationRepository implements MigrationRepository {
         schema.drop(baseTable);
     }
 
+    /**
+     * Fails with the statement to run when the table was created before checksums existed.
+     *
+     * @throws IllegalStateException if the table exists without a {@code checksum} column
+     */
+    void requireChecksumColumn() {
+        if (!schema.hasColumn(baseTable, "checksum")) {
+            throw missingColumn(null);
+        }
+    }
+
+    // A failed statement may mean an old table; look only after a failure, so a healthy call costs
+    // nothing and pretend mode, where every catalog read is empty, is never misjudged.
+    private <T> T guarded(Supplier<T> statement) {
+        try {
+            return statement.get();
+        } catch (QueryException failure) {
+            boolean isMissing;
+            try {
+                isMissing = repositoryExists() && !schema.hasColumn(baseTable, "checksum");
+            } catch (RuntimeException probeFailure) {
+                failure.addSuppressed(probeFailure);
+                throw failure;
+            }
+            if (isMissing) {
+                throw missingColumn(failure);
+            }
+            throw failure;
+        }
+    }
+
+    private IllegalStateException missingColumn(Throwable cause) {
+        return new IllegalStateException("The migrations table " + sql.table() + " has no checksum column; it was "
+                + "created before checksums existed. Run once: alter table " + sql.table()
+                + " add column checksum varchar(" + MigrationChecksum.LENGTH + ")", cause);
+    }
+
     private static List<MigrationEntry> entries(List<Map<String, Object>> rows) {
         List<MigrationEntry> entries = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
-            entries.add(new MigrationEntry(text(column(row, 0)), intValue(column(row, 1))));
+            Object stored = column(row, 2);
+            entries.add(new MigrationEntry(text(column(row, 0)), intValue(column(row, 1)),
+                    Optional.ofNullable(stored == null ? null : stored.toString())));
         }
         return Collections.unmodifiableList(entries);
     }

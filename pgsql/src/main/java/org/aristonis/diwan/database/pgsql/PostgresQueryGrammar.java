@@ -10,7 +10,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.LockStrength;
+import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
+import org.aristonis.diwan.database.query.RowLock;
 import org.aristonis.diwan.database.query.Where;
 
 /**
@@ -172,6 +175,68 @@ public class PostgresQueryGrammar extends QueryGrammar {
     @Override
     public String compileInsertOrIgnoreUsing(Builder query, List<String> columns, String sql) {
         return compileInsertUsing(query, columns, sql) + " on conflict do nothing";
+    }
+
+    /**
+     * Compiles an insert of rows that skips a row breaking a unique or primary key constraint,
+     * with {@code on conflict do nothing}.
+     *
+     * @param query the query naming the target table, never {@code null}
+     * @param rows the rows, never {@code null} or empty
+     * @return {@code insert into "t" ("a") values (?) on conflict do nothing}, never {@code null}
+     */
+    @Override
+    protected String compileInsertOrIgnore(Builder query, List<? extends Map<String, ?>> rows) {
+        return compileInsert(query, rows).orElseThrow(IllegalStateException::new) + " on conflict do nothing";
+    }
+
+    /**
+     * Compiles an insert with {@code on conflict (unique columns) do update set}, or
+     * {@code do nothing} when there is nothing to set.
+     *
+     * @param query the query naming the target table, never {@code null}
+     * @param rows the rows, never {@code null} or empty
+     * @param uniqueBy the columns of the unique index, never {@code null} or empty
+     * @param excluded the columns to take from the refused row, never {@code null}
+     * @param values the columns to set to a given value, never {@code null}
+     * @return the SQL, never {@code null}
+     */
+    @Override
+    protected String compileUpsert(Builder query, List<? extends Map<String, ?>> rows, List<String> uniqueBy,
+            List<String> excluded, Map<String, ?> values) {
+        return compileInsert(query, rows).orElseThrow(IllegalStateException::new) + " "
+                + compileOnConflict(uniqueBy, excluded, values);
+    }
+
+    /**
+     * Compiles the row lock: {@code for update}, {@code for no key update}, {@code for share} or
+     * {@code for key share}, then {@code nowait} or {@code skip locked}.
+     *
+     * @param query the query, never {@code null}
+     * @param lock the lock, never {@code null}
+     * @return the SQL, such as {@code for update skip locked}, never {@code null}
+     * @throws IllegalArgumentException if the query has unions
+     */
+    @Override
+    protected String compileLock(Builder query, RowLock lock) {
+        checkLockable(query);
+        String strength = lock.strength() == LockStrength.UPDATE ? "for update"
+                : lock.strength() == LockStrength.NO_KEY_UPDATE ? "for no key update"
+                : lock.strength() == LockStrength.SHARE ? "for share" : "for key share";
+        if (lock.lockWait() == LockWait.NOWAIT) {
+            return strength + " nowait";
+        }
+        return lock.lockWait() == LockWait.SKIP_LOCKED ? strength + " skip locked" : strength;
+    }
+
+    /**
+     * Tells that a lock ends with its transaction.
+     *
+     * @return {@code true}
+     */
+    @Override
+    protected boolean locksNeedTransaction() {
+        return true;
     }
 
     /**

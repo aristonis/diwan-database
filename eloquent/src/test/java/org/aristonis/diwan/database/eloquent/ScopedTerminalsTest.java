@@ -54,13 +54,15 @@ class ScopedTerminalsTest {
 
     private static final Pattern ALLOWED_CALL = Pattern.compile("^\\.(?:where\\w*|orWhere\\w*|order\\w*|reorder|"
             + "select\\w*|addSelect|distinct|groupBy|having|join|leftJoin|limit|take|offset|skip|forPage|latest|"
-            + "oldest|inRandomOrder|getOrders|getUnionOrders|getWheres|getJoins|clone)\\b");
+            + "oldest|inRandomOrder|getOrders|getUnionOrders|getWheres|getJoins|clone|lockForUpdate|sharedLock|lock)\\b");
 
     /** Public methods that run no query of their own or only insert; named so a new one must be classified. */
     private static final Set<String> NOT_A_SCOPED_READ = new HashSet<>(Arrays.asList(
             "hydrate", "getModel", "getEagerLoads", "removedScopes",
             "make", "create", "forceCreate",
-            "createOrFirst", "createOrRestore"));
+            "createOrFirst", "createOrRestore",
+            // Writes that skip scopes, as in Laravel, where global scopes never apply to inserts.
+            "insertOrIgnore", "upsert"));
 
     private static final Set<String> INSPECTION = new HashSet<>(Arrays.asList("toBase", "toSql", "getBindings"));
 

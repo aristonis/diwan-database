@@ -33,8 +33,9 @@ import org.aristonis.diwan.database.values.Instants;
  * table's {@code rowid}, so on a {@code WITHOUT ROWID} table it fails the same way, with SQLite's
  * "no such column" error; telling such a table apart would need a schema read on every call.
  *
- * <p>Laravel's {@code compileLock} returns an empty string for SQLite; the core builder has no
- * lock clause, so there is nothing to override.
+ * <p>Laravel's {@code compileLock} returns an empty string for SQLite, and so does the base grammar
+ * here for {@code lockForUpdate} and {@code sharedLock}, so nothing is overridden. A lock strength
+ * or wait only PostgreSQL has is refused with {@code UnsupportedOperationException}.
  *
  * <p>Instances are immutable and safe to share between threads.
  */
@@ -46,6 +47,8 @@ public class SQLiteQueryGrammar extends QueryGrammar {
             "&", "|", "<<", ">>")));
     private static final Pattern ALIAS = Pattern.compile("\\s+as\\s+", Pattern.CASE_INSENSITIVE);
     private static final String ROWID = "rowid";
+    private static final int UPSERT_MAJOR = 3;
+    private static final int UPSERT_MINOR = 24;
 
     /** Bound eager keys per query: under the 999 bindings of SQLite before 3.32, as on Android 9. */
     private static final int EAGER_KEY_CHUNK_SIZE = 900;
@@ -254,6 +257,58 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     @Override
     public String compileInsertOrIgnoreUsing(Builder query, List<String> columns, String sql) {
         return "insert or ignore" + compileInsertUsing(query, columns, sql).substring("insert".length());
+    }
+
+    /**
+     * Compiles an insert of rows that skips a row breaking a unique or primary key constraint,
+     * with SQLite's {@code insert or ignore}. SQLite also skips a row that fails a {@code not null}
+     * or {@code check} constraint.
+     *
+     * @param query the query naming the target table, never {@code null}
+     * @param rows the rows, never {@code null} or empty
+     * @return {@code insert or ignore into "t" ("a") values (?)}, never {@code null}
+     */
+    @Override
+    protected String compileInsertOrIgnore(Builder query, List<? extends Map<String, ?>> rows) {
+        return "insert or ignore" + compileInsert(query, rows).orElseThrow(IllegalStateException::new)
+                .substring("insert".length());
+    }
+
+    /**
+     * Compiles an insert with {@code on conflict (unique columns) do update set}, or
+     * {@code do nothing} when there is nothing to set.
+     *
+     * @param query the query naming the target table, never {@code null}
+     * @param rows the rows, never {@code null} or empty
+     * @param uniqueBy the columns of the unique index, never {@code null} or empty
+     * @param excluded the columns to take from the refused row, never {@code null}
+     * @param values the columns to set to a given value, never {@code null}
+     * @return the SQL, never {@code null}
+     */
+    @Override
+    protected String compileUpsert(Builder query, List<? extends Map<String, ?>> rows, List<String> uniqueBy,
+            List<String> excluded, Map<String, ?> values) {
+        return compileInsert(query, rows).orElseThrow(IllegalStateException::new) + " "
+                + compileOnConflict(uniqueBy, excluded, values);
+    }
+
+    /**
+     * Refuses an upsert on a SQLite older than 3.24, which has no {@code on conflict do update}.
+     * Android before API 30 ships such a SQLite. A version that cannot be read is refused with its own message.
+     *
+     * @param databaseVersion the version the driver reports, never {@code null}
+     * @throws UnsupportedOperationException if the version is older than 3.24 or unreadable
+     */
+    @Override
+    protected void checkUpsert(String databaseVersion) {
+        if (!SqliteVersion.isReadable(databaseVersion)) {
+            throw new UnsupportedOperationException("Cannot read the SQLite version '" + databaseVersion
+                    + "'; upsert needs SQLite 3.24 or later");
+        }
+        if (!SqliteVersion.atLeast(databaseVersion, UPSERT_MAJOR, UPSERT_MINOR, 0)) {
+            throw new UnsupportedOperationException("Upsert needs SQLite 3.24 or later (Android API 30+); "
+                    + "this database is " + databaseVersion);
+        }
     }
 
     /**

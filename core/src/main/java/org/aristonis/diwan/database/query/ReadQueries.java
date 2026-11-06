@@ -119,7 +119,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
      */
     public final boolean exists() {
-        List<Map<String, Object>> rows = connection.select(grammar.compileExists(self()),
+        List<Map<String, Object>> rows = connection.select(grammar.compileExists(withoutLock()),
                 grammar.prepareBindings(getBindings()));
         if (rows.isEmpty()) {
             return false;
@@ -138,7 +138,20 @@ abstract class ReadQueries extends SubqueryClauses {
         return !exists();
     }
 
+    /**
+     * Refuses a row lock outside a transaction on a database where the lock ends with the
+     * statement. Not tied to the connection's strict transactions flag: such a lock never holds
+     * anything.
+     */
+    final void checkLockTransaction() {
+        if (lock != null && grammar.locksNeedTransaction() && connection.transactionLevel() == 0) {
+            throw new IllegalStateException(
+                    "A row lock outside a transaction is released at once; run the query inside transaction(...)");
+        }
+    }
+
     private List<Map<String, Object>> runSelect() {
+        checkLockTransaction();
         return connection.select(toSql(), grammar.prepareBindings(getBindings()));
     }
 

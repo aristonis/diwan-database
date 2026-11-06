@@ -23,16 +23,16 @@ final class MigrationTableSql {
     }
 
     String latest() {
-        return "select migration, batch from " + table
+        return "select migration, batch, checksum from " + table
                 + " where batch >= 1 order by batch desc, migration desc limit ?";
     }
 
     String byBatch() {
-        return "select migration, batch from " + table + " where batch = ? order by migration desc";
+        return "select migration, batch, checksum from " + table + " where batch = ? order by migration desc";
     }
 
     String last() {
-        return "select migration, batch from " + table + " where batch = (select max(batch) from " + table
+        return "select migration, batch, checksum from " + table + " where batch = (select max(batch) from " + table
                 + ") order by migration desc";
     }
 
@@ -41,7 +41,15 @@ final class MigrationTableSql {
     }
 
     String log() {
-        return "insert into " + table + " (migration, batch) values (?, ?)";
+        return "insert into " + table + " (migration, batch, checksum) values (?, ?, ?)";
+    }
+
+    String checksums() {
+        return "select migration, checksum from " + table + " order by batch asc, migration asc";
+    }
+
+    String setChecksum() {
+        return "update " + table + " set checksum = ? where migration = ?";
     }
 
     String delete() {

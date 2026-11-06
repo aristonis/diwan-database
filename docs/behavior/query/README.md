@@ -39,7 +39,7 @@ List<Object> names = query.table("customers")
 | Use a subquery | `fromSub`, `selectSub`, `whereIn` or `whereExists` with a query, `whereRowValues`, `orderBy` a query |
 | Read | `get`, `first`, `find`, `value`, `pluck`, `exists`, `doesntExist` |
 | Count and sum | `count`, `min`, `max`, `sum`, `avg` |
-| Write | `insert`, `insertGetId`, `insertUsing`, `insertOrIgnoreUsing`, `update`, `increment`, `decrement`, `delete`, `truncate` |
+| Write | `insert`, `insertGetId`, `insertUsing`, `insertOrIgnore`, `insertOrIgnoreUsing`, `upsert`, `updateOrInsert`, `update`, `increment`, `decrement`, `delete`, `truncate` |
 | Read in batches or stream | `chunk`, `each`, `chunkMap`, `chunkById`, `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`, `cursor` |
 | Page a list | `paginate`, `simplePaginate`, `cursorPaginate`, `getCountForPagination` |
 | See the SQL | `toSql`, `getBindings`, `toRawSql` |
@@ -47,11 +47,86 @@ List<Object> names = query.table("customers")
 
 An `Instant` is stored as `Blueprint.instant` stores it on each database.
 
+## Insert or ignore, upsert and update-or-insert
+
+```java
+db.table("users").insertOrIgnore(rows);                       // skips rows that break a unique key
+db.table("users").upsert(rows, List.of("email"));              // updates every column of the first row
+db.table("users").upsert(rows, List.of("email"), List.of("name"));
+db.table("users").upsert(rows, List.of("email"), Map.of("votes", Expression.raw("users.votes + 1")));
+db.table("users").updateOrInsert(Map.of("email", "a@x"), Map.of("name", "A"));
+```
+
+- `insertOrIgnore` writes `insert or ignore` on SQLite and `on conflict do nothing` on PostgreSQL,
+  and returns the number of rows inserted. No rows runs nothing and returns 0.
+- `upsert` writes `insert ... on conflict ("email") do update set "name" = "excluded"."name"`. The
+  second list names the unique columns; the database needs a unique index on exactly those, or it
+  refuses the statement with a `QueryException`. The third argument is a list of columns to take
+  from the refused row (none given: every column of the first row), or a map of column to value;
+  map values are bound after the row values, and an `Expression` is written as given.
+- The checks run in this order: no unique columns is an `IllegalArgumentException`; no rows
+  returns 0 without SQL; a row with no columns, or rows with different columns, is an
+  `IllegalArgumentException`.
+- `updateOrInsert(attributes, values)` looks for a row matching the attributes. If there is none it
+  inserts the attributes merged with the values; if there is one it updates it (`limit 1`) and
+  returns whether a row changed. With no values it only checks and returns `true`.
+- The base grammar refuses all three with `UnsupportedOperationException`; SQLite and PostgreSQL
+  implement them.
+
+## Row locks
+
+```java
+db.transaction(c -> {
+    var rows = PostgresQuery.of(c).table("accounts").where("id", 1).lockForUpdate().get();
+    var next = PostgresQuery.of(c).table("jobs").lock(LockStrength.UPDATE, LockWait.SKIP_LOCKED).limit(10).get();
+    return null;
+});
+```
+
+- `lockForUpdate()` and `sharedLock()` are `lock(LockStrength.UPDATE)` and
+  `lock(LockStrength.SHARE)`. `lock(strength, wait)` adds `LockWait.NOWAIT` or
+  `LockWait.SKIP_LOCKED`. The strengths are `UPDATE`, `NO_KEY_UPDATE`, `SHARE` and `KEY_SHARE`.
+  The last lock set wins, and `clone` keeps it.
+- PostgreSQL writes `for update`, `for no key update`, `for share` or `for key share`, then
+  `nowait` or `skip locked`, last in the select, after the offset.
+- SQLite has no row locks: `lockForUpdate`, `sharedLock` and the plain `UPDATE` and `SHARE` locks
+  write nothing. `NO_KEY_UPDATE`, `KEY_SHARE`, `NOWAIT` and `SKIP_LOCKED` are refused with
+  `UnsupportedOperationException`, so code written for PostgreSQL does not silently lose them.
+- A locked select on PostgreSQL outside a transaction throws `IllegalStateException`, because the
+  lock would be released as soon as the statement ends. This does not depend on the connection's
+  strict transactions flag. Run the query on the connection a `transaction(...)` callback gives.
+- `count`, `sum` and the other aggregates, `exists` and the count that `paginate` makes leave the
+  lock out, as PostgreSQL refuses `for update` there. The page's own select keeps it.
+- A union with a lock on the query or on any part is an `IllegalArgumentException`.
+- A model query forwards all four: `lockForUpdate()`, `sharedLock()`, `lock(strength)` and
+  `lock(strength, wait)`.
+
 ## Limits
 
 - A right join needs SQLite 3.39 or later. Older SQLite, including Android 9 to 13, reports its
   own error as a `QueryException`.
+- `upsert` needs SQLite 3.24 or later, which is Android API 30 and up. Older SQLite, as on
+  Android 9, is refused with an `UnsupportedOperationException` that names the version, before any
+  SQL runs; a version that cannot be read is refused with its own message ("Cannot read the SQLite
+  version ..."). `insertOrIgnore` works on every version.
+- `updateOrInsert` is not atomic: it reads, then writes. Two callers can both find no row and both
+  insert. Use `upsert` on a unique index when that matters: it is one atomic statement.
+- `insertOrIgnore` and `upsert` send every row in one statement and never split it. Each value is
+  a binding, so rows times columns must stay under the driver's limit: 999 on SQLite before 3.32,
+  32766 on SQLite 3.32 and later, 65535 on PostgreSQL. Past it the database refuses the
+  statement. Chunk the rows yourself, inside a transaction when the chunks must succeed together.
+- An `upsert` batch that holds two rows with the same unique key differs by database. SQLite
+  applies the rows in order, so the last one wins. PostgreSQL refuses the statement ("ON CONFLICT
+  DO UPDATE command cannot affect row a second time"). Remove duplicate keys from the batch first.
+- An `upsert` with an empty update list or map leaves a conflicting row as it is
+  (`on conflict ... do nothing`). Laravel runs a plain insert there, which fails on the conflict.
+- On SQLite `insertOrIgnore` also skips a row that fails a `not null` or `check` constraint, not
+  only a unique one.
 - An update or delete with a join on a SQLite `without rowid` table fails with SQLite's error.
+- Row locks take the two enums only. Laravel's raw string lock (`lock('lock in share mode')`) is
+  not available, and there is no `for update of table`. SQLite ignores the plain locks, so a
+  program that relies on them for mutual exclusion is only safe on PostgreSQL. On PostgreSQL a
+  lock needs a transaction.
 - Neither database lets a whole union be ordered by a subquery.
 - A write needs a table: insert, update, delete and truncate are refused on a query that reads
   from a subquery or raw SQL.

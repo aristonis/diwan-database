@@ -88,7 +88,9 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
         if (query.getAggregate().isPresent() && (!query.getHavings().isEmpty() || !query.unions.isEmpty())) {
             return compileUnionAggregate(query);
         }
-        List<Object> columns = query.getColumns().isEmpty() ? Collections.<Object>singletonList("*") : query.getColumns();
+        List<Object> columns = query.getColumns().isEmpty()
+                ? Collections.<Object>singletonList("*")
+                : query.getColumns();
         String sql = concatenate(compileComponents(query, columns)).trim();
         return query.unions.isEmpty() ? sql : wrapUnion(sql) + " " + compileUnions(query);
     }
@@ -120,6 +122,7 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
         sql.add(compileOrders(query, query.getOrders()));
         query.getLimit().ifPresent(limit -> sql.add(compileLimit(query, limit)));
         query.getOffset().ifPresent(offset -> sql.add(compileOffset(query, offset)));
+        query.getLock().ifPresent(lock -> sql.add(compileLock(query, lock)));
         return sql;
     }
 

@@ -39,8 +39,9 @@ Repository
   `steps` below 1 is refused.
 - `getMigrationsByBatch(batch)` and `getLast()` return one batch, by name descending.
 - `getMigrationBatches()` returns name to batch in `getRan()` order.
-- `log(name, batch)` records a migration; a second `log` of the same name fails with
-  `UniqueConstraintViolationException`. `delete(name)` removes it; an absent name changes nothing.
+- `log(name, batch, checksum)` records a migration, with a `null` checksum for none; a second `log`
+  of the same name fails with `UniqueConstraintViolationException`. `delete(name)` removes it; an
+  absent name changes nothing.
 - `getLastBatchNumber()` is 0 on an empty table; `getNextBatchNumber()` is one more.
 - Returned lists and maps cannot be modified.
 

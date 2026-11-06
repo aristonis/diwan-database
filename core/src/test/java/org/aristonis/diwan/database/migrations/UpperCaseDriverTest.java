@@ -95,6 +95,7 @@ class UpperCaseDriverTest {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("MIGRATION", name);
         row.put("BATCH", batch);
+        row.put("CHECKSUM", null);
         return row;
     }
 

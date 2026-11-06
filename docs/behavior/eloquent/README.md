@@ -38,6 +38,7 @@ found.delete();
 | Reload or copy | `refresh`, `fresh`, `replicate`, `is`, `isNot` |
 | Find | `find`, `findMany`, `findOrFail`, `first`, `firstOrFail`, `sole`, `firstWhere`, `value`, `all` |
 | Find or make | `firstOrNew`, `firstOrCreate`, `updateOrCreate`, `create`, `forceCreate` |
+| Write many rows at once | `upsert`, `insertOrIgnore` on the model query; see [bulk upsert](#bulk-upsert-and-insert-or-ignore) |
 | Read many | `get`, `chunk`, `chunkById`, `each`, `lazy`, `lazyById`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` |
 | Reach the query builder | `query(Consumer<Builder>)`, `toBase()` |
 | Declare relations | override `relations()` with `RelationMap`; `hasOne`, `hasMany`, `belongsTo` in typed methods |
@@ -269,6 +270,24 @@ owner object in memory keeps its old `updated_at`.
 `chaperone()` sets the parent on every child the relation returns or writes, as the same instance
 and with no query. Without a name it guesses: the foreign key without its key suffix, the parent's
 foreign key, the parent class name, `owner`, then `parent` for a self relation.
+
+## Bulk upsert and insert or ignore
+
+`Member.QUERY.on(db).query().upsert(rows, List.of("email"))` and `insertOrIgnore(rows)` go straight
+to the database, as in Laravel: no model events run and no casts apply. Before the write the
+builder:
+
+- adds a new unique id (UUID or ULID) to each row that lacks the key, for a model that generates
+  them;
+- adds `created_at` and `updated_at` to each row when the model keeps timestamps, one moment for
+  all rows; a row that names the column keeps its own value;
+- for `upsert`, adds `updated_at` to the columns that are updated, never `created_at`. With no
+  update list the columns are those of the first row as given. An empty update list leaves a
+  conflicting row as it is, `updated_at` too.
+
+The database rules are the query builder's: `upsert` needs a unique index on the given columns and
+SQLite 3.24 or later (Android API 30+). See the
+[query builder](../query/README.md#insert-or-ignore-upsert-and-update-or-insert).
 
 ## Limits
 
