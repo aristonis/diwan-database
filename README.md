@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Java-17%2B-orange" alt="Java 17+">
   <img src="https://img.shields.io/badge/Android-API%2028%2B-3DDC84" alt="Android API 28+">
-  <a href="https://docs.aristonis.org/diwan-database/"><img src="https://img.shields.io/badge/docs-site-indigo" alt="Docs"></a>
+  <a href="https://aristonis.org/open-source/diwan-database/docs/main/home"><img src="https://img.shields.io/badge/docs-site-indigo" alt="Docs"></a>
 </p>
 
 # Diwan Database
@@ -109,19 +109,19 @@ its connection.
 
 ## Documentation
 
-The guides live at <https://docs.aristonis.org/diwan-database/>.
+The guides live at <https://aristonis.org/open-source/diwan-database/docs/main/home>.
 
 | Guide | Covers |
 |---|---|
-| [Connections](https://docs.aristonis.org/diwan-database/connections/) | Running SQL, transactions, pretend mode, the manager. |
-| [Query builder](https://docs.aristonis.org/diwan-database/query-builder/) | Reads, writes, joins, pagination, cursors. |
-| [Schema](https://docs.aristonis.org/diwan-database/schema/) | Tables, columns, indexes, checks, `change()`. |
-| [Migrations](https://docs.aristonis.org/diwan-database/migrations/) | The migrator, rollback, status, locks. |
-| [Models](https://docs.aristonis.org/diwan-database/models/) | Casts, accessors, events, scopes. |
-| [Relations](https://docs.aristonis.org/diwan-database/relations/) | Has-many, many-to-many, morph, eager loading. |
-| [Android](https://docs.aristonis.org/diwan-database/android/) | The driver, R8, thread rules. |
-| [Differences from Laravel](https://docs.aristonis.org/diwan-database/differences/) | Where Diwan chooses differently. |
-| [Errors](https://docs.aristonis.org/diwan-database/errors/) | Exception types and how to handle them. |
+| [Connections](https://aristonis.org/open-source/diwan-database/docs/main/connections-and-transactions) | Running SQL, transactions, pretend mode, the manager. |
+| [Query builder](https://aristonis.org/open-source/diwan-database/docs/main/query-builder) | Reads, writes, joins, pagination, cursors. |
+| [Schema](https://aristonis.org/open-source/diwan-database/docs/main/schema-builder) | Tables, columns, indexes, checks, `change()`. |
+| [Migrations](https://aristonis.org/open-source/diwan-database/docs/main/migrations) | The migrator, rollback, status, locks. |
+| [Models](https://aristonis.org/open-source/diwan-database/docs/main/models) | Casts, accessors, events, scopes. |
+| [Relations](https://aristonis.org/open-source/diwan-database/docs/main/relations) | Has-many, many-to-many, morph, eager loading. |
+| [Android](https://aristonis.org/open-source/diwan-database/docs/main/android) | The driver, R8, thread rules. |
+| [Differences from Laravel](https://aristonis.org/open-source/diwan-database/docs/main/differences-from-laravel) | Where Diwan chooses differently. |
+| [Errors](https://aristonis.org/open-source/diwan-database/docs/main/errors-and-exceptions) | Exception types and how to handle them. |
 
 In this repository, `docs/` holds the living behavior pages, the requirements, the design and the
 decision records:
@@ -138,7 +138,7 @@ decision records:
 The [`ai/`](ai/README.md) folder has an `AGENTS.md` rules file and one skill per task (usage, query
 builder, migrations, models and relations, Android, reporting an issue). Copy them into your
 project so an agent writes correct Diwan code. The same material is at
-<https://docs.aristonis.org/diwan-database/ai/index/>.
+<https://aristonis.org/open-source/diwan-database/docs/main/overview>.
 
 ## Security
 
@@ -147,6 +147,7 @@ Report a vulnerability privately through [GitHub private vulnerability reporting
 ## Project
 
 - [Changelog](CHANGELOG.md) and [releases](https://github.com/aristonis/diwan-database/releases)
+- [Roadmap](ROADMAP.md): what is planned next
 - License: MIT, see [LICENSE](LICENSE).
 - Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md). Build and test with `./gradlew check`; Javadoc and docs follow the
   [documentation standard](docs/documentation-standard.md).

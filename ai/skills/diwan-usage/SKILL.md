@@ -46,4 +46,4 @@ long orderId = db.transaction(tx -> {
 - `TransactionScope` from `db.beginTransaction()` rolls back on close unless `commit()` ran.
 - Errors are unchecked and the message hides binding values. Do not log bindings with personal data.
 
-Docs: Getting started and Connections and transactions on https://docs.aristonis.org/diwan-database/
+Docs: Getting started and Connections and transactions on https://aristonis.org/open-source/diwan-database/docs/main/home

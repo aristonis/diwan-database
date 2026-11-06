@@ -54,4 +54,4 @@ gh issue create --repo aristonis/diwan-database \
 - A report about the docs or a skill goes to aristonis/diwan-database-docs or the skills folder issues.
 - The repository URL works once the project is public.
 
-Docs: Report an issue on https://docs.aristonis.org/diwan-database/
+Docs: Report an issue on https://aristonis.org/open-source/diwan-database/docs/main/home

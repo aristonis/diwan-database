@@ -50,4 +50,4 @@ ModelCollection<Post> list = posts.with("author").get();
 - `casts()` and `accessors()` are read once per class and must not use instance state.
 - Model `upsert` and `insertOrIgnore` skip events and casts. `upsert` needs SQLite 3.24.
 
-Docs: Models and Relations on https://docs.aristonis.org/diwan-database/
+Docs: Models and Relations on https://aristonis.org/open-source/diwan-database/docs/main/home

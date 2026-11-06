@@ -33,5 +33,5 @@ cp -r ai/skills/* .claude/skills/
 Other agents that support the Agent Skills format read the same folders from their own skills
 directory. Each skill is one folder with one `SKILL.md`.
 
-The guides at https://docs.aristonis.org/diwan-database/ stay the source of truth. If a skill and a
+The guides at https://aristonis.org/open-source/diwan-database/docs/main/home stay the source of truth. If a skill and a
 guide disagree, trust the guide and report the difference through the `diwan-report-issue` skill.

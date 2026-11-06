@@ -51,4 +51,4 @@ migrator.run();
 - On several processes, plug in a lock: `.lock(new PostgresMigrationLock(dataSource))`.
 - Rollback with a recorded migration missing from your list throws `MissingMigrationsException`.
 
-Docs: Schema and Migrations on https://docs.aristonis.org/diwan-database/
+Docs: Schema and Migrations on https://aristonis.org/open-source/diwan-database/docs/main/home

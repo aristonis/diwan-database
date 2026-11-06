@@ -52,4 +52,4 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
 - Batched `insert`, `upsert` and `insertOrIgnore` must stay under the binding limit (999 on SQLite
   before 3.32, 32766 after, 65535 on PostgreSQL).
 
-Docs: Query builder on https://docs.aristonis.org/diwan-database/
+Docs: Query builder on https://aristonis.org/open-source/diwan-database/docs/main/home

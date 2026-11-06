@@ -43,6 +43,10 @@ Always:
   names in R8.
 - Use the `tx` connection inside `db.transaction(tx -> ...)`.
 - Keep an Android transaction, and a cursor, on the thread that opened it.
+- Import exceptions from `org.aristonis.diwan.database.exception` and
+  `org.aristonis.diwan.database.eloquent.exception`. `DatabaseException` is the parent of every
+  database, driver, migration and model failure. Never import from an `internal` package: those
+  classes are `@Internal`, not exported from the Java module, and may change in any release.
 
 Never:
 
@@ -58,7 +62,7 @@ Never:
 
 ## Docs
 
-- Guides: https://docs.aristonis.org/diwan-database/ (getting started, connections, query builder,
+- Guides: https://aristonis.org/open-source/diwan-database/docs/main/home (getting started, connections, query builder,
   schema, migrations, models, relations, Android, errors, API).
 - Source and issues: https://github.com/aristonis/diwan-database (public once released).
 - Skills: the `skills/` folder next to this file.

@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/aristonis/diwan-database/security/advisories/new
     about: Report vulnerabilities privately, never as a public issue.
   - name: Documentation
-    url: https://docs.aristonis.org/diwan-database/
+    url: https://aristonis.org/open-source/diwan-database/docs/main/home
     about: Guides and the API reference.

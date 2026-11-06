@@ -50,4 +50,4 @@ QueryFactory db = manager.query();
 - `decimal` reads as a double. Store money as integer minor units.
 - Foreign keys are off on Android until you enable them.
 
-Docs: Android on https://docs.aristonis.org/diwan-database/
+Docs: Android on https://aristonis.org/open-source/diwan-database/docs/main/home
