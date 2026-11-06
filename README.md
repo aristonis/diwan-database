@@ -48,15 +48,22 @@ Not yet published. Build it locally with `./gradlew check`.
 ## Quick start
 
 ```java
-Connection db = Connection.builder().name("main").dataSource(dataSource).build();
+// Configuration names the driver, so this code never imports a SQLite or PostgreSQL class.
+DatabaseManager manager = DatabaseManager.builder()
+        .config(DatabaseConfig.from(MapConfigSource.of(Map.of(
+                "database.default", "main",
+                "database.connections.main.driver", "sqlite",
+                "database.connections.main.database", "app.db"))))
+        .connector(new SQLiteConnector())
+        .build();
 
 // Migration: run what is pending, one transaction per migration.
-Migrator.builder(SQLiteSchema.of(db)).add(new CreateUsersTable()).build().run();
+manager.migrator("main").add(new CreateUsersTable()).build().run();
 
 // Query builder, with Laravel's method names.
-QueryFactory query = SQLiteQuery.of(db);
-query.table("users").insert(Map.of("email", "ada@example.com"));
-List<Map<String, Object>> rows = query.table("users")
+QueryFactory db = manager.query();
+db.table("users").insert(Map.of("email", "ada@example.com"));
+List<Map<String, Object>> rows = db.table("users")
         .where("email", "like", "%@example.com")
         .orderByDesc("id")
         .get();
@@ -70,8 +77,13 @@ public final class User extends Model {
         return List.of("name", "email");
     }
 }
-User ada = User.query.create(Map.of("name", "Ada", "email", "ada@example.com"));
+User ada = User.query.on(db).create(Map.of("name", "Ada", "email", "ada@example.com"));
 ```
+
+Switching to PostgreSQL changes the `driver` and adds a host in the configuration, and registers
+`PostgresConnector`. Nothing else changes. Without a manager, build a `Connection` and take the
+factories from the grammar module: `SQLiteQuery.of(connection)`, `SQLiteSchema.of(connection)`,
+`PostgresQuery.of(connection)`, `PostgresSchema.of(connection)`.
 
 Inside a transaction, pass the connection you were handed (`tx`) to everything the work calls. The
 outer connection refuses calls from inside its own transaction, because they would run outside it.
@@ -111,9 +123,17 @@ builder, migrations, models and relations, Android, reporting an issue). Copy th
 project so an agent writes correct Diwan code. The same material is at
 <https://docs.aristonis.org/diwan-database/ai/index/>.
 
+## Security
+
+Report a vulnerability privately through [GitHub private vulnerability reporting](https://github.com/aristonis/diwan-database/security/advisories/new), never as a public issue. See [SECURITY.md](SECURITY.md).
+
 ## Project
 
 - [Changelog](CHANGELOG.md)
 - License: MIT, see [LICENSE](LICENSE).
 - Contributing: build and test with `./gradlew check`; Javadoc and docs follow the
   [documentation standard](docs/documentation-standard.md).
+
+## Notes
+
+AI AGENT (claude) help to build this and write code

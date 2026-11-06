@@ -5,6 +5,12 @@ description: Prepare and file a bug report against Diwan Database. Use when a Di
 
 # Report a Diwan issue
 
+## Security problems
+
+If the problem is a vulnerability (injection, data exposure, a bypass of a check), do not file a
+public issue and never run `gh issue create`. Tell the user to report it privately at
+https://github.com/aristonis/diwan-database/security/advisories/new and stop.
+
 ## Steps
 
 1. Reduce the failure to the smallest code that still fails, on an empty database.

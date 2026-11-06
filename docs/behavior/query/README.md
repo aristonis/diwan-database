@@ -76,12 +76,14 @@ db.table("users").updateOrInsert(Map.of("email", "a@x"), Map.of("name", "A"));
 ## Row locks
 
 ```java
-db.transaction(c -> {
-    var rows = PostgresQuery.of(c).table("accounts").where("id", 1).lockForUpdate().get();
-    var next = PostgresQuery.of(c).table("jobs").lock(LockStrength.UPDATE, LockWait.SKIP_LOCKED).limit(10).get();
+connection.transaction(c -> {
+    var rows = query.on(c).table("accounts").where("id", 1).lockForUpdate().get();
+    var next = query.on(c).table("jobs").lock(LockStrength.UPDATE, LockWait.SKIP_LOCKED).limit(10).get();
     return null;
 });
 ```
+
+Inside a transaction, `query.on(c)` returns the factory bound to the transaction's connection; another kind of database is refused with `IllegalArgumentException`.
 
 - `lockForUpdate()` and `sharedLock()` are `lock(LockStrength.UPDATE)` and
   `lock(LockStrength.SHARE)`. `lock(strength, wait)` adds `LockWait.NOWAIT` or

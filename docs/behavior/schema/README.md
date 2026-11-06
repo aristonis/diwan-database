@@ -69,5 +69,6 @@ schema.dropIfExists("people");
   call if you like.
 - `pretend` on the schema reads the live tables, so a rebuild lists its real statements; a table
   made earlier in the same pretend run does not exist yet for it.
+- `schema.on(connection)` returns the schema builder bound to another connection of the same database, such as a transaction's; another kind of database is refused with `IllegalArgumentException`.
 
 See [user stories](user-stories.md) and [user scenarios](user-scenarios.md).

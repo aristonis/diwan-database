@@ -11,19 +11,24 @@ description: Run Diwan Database on Android (API 28 and later) over SQLiteDatabas
    `diwan-database-eloquent` if you use models.
 2. In your `SQLiteOpenHelper.onConfigure`, call `setForeignKeyConstraintsEnabled(true)` and
    `enableWriteAheadLogging()`.
-3. Build the connection with `AndroidSqliteDriver.of(helper)`. Make the first call off the main thread.
-4. Run migrations with `SQLiteSchema.of(db)`, queries with `SQLiteQuery.of(db)`.
+3. Register `AndroidConnector.of(() -> helper, SQLiteQuery::of, SQLiteSchema::of)` with the
+   `DatabaseManager` once. Make the first call off the main thread.
+4. Run migrations with `manager.migrator("app")`, queries with `manager.query()`.
 5. Prepare R8: explicit names or a keep rule.
 
 ## Example
 
 ```java
-Connection db = Connection.builder()
-        .name("app")
-        .driver(AndroidSqliteDriver.of(new AppDb(context)))
+DatabaseConfig config = DatabaseConfig.builder()
+        .defaultConnection("app")
+        .connection(ConnectionConfig.builder("app").driver("android").build())
         .build();
-Migrator.builder(SQLiteSchema.of(db)).migrations(migrations).build().run();
-QueryFactory query = SQLiteQuery.of(db);
+DatabaseManager manager = DatabaseManager.builder()
+        .config(config)
+        .connector(AndroidConnector.of(() -> new AppDb(context), SQLiteQuery::of, SQLiteSchema::of))
+        .build();
+manager.migrator("app").migrations(migrations).build().run();
+QueryFactory db = manager.query();
 ```
 
 ```

@@ -32,7 +32,7 @@ final class CreateUsersTable extends Migration {
     @Override public void down(Schema schema) { schema.drop("users"); }
 }
 
-Migrator migrator = Migrator.builder(SQLiteSchema.of(db))
+Migrator migrator = manager.migrator("main")
         .add(new CreateUsersTable())
         .build();
 migrator.run();

@@ -7,7 +7,8 @@ description: Read and write rows with Diwan's query builder (table, where, join,
 
 ## Steps
 
-1. Start from the factory: `QueryFactory query = SQLiteQuery.of(db);` then `query.table("orders")`.
+1. Start from the manager: `QueryFactory db = manager.query();` then `db.table("orders")`. Use
+   `SQLiteQuery.of(connection)` only when there is no manager.
 2. Chain filters, then end with `get()`, `first()`, `find(id)`, `value(col)`, `exists()`, `count()`,
    or a write (`insert`, `update`, `delete`, `upsert`).
 3. For large reads pick `chunkById`, `lazyById`, or `cursor()`.
@@ -30,7 +31,7 @@ try (QueryCursor<Map<String, Object>> rows = query.table("orders").orderBy("id")
     }
 }
 
-db.transaction(c -> PostgresQuery.of(c).table("accounts")
+connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction, call db.on(c)
         .where("id", 1).lockForUpdate().get());
 ```
 

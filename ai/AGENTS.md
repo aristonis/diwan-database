@@ -8,14 +8,23 @@ Method names follow Laravel (`where`, `orderBy`, `firstOrCreate`). Java idioms r
 
 ## Entry points
 
-| Database | Query builder | Schema builder |
-|---|---|---|
-| SQLite | `SQLiteQuery.of(db)` | `SQLiteSchema.of(db)` |
-| PostgreSQL | `PostgresQuery.of(db)` | `PostgresSchema.of(db)` |
-| Android | `AndroidSqliteDriver.of(helper)` as the driver, then `SQLiteQuery` and `SQLiteSchema` | same |
+Start from a `DatabaseManager`. It builds the query factory, schema and migrator from the
+connection's configuration, so your code never names a driver class and switching the database is a
+configuration change.
 
-`db` is a `Connection` built with `Connection.builder().name(...).dataSource(...).build()`.
-`SQLiteQuery.of(db).table("users")` starts a query. Models: `User.query.on(SQLiteQuery.of(db))`.
+```java
+QueryFactory db = manager.query();                 // default connection; manager.query("name") for another
+Schema schema = manager.schema();
+Migrator migrator = manager.migrator("main").add(new CreateUsersTable()).build();
+db.table("users").where("id", 1).first();
+```
+
+Models: `User.query.on(manager.query())`.
+
+Without a manager, take the factories from the grammar module: `SQLiteQuery.of(connection)`,
+`SQLiteSchema.of(connection)`, `PostgresQuery.of(connection)`, `PostgresSchema.of(connection)`. On
+Android, `AndroidConnector.of(() -> helper, SQLiteQuery::of, SQLiteSchema::of)` is registered once
+with the manager. Inside a transaction, call `db.on(tx)` so the work runs on the transaction.
 
 ## Rules
 

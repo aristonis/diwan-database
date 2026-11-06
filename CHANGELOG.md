@@ -9,6 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `QueryFactory.on(Connection)` and `Schema.on(Connection)`: the same factory or schema builder bound to
+  another connection of the same database, such as a transaction's. Another kind of database is
+  refused with `IllegalArgumentException`.
 - Row locks on the query builder and the model query: `lockForUpdate()`, `sharedLock()` and
   `lock(LockStrength[, LockWait])`, with `UPDATE`, `NO_KEY_UPDATE`, `SHARE` and `KEY_SHARE`, and
   `WAIT`, `NOWAIT` and `SKIP_LOCKED`. PostgreSQL writes `for update`, `for share` and the others
@@ -214,68 +217,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   checked, and one that starts declaring a checksum gets it recorded on the next run.
   `Migrator.repairChecksums(List)` accepts the current values and `clearChecksums()` removes them,
   both under the migration lock. The migrations table gains a nullable `checksum varchar(64)`
-  column, `MigrationEntry.checksum()`, and `MigrationRepository.log` takes the checksum. A
-  migrations table created before this release has no such column and is not altered at runtime:
-  run `alter table migrations add column checksum varchar(64)` once (SQLite and PostgreSQL), or the
-  first migrator call fails with a message that says so.
+  column, `MigrationEntry.checksum()`, and `MigrationRepository.log` takes the checksum.
 
-### Changed
-
-- `withCount`, `withExists`, `withSum`, `withAvg`, `withMin` and `withMax` closures now follow the rules of `whereHas`: joins are allowed, columns, orders, limit and offset are cleared, and `groupBy`, `having`, `distinct` and unions throw `IllegalArgumentException` instead of `IllegalStateException`.
-- `Builder.cursor()` and `Connection.cursor(...)` return the public `QueryCursor<Map<String, Object>>`
-  instead of the driver type `RowCursor`, and `EloquentBuilder.cursor()` returns `QueryCursor<T>`.
-  A `QueryCursor` is `Iterable` and `AutoCloseable`: `iterator()` works once (a second call throws
-  `IllegalStateException`), `stream()` is lazy and closing the stream closes the cursor, and
-  `map(fn)` gives a cursor of the mapped type that shares the close. A stream releases its
-  connection only when it is closed, so use it in try-with-resources. `RowCursor` stays the driver
-  SPI type.
-- SQLite: dates are stored as `yyyy-MM-dd HH:mm:ss` (a fraction only when there is one) by both
-  the JDBC and Android drivers; `Instant` and `OffsetDateTime` as UTC with `+00:00`. Text written by
-  earlier builds (`2026-01-02T03:04`, local offsets) does not sort or compare with the new text.
-  Years outside 0000 to 9999 are refused on SQLite.
-- `has` and `whereHas`: the wheres a closure adds are wrapped in brackets only when they contain an
-  `or` (same meaning as before). The exists form drops orders from the subquery; the count form
-  replaces the selected columns with `count(*)` and refuses `distinct` and unions.
-
-### Fixed
-
-- `cursorPaginate` quotes an order column that contains parentheses as a name; only a select alias is
-  written as an expression, so a user-supplied sort column cannot inject SQL.
+- `Builder.cursor()` and `Connection.cursor(...)` return the public `QueryCursor<Map<String, Object>>`,
+  and `EloquentBuilder.cursor()` returns `QueryCursor<T>`. A `QueryCursor` is `Iterable` and
+  `AutoCloseable`: `iterator()` works once (a second call throws `IllegalStateException`),
+  `stream()` is lazy and closing the stream closes the cursor, and `map(fn)` gives a cursor of the
+  mapped type that shares the close. A stream releases its connection only when it is closed, so
+  use it in try-with-resources.
+- SQLite stores dates as `yyyy-MM-dd HH:mm:ss` (a fraction only when there is one) on both the JDBC
+  and Android drivers, and `Instant` and `OffsetDateTime` as UTC with `+00:00`. Years outside 0000
+  to 9999 are refused on SQLite.
+- `has` and `whereHas` wrap the wheres of a closure in brackets only when they contain an `or`.
+  The exists form drops orders from the subquery; the count form replaces the selected columns
+  with `count(*)` and refuses `distinct` and unions. `withCount`, `withExists`, `withSum`,
+  `withAvg`, `withMin` and `withMax` closures follow the rules of `whereHas`: joins are allowed,
+  columns, orders, limit and offset are cleared, and `groupBy`, `having`, `distinct` and unions
+  throw `IllegalArgumentException`.
+- Relation existence and aggregate queries on a table with an alias (`from("users as u")`)
+  correlate on the alias.
+- `cursorPaginate` quotes an order column that contains parentheses as a name; only a select alias
+  is written as an expression.
 - A statement given more values than placeholders fails with a `QueryException` on SQLite.
-- A model without a primary key is not incrementing.
-- `touch()` returns `false` and saves nothing when the model has no `updated_at` column.
-- `increment` and `decrement` write their extra columns through the model's casts.
-- After-rollback callbacks run deepest first.
-- `has`, `whereHas`, `doesntHave`, `withCount` and the other aggregates on a query whose table
-  has an alias (`from("users as u")`) correlate on the alias; Laravel names the table and the
-  query fails on SQLite and PostgreSQL.
-- PostgreSQL identifier limits are counted in UTF-8 bytes; catalog reads work in a mixed-case
-  current schema; an empty comment removes a column comment.
-- SQLite: `unprepared` runs every statement of a script, on JDBC and Android; renaming a column
-  on SQLite before 3.25 no longer fails on its own check.
-- PostgreSQL statements that cannot run in a transaction name `withinTransaction()` in the error.
-- The PostgreSQL migration lock times its wait with a monotonic clock.
-
+- `touch()` returns `false` and saves nothing when the model has no `updated_at` column;
+  `increment` and `decrement` write their extra columns through the model's casts; after-rollback
+  callbacks run deepest first.
+- PostgreSQL identifier limits are counted in UTF-8 bytes, an empty comment removes a column
+  comment, statements that cannot run in a transaction name `withinTransaction()` in the error,
+  and the migration lock times its wait with a monotonic clock.
+- SQLite: `unprepared` runs every statement of a script, on JDBC and Android. `BigDecimal` is bound
+  in plain form, never `1E+3`. A `decimal()` column still has numeric affinity, which turns the
+  text into a floating-point number; use an integer column of minor units for exact amounts.
 - Dates read through `java.time` by column type: dates before 1582, times in a daylight-saving gap
   and `timestamptz` offsets read back unchanged; PostgreSQL `infinity` reads as `MAX` / `MIN`.
-- SQLite: `BigDecimal` is bound in plain form, never `1E+3`. A `decimal()` column still has numeric
-  affinity, which turns the text into a floating-point number; use an integer column of minor
-  units for exact amounts.
 - PostgreSQL: text binds into `uuid`, `jsonb` and `inet`, nulls into any column; `json` and `inet`
   read back as text.
-- NaN and infinite numbers are refused before any SQL.
-- A session whose rollback failed or whose connection was lost is discarded, not handed back.
-- SQLite: the foreign key check after a table rebuild used the table-valued
-  `pragma_foreign_key_check(?)`, which SQLite before 3.26 (Android 9) rejects; it now uses the
-  pragma statement.
-
-### Removed
-
-- `ModelCursor`, replaced by `QueryCursor<T>` (see Changed).
-- `QueryGrammar.prepareBindingsForUpdate` and `prepareBindingsForDelete` overloads that took only a
-  binding map.
-- Money support, removed before v0.1 because Diwan is a database library and ships no money type:
-  `Blueprint.money(column, scale)`, `ColumnDefinition.asDecimal(int)`, `ColumnType.MONEY`, and the
-  `Money` and `MoneyAmount` classes of the `values` package. Use `decimal()` as in Laravel, or an
-  integer column of minor units. A SQLite file created by a pre-release build with a decimal money
-  column keeps its generated check as an ordinary user check.
+- NaN and infinite numbers are refused before any SQL. A session whose rollback failed or whose
+  connection was lost is discarded, not handed back.

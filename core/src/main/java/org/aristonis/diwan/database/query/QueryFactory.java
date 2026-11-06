@@ -85,6 +85,34 @@ public final class QueryFactory {
     }
 
     /**
+     * Returns a factory with the same grammar and processor that runs on another connection of the
+     * same database, such as the connection a transaction callback receives.
+     *
+     * <p>Code inside {@code connection.transaction(tx -> ...)} must run on {@code tx}; this lets it
+     * keep using the factory it already has without naming the database's module.
+     *
+     * @param other the connection to run on, never {@code null}
+     * @return a factory bound to {@code other}, never {@code null}
+     * @throws NullPointerException if {@code other} is {@code null}
+     * @throws IllegalArgumentException if {@code other} talks to a different kind of database or uses
+     *     a different table prefix
+     */
+    public QueryFactory on(Connection other) {
+        Objects.requireNonNull(other, "other");
+        requireSameDatabase(connection, other);
+        return of(other, grammar, processor);
+    }
+
+    private static void requireSameDatabase(Connection current, Connection other) {
+        String expected = current.getDriverInfo().databaseName();
+        String actual = other.getDriverInfo().databaseName();
+        if (!expected.equals(actual)) {
+            throw new IllegalArgumentException("The connection is to " + actual + ", but this factory writes SQL for "
+                    + expected);
+        }
+    }
+
+    /**
      * Returns the connection.
      *
      * @return the connection, never {@code null}

@@ -12,7 +12,7 @@ description: Define Diwan models, relations, casts, scopes and eager loading in 
 3. Override `table()` when the plural guess is wrong, and always on Android.
 4. For a relation, add a typed method (`hasMany`, `belongsTo`, ...) and register its name in
    `relations()` with `RelationMap`.
-5. Bind to a factory before use: `User.query.on(SQLiteQuery.of(db))`, or `.on(tx)` in a transaction.
+5. Bind to a factory before use: `User.query.on(manager.query())`, or `.on(db.on(tx))` in a transaction.
 6. Eager load with `with("posts.comments")` instead of reading a relation in a loop.
 
 ## Example
@@ -30,7 +30,7 @@ public final class Post extends Model {
     public BelongsTo<User> author() { return belongsTo(User.class, "user_id"); }
 }
 
-ModelQuery<Post> posts = Post.query.on(SQLiteQuery.of(db));
+ModelQuery<Post> posts = Post.query.on(manager.query());
 ModelCollection<Post> list = posts.with("author").get();
 ```
 

@@ -38,11 +38,9 @@ after R8 or ProGuard shrinks an Android app, so an unchanged migration would be 
 7. Repair and clear. `Migrator.repairChecksums(List<Migration>)` rewrites the recorded checksum of
    every listed migration that ran and declares one. `Migrator.clearChecksums()` sets every recorded
    checksum to null. Both run under the migration lock and fire no migration events.
-8. No upgrade path. A table created before this release has no `checksum` column. The library
-   never alters the table at runtime: the first call that needs the column fails with a message
-   naming the one statement to run, `alter table <table> add column checksum varchar(64)`. The
-   changelog gives the same statement. Release 0.1.0 is the first published version, so only
-   development databases are affected.
+8. No runtime DDL. The library never alters the migrations table at runtime. If the `checksum`
+   column is missing from a hand-built table, the first call that needs it fails with a message
+   naming the statement to add it, `alter table <table> add column checksum varchar(64)`.
 9. `MigrationRepository` gains `log(name, batch, checksum)` in place of the two-argument method,
    and the default methods `checksums()` and `setChecksum(name, checksum)`, which throw
    `UnsupportedOperationException`, so a repository written elsewhere keeps compiling.
@@ -63,6 +61,6 @@ after R8 or ProGuard shrinks an Android app, so an unchanged migration would be 
   every existing migration class.
 - Add the column automatically on first use: DDL inside a read path, racy between processes, and
   a different failure mode on each database. A one-line manual statement is clearer for a
-  pre-release table.
+  hand-built table.
 - Store MD5 with a version prefix, as Liquibase does: nothing to migrate between hash versions yet,
   and 64 hex characters cover SHA-256 exactly.

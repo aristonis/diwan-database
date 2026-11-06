@@ -66,6 +66,27 @@ public final class Schema {
     }
 
     /**
+     * Returns a schema builder with the same grammar that runs on another connection of the same
+     * database, such as the connection a transaction callback receives.
+     *
+     * @param other the connection to run on, never {@code null}
+     * @return a schema builder bound to {@code other}, never {@code null}
+     * @throws NullPointerException if {@code other} is {@code null}
+     * @throws IllegalArgumentException if {@code other} talks to a different kind of database
+     */
+    public Schema on(Connection other) {
+        Objects.requireNonNull(other, "other");
+        String expected = connection.getDriverInfo().databaseName();
+        String actual = other.getDriverInfo().databaseName();
+        if (!expected.equals(actual)) {
+            throw new IllegalArgumentException("The connection is to " + actual
+                    + ", but this schema builder writes SQL for " + expected);
+        }
+        return new Schema(other, grammar, other);
+    }
+
+
+    /**
      * Returns the connection.
      *
      * @return the connection, never {@code null}

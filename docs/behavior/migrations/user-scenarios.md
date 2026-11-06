@@ -32,6 +32,6 @@
 | E19 | A migration that ran without a checksum starts declaring one | The next run records it and checks it from then on | `MigrationChecksumTest#aMigrationThatStartsDeclaringAChecksumAdoptsItAndIsCheckedAfterwards` |
 | E20 | The same text is saved with Windows line endings or decomposed accents | The same checksum | `MigrationChecksumTest#sameTextWithDifferentLineEndingsHasTheSameChecksum`, `MigrationChecksumTest#composedAndDecomposedAccentsHaveTheSameChecksum` |
 | E21 | An edit was intended | `repairChecksums` accepts the current values; `clearChecksums` removes them | `MigrationChecksumTest#repairAcceptsTheCurrentChecksumsAndReportsHowManyChanged`, `MigrationChecksumTest#clearRemovesEveryChecksumAndTheNextRunAdoptsThemAgain` |
-| E22 | The table was created before checksums existed | A clear error with the one `alter table` statement; nothing is altered | `MigrationChecksumTest#aTableFromBeforeChecksumsFailsWithTheStatementToRun` |
+| E22 | The table has no `checksum` column | A clear error with the one `alter table` statement; nothing is altered | `MigrationChecksumTest#aTableFromBeforeChecksumsFailsWithTheStatementToRun` |
 | E23 | Two instances migrate at once on PostgreSQL | Validation, repair and clear run under the migration lock | `PostgresMigrationChecksumTest#repairAndClearRunUnderTheLockAndTheLockIsFreeAfterwards` |
 | E24 | An Android app runs and validates a checksum | Same behavior through the Android driver | `AndroidMigrationChecksumTest#aRunRecordsTheChecksumAndAnEditedMigrationIsRefused` |

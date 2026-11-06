@@ -47,9 +47,6 @@ compilers and code shrinkers.
 - To accept an intended edit, call `migrator.repairChecksums(migrator.migrations())`. To drop every
   recorded checksum, call `migrator.clearChecksums()`. Both take the migration lock and fire no
   events.
-- A table created before this release has no `checksum` column. The library does not alter tables
-  at runtime: the first call that needs the column throws an `IllegalStateException` that gives the
-  one statement to run, `alter table migrations add column checksum varchar(64)`.
 
 See [ADR 0029](../../adr/0029-migration-checksums.md).
 
