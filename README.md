@@ -148,7 +148,7 @@ Report a vulnerability privately through [GitHub private vulnerability reporting
 
 - [Changelog](CHANGELOG.md) and [releases](https://github.com/aristonis/diwan-database/releases)
 - License: MIT, see [LICENSE](LICENSE).
-- Contributing: build and test with `./gradlew check`; Javadoc and docs follow the
+- Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md). Build and test with `./gradlew check`; Javadoc and docs follow the
   [documentation standard](docs/documentation-standard.md).
 
 ## Notes

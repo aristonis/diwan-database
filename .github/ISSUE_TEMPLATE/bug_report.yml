@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in Diwan does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Security problem? Do not use this form. Report it privately, see SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: Diwan version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options: [SQLite, PostgreSQL, Android SQLite]
+    validations:
+      required: true
+  - type: input
+    id: java
+    attributes:
+      label: Java version or Android API level
+      placeholder: JDK 21 / API 34
+  - type: textarea
+    id: code
+    attributes:
+      label: Code that shows the problem
+      description: The smallest code that reproduces it.
+      render: java
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+      description: Include the full exception message and the SQL, if any.
+    validations:
+      required: true

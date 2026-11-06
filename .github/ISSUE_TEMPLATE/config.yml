@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/aristonis/diwan-database/security/advisories/new
+    about: Report vulnerabilities privately, never as a public issue.
+  - name: Documentation
+    url: https://docs.aristonis.org/diwan-database/
+    about: Guides and the API reference.
