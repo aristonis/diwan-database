@@ -52,8 +52,6 @@ implementation("org.aristonis:diwan-database-eloquent:0.1.0") // optional
 </dependency>
 ```
 
-Not yet published. Build it locally with `./gradlew check`.
-
 ## Platforms
 
 - Java 17 or later. The JAR is plain Java 17 bytecode, tested on JDK 17, 21 and 25.

@@ -7,7 +7,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-11-07
 
 The first release: a hand port of Laravel's `illuminate/database` to Java 17 and Android, with
 Laravel's method names where they read well in Java. Where Diwan behaves differently from Laravel,
