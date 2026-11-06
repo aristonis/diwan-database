@@ -1,3 +1,20 @@
+<p align="center"><img src="assets/logo/diwan-database.svg" alt="Diwan Database logo" width="128"></p>
+
+<p align="center">
+  <a href="https://central.sonatype.com/artifact/org.aristonis/diwan-database"><img src="https://img.shields.io/maven-central/v/org.aristonis/diwan-database?label=Maven%20Central" alt="Maven Central"></a>
+  <a href="https://github.com/aristonis/diwan-database/releases/latest"><img src="https://img.shields.io/github/v/release/aristonis/diwan-database?label=release" alt="Latest release"></a>
+  <a href="https://github.com/aristonis/diwan-database/releases"><img src="https://img.shields.io/github/downloads/aristonis/diwan-database/total" alt="Downloads"></a>
+  <a href="https://github.com/aristonis/diwan-database/stargazers"><img src="https://img.shields.io/github/stars/aristonis/diwan-database?style=flat" alt="GitHub stars"></a>
+  <a href="https://javadoc.io/doc/org.aristonis/diwan-database"><img src="https://javadoc.io/badge2/org.aristonis/diwan-database/javadoc.svg" alt="Javadoc"></a>
+  <a href="https://github.com/aristonis/diwan-database/commits"><img src="https://img.shields.io/github/last-commit/aristonis/diwan-database" alt="Last commit"></a>
+  <a href="https://github.com/aristonis/diwan-database/issues"><img src="https://img.shields.io/github/issues/aristonis/diwan-database" alt="Open issues"></a>
+  <a href="https://github.com/aristonis/diwan-database/graphs/contributors"><img src="https://img.shields.io/github/contributors/aristonis/diwan-database" alt="Contributors"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Java-17%2B-orange" alt="Java 17+">
+  <img src="https://img.shields.io/badge/Android-API%2028%2B-3DDC84" alt="Android API 28+">
+  <a href="https://docs.aristonis.org/diwan-database/"><img src="https://img.shields.io/badge/docs-site-indigo" alt="Docs"></a>
+</p>
+
 # Diwan Database
 
 Diwan Database is a hand port of Laravel's database layer (`illuminate/database`) to Java. It
@@ -129,7 +146,7 @@ Report a vulnerability privately through [GitHub private vulnerability reporting
 
 ## Project
 
-- [Changelog](CHANGELOG.md)
+- [Changelog](CHANGELOG.md) and [releases](https://github.com/aristonis/diwan-database/releases)
 - License: MIT, see [LICENSE](LICENSE).
 - Contributing: build and test with `./gradlew check`; Javadoc and docs follow the
   [documentation standard](docs/documentation-standard.md).
