@@ -1,6 +1,7 @@
 <p align="center"><img src="assets/logo/diwan-database.svg" alt="Diwan Database logo" width="128"></p>
 
 <p align="center">
+  <a href="https://github.com/aristonis/diwan-database/actions/workflows/ci.yml"><img src="https://github.com/aristonis/diwan-database/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
   <a href="https://central.sonatype.com/artifact/org.aristonis/diwan-database"><img src="https://img.shields.io/maven-central/v/org.aristonis/diwan-database?label=Maven%20Central" alt="Maven Central"></a>
   <a href="https://github.com/aristonis/diwan-database/releases/latest"><img src="https://img.shields.io/github/v/release/aristonis/diwan-database?label=release" alt="Latest release"></a>
   <a href="https://github.com/aristonis/diwan-database/releases"><img src="https://img.shields.io/github/downloads/aristonis/diwan-database/total" alt="Downloads"></a>
