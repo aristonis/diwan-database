@@ -66,7 +66,7 @@ class TransactionCallbacksTest {
         assertEquals(0, ran.size());
         callbacks.drainRolledBack().run();
 
-        assertEquals(Arrays.asList("savepoint", "deeper"), ran);
+        assertEquals(Arrays.asList("deeper", "savepoint"), ran);
     }
 
     @Test

@@ -59,6 +59,8 @@ An `Instant` is stored as `Blueprint.instant` stores it on each database.
   read twice; use `chunkById` for a table that changes.
 - A null in a `cursorPaginate` order column can make rows be skipped, as in Laravel. Order by
   columns that are never null.
+- `cursorPaginate` quotes each order column as a name, but the app must allowlist any sort column
+  that comes from user input.
 - On SQLite an open cursor holds a read lock, so another connection's write waits or fails as
   busy until the cursor is closed.
 - A cursor outside a transaction that is neither read to the end nor closed keeps its pooled

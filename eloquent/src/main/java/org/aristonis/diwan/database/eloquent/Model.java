@@ -538,13 +538,17 @@ public abstract class Model extends ModelSoftDeletes {
         }
         putRawAttribute(column, ModelNumbers.add(getRawAttribute(column), amount, up));
         forceFill(written);
+        Map<String, Object> stored = new LinkedHashMap<>(written);
+        for (String key : written.keySet()) {
+            stored.put(key, getRawAttribute(key));
+        }
         if (!fireHalting(ModelEvent.UPDATING)) {
             setRawAttributes(before);
             return 0;
         }
         beforeWrite();
         Builder query = setKeysForSaveQuery(newBaseQuery());
-        int affected = up ? query.increment(column, amount, written) : query.decrement(column, amount, written);
+        int affected = up ? query.increment(column, amount, stored) : query.decrement(column, amount, stored);
         syncChanges();
         fire(ModelEvent.UPDATED);
         String[] synced = written.keySet().toArray(new String[written.size() + 1]);
@@ -718,10 +722,11 @@ public abstract class Model extends ModelSoftDeletes {
     /**
      * Updates the timestamps and saves.
      *
-     * @return {@code false} when the model keeps no timestamps or a hook vetoed the save
+     * @return {@code false} when the model keeps no timestamps, has no {@code updated_at} column
+     *     or a hook vetoed the save
      */
     public boolean touch() {
-        if (!usesTimestamps()) {
+        if (!usesTimestamps() || getUpdatedAtColumn() == null) {
             return false;
         }
         updateTimestamps();

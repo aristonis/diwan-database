@@ -6,4 +6,6 @@ description = "Diwan Database SQLite: the schema grammar for SQLite."
 
 dependencies {
     api(project(":core"))
+
+    testImplementation("com.zaxxer:HikariCP:5.1.0")
 }

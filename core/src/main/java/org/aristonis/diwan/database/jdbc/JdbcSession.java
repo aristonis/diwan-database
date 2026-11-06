@@ -552,13 +552,22 @@ final class JdbcSession implements DriverSession {
                 bind(statement, index++, value, DatabaseFamily.of(productName));
             }
             return statement;
+        } catch (IndexOutOfBoundsException e) {
+            // A driver that does not check the index (sqlite-jdbc) throws it unchecked; report it as
+            // the ordinary statement failure.
+            closeAfterFailure(statement, e);
+            throw new SQLException("The statement has fewer placeholders than values.", e);
         } catch (SQLException | RuntimeException e) {
-            try {
-                statement.close();
-            } catch (SQLException closeFailure) {
-                e.addSuppressed(closeFailure);
-            }
+            closeAfterFailure(statement, e);
             throw e;
+        }
+    }
+
+    private static void closeAfterFailure(PreparedStatement statement, Exception failure) {
+        try {
+            statement.close();
+        } catch (SQLException closeFailure) {
+            failure.addSuppressed(closeFailure);
         }
     }
 

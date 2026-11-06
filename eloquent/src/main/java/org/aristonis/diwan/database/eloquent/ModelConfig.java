@@ -369,12 +369,13 @@ abstract class ModelConfig {
     }
 
     /**
-     * Returns whether the database assigns the key: never for a unique id model.
+     * Returns whether the database assigns the key: never for a unique id model or a model
+     * without a primary key.
      *
      * @return whether the key increments
      */
     public boolean getIncrementing() {
-        return getUniqueIdKind() == UniqueIdKind.NONE && incrementing();
+        return getKeyName() != null && getUniqueIdKind() == UniqueIdKind.NONE && incrementing();
     }
 
     /**

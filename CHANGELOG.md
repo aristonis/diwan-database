@@ -212,6 +212,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `cursorPaginate` quotes an order column that contains parentheses as a name; only a select alias is
+  written as an expression, so a user-supplied sort column cannot inject SQL.
+- A statement given more values than placeholders fails with a `QueryException` on SQLite.
+- A model without a primary key is not incrementing.
+- `touch()` returns `false` and saves nothing when the model has no `updated_at` column.
+- `increment` and `decrement` write their extra columns through the model's casts.
+- After-rollback callbacks run deepest first.
 - `has`, `whereHas`, `doesntHave`, `withCount` and the other aggregates on a query whose table
   has an alias (`from("users as u")`) correlate on the alias; Laravel names the table and the
   query fails on SQLite and PostgreSQL.

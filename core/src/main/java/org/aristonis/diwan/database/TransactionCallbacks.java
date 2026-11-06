@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -48,7 +49,7 @@ final class TransactionCallbacks {
 
     /**
      * Handles a rollback of {@code level} and every level inside it: drops their commit callbacks
-     * and queues their rollback callbacks, in registration order, for {@link #drainRolledBack()}.
+     * and queues their rollback callbacks for {@link #drainRolledBack()}.
      */
     void rollbackLevel(int level) {
         for (Iterator<Entry> it = commit.iterator(); it.hasNext();) {
@@ -56,13 +57,18 @@ final class TransactionCallbacks {
                 it.remove();
             }
         }
+        List<Entry> batch = new ArrayList<Entry>();
         for (Iterator<Entry> it = rollback.iterator(); it.hasNext();) {
             Entry entry = it.next();
             if (entry.level >= level) {
-                rolledBack.add(entry);
+                batch.add(entry);
                 it.remove();
             }
         }
+        // Within one rollback the deepest callback runs first, as Laravel does; an earlier
+        // savepoint rollback still runs before a later one.
+        Collections.reverse(batch);
+        rolledBack.addAll(batch);
     }
 
     /**
@@ -79,7 +85,8 @@ final class TransactionCallbacks {
     }
 
     /**
-     * Takes the queued rollback callbacks, in registration order.
+     * Takes the queued rollback callbacks: rollbacks in the order they happened, and within each
+     * one the deepest callback first.
      *
      * @return a runner that runs all of them and throws the first failure with the rest suppressed
      */

@@ -83,20 +83,22 @@ final class PaginationOrders {
         Order.Column order = orders.get(index);
         String column = order.column();
         String original = originalColumn(source, column);
+        boolean isAlias = !original.equals(column);
         Object value = cursor.parameter(column);
-        compare(group, original, column, ASC.equals(order.direction()) ? ">" : "<", value);
+        compare(group, original, isAlias, ASC.equals(order.direction()) ? ">" : "<", value);
         if (index < orders.size() - 1) {
             group.orWhere(next -> {
-                compare(next, original, column, "=", value);
+                compare(next, original, isAlias, "=", value);
                 next.where(deeper -> keyset(deeper, outer, orders, cursor, index + 1, outer));
             });
         }
     }
 
-    private static void compare(Builder query, String original, String column, String operator, Object value) {
-        // A selected expression such as "count(x) as total" is written as given, as Laravel does;
-        // so is a parenthesized column without an alias, which where() would quote as a name.
-        if (original.contains("(") || original.contains(")")) {
+    private static void compare(Builder query, String original, boolean isAlias, String operator, Object value) {
+        // Only a select alias for an expression such as "count(x)" is written as given, as Laravel
+        // does; the select list comes from the developer. An alias for a plain column and every
+        // other order column are names and are quoted, so they cannot carry SQL.
+        if (isAlias && (original.indexOf('(') >= 0 || original.indexOf(')') >= 0)) {
             query.whereRaw(original + " " + operator + " ?", Collections.singletonList(value));
         } else {
             query.where(original, operator, value);
