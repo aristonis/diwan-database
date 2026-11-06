@@ -2,6 +2,8 @@ plugins {
     `java-library`
     jacoco
     id("ru.vyarus.animalsniffer")
+    signing
+    id("com.vanniktech.maven.publish")
 }
 
 // The core module is published as diwan-database; each driver module as
@@ -22,8 +24,6 @@ repositories {
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
-    withSourcesJar()
-    withJavadocJar()
 }
 
 dependencies {
@@ -115,4 +115,60 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
     dependsOn(perJdk, tasks.jacocoTestCoverageVerification, tasks.javadoc)
+}
+
+// Maven Central through the Central Portal. The upload stops at "validated"; a person publishes it
+// in the Portal, because a released version can never be changed or removed.
+mavenPublishing {
+    publishToMavenCentral(automaticRelease = false)
+    // Signs with the local gpg key named by signing.gnupg.keyName; without it nothing is signed,
+    // so a local dry run works on any machine.
+    if (providers.gradleProperty("signing.gnupg.keyName").isPresent) {
+        signAllPublications()
+    }
+    coordinates(group.toString(), base.archivesName.get(), version.toString())
+    pom {
+        name = base.archivesName.get()
+        description = project.description
+        inceptionYear = "2026"
+        url = "https://github.com/aristonis/diwan-database"
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/licenses/MIT"
+                distribution = "repo"
+            }
+        }
+        developers {
+            developer {
+                id = "aristonis"
+                name = "Aristonis"
+                email = "aristonis@outlook.com"
+                url = "https://aristonis.org"
+            }
+        }
+        scm {
+            url = "https://github.com/aristonis/diwan-database"
+            connection = "scm:git:https://github.com/aristonis/diwan-database.git"
+            developerConnection = "scm:git:ssh://git@github.com/aristonis/diwan-database.git"
+        }
+        issueManagement {
+            system = "GitHub"
+            url = "https://github.com/aristonis/diwan-database/issues"
+        }
+    }
+}
+
+signing {
+    useGpgCmd()
+}
+
+// A local copy of what Maven Central receives, for checking a release before the upload.
+publishing {
+    repositories {
+        maven {
+            name = "localStaging"
+            url = uri(rootProject.layout.buildDirectory.dir("staging-repo"))
+        }
+    }
 }

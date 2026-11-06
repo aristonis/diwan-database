@@ -2,7 +2,7 @@ plugins {
     id("diwan.java-library")
 }
 
-description = "Diwan Database Eloquent: models over the query builder, in the style of Laravel's Eloquent."
+description = "Diwan Database Eloquent: models, casts and relations over the query builder, in the style of Laravel's Eloquent."
 
 dependencies {
     api(project(":core"))
@@ -12,7 +12,8 @@ dependencies {
     testImplementation("org.postgresql:postgresql:42.7.5")
 }
 
-// Javadoc never reads the internal bridges, so doclint at compile time is their only docs check.
+// Javadoc leaves the internal bridges out of its pages and checks, so doclint at compile time is
+// their only docs check.
 tasks.named<JavaCompile>("compileJava") {
     options.compilerArgs.addAll(
         listOf(

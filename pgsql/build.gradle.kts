@@ -2,7 +2,7 @@ plugins {
     id("diwan.java-library")
 }
 
-description = "Diwan Database PostgreSQL: the schema grammar and migration lock for PostgreSQL."
+description = "Diwan Database PostgreSQL: the PostgreSQL query and schema grammars, the connector and the migration lock."
 
 dependencies {
     api(project(":core"))

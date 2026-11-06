@@ -3,3 +3,9 @@ build/
 .idea/
 *.iml
 out/
+
+# Signing keys and revocation certificates never belong in the repository.
+*.asc
+*.gpg
+*.rev
+*.key
