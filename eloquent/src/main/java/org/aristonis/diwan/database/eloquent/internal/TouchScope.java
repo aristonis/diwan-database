@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -27,6 +28,7 @@ import java.util.function.Supplier;
  *
  * <p>Internal: not API. Safe to use from any thread; each thread sees only its own scope.
  */
+@Internal
 public final class TouchScope {
 
     /** The ignored classes of this thread: an unmodifiable list, or unset when no scope is open. */

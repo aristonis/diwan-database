@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidRelationException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;

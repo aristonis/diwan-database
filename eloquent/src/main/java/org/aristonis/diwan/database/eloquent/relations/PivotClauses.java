@@ -313,7 +313,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @param pivotClass the pivot class, never {@code null}
      * @return this relation
      * @throws NullPointerException if {@code pivotClass} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException if the class
+     * @throws org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException if the class
      *     has no registry entry
      */
     public BelongsToMany<R> using(Class<? extends Pivot> pivotClass) {
@@ -615,7 +615,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      *
      * @param declaringInverse the pivot relation that points at the parent, or {@code null} to guess
      * @return this relation
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the pivot
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the pivot
      *     class declares no relation of the given name
      */
     public BelongsToMany<R> chaperone(String declaringInverse) {
@@ -630,7 +630,7 @@ abstract class PivotClauses<R extends Model> extends Relation<R, BelongsToMany<R
      * @param declaringInverse the pivot relation that points at the parent, or {@code null} to guess
      * @param relatedInverse the pivot relation that points at the related model, or {@code null} to guess
      * @return this relation
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the pivot
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the pivot
      *     class declares no relation of a given name
      */
     public BelongsToMany<R> chaperone(String declaringInverse, String relatedInverse) {

@@ -1,5 +1,9 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.event.ConnectionListener;
+import org.aristonis.diwan.database.event.QueryExecuted;
+import org.aristonis.diwan.database.event.QueryFailed;
+import org.aristonis.diwan.database.event.TransactionEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

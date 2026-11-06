@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,7 +13,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.aristonis.diwan.database.eloquent.ClassMorphViolationException;
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelQuery;

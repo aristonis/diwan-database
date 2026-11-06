@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.exception.ModelNotFoundException;
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,7 +12,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.eloquent.casts.Attribute;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;

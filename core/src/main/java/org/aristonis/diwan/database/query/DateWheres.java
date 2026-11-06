@@ -37,7 +37,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder whereDate(String column, Object value) {
-        return addDateBased(Where.DatePart.DATE, column, "=", value, AND);
+        return addDateBased(DatePart.DATE, column, "=", value, AND);
     }
 
     /**
@@ -51,7 +51,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder whereDate(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.DATE, column, operator, value, AND);
+        return addDateBased(DatePart.DATE, column, operator, value, AND);
     }
 
     /**
@@ -64,7 +64,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder orWhereDate(String column, Object value) {
-        return addDateBased(Where.DatePart.DATE, column, "=", value, OR);
+        return addDateBased(DatePart.DATE, column, "=", value, OR);
     }
 
     /**
@@ -78,7 +78,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder orWhereDate(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.DATE, column, operator, value, OR);
+        return addDateBased(DatePart.DATE, column, operator, value, OR);
     }
 
     /**
@@ -91,7 +91,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder whereTime(String column, Object value) {
-        return addDateBased(Where.DatePart.TIME, column, "=", value, AND);
+        return addDateBased(DatePart.TIME, column, "=", value, AND);
     }
 
     /**
@@ -105,7 +105,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder whereTime(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.TIME, column, operator, value, AND);
+        return addDateBased(DatePart.TIME, column, operator, value, AND);
     }
 
     /**
@@ -118,7 +118,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder orWhereTime(String column, Object value) {
-        return addDateBased(Where.DatePart.TIME, column, "=", value, OR);
+        return addDateBased(DatePart.TIME, column, "=", value, OR);
     }
 
     /**
@@ -132,7 +132,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder orWhereTime(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.TIME, column, operator, value, OR);
+        return addDateBased(DatePart.TIME, column, operator, value, OR);
     }
 
     /**
@@ -145,7 +145,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is not a whole number or date
      */
     public final Builder whereDay(String column, Object value) {
-        return addDateBased(Where.DatePart.DAY, column, "=", value, AND);
+        return addDateBased(DatePart.DAY, column, "=", value, AND);
     }
 
     /**
@@ -159,7 +159,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereDay(String, Object)}
      */
     public final Builder whereDay(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.DAY, column, operator, value, AND);
+        return addDateBased(DatePart.DAY, column, operator, value, AND);
     }
 
     /**
@@ -172,7 +172,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereDay(String, Object)}
      */
     public final Builder orWhereDay(String column, Object value) {
-        return addDateBased(Where.DatePart.DAY, column, "=", value, OR);
+        return addDateBased(DatePart.DAY, column, "=", value, OR);
     }
 
     /**
@@ -186,7 +186,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereDay(String, Object)}
      */
     public final Builder orWhereDay(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.DAY, column, operator, value, OR);
+        return addDateBased(DatePart.DAY, column, operator, value, OR);
     }
 
     /**
@@ -199,7 +199,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is not a whole number or date
      */
     public final Builder whereMonth(String column, Object value) {
-        return addDateBased(Where.DatePart.MONTH, column, "=", value, AND);
+        return addDateBased(DatePart.MONTH, column, "=", value, AND);
     }
 
     /**
@@ -213,7 +213,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereMonth(String, Object)}
      */
     public final Builder whereMonth(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.MONTH, column, operator, value, AND);
+        return addDateBased(DatePart.MONTH, column, operator, value, AND);
     }
 
     /**
@@ -226,7 +226,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereMonth(String, Object)}
      */
     public final Builder orWhereMonth(String column, Object value) {
-        return addDateBased(Where.DatePart.MONTH, column, "=", value, OR);
+        return addDateBased(DatePart.MONTH, column, "=", value, OR);
     }
 
     /**
@@ -240,7 +240,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#whereMonth(String, Object)}
      */
     public final Builder orWhereMonth(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.MONTH, column, operator, value, OR);
+        return addDateBased(DatePart.MONTH, column, operator, value, OR);
     }
 
     /**
@@ -253,7 +253,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder whereYear(String column, Object value) {
-        return addDateBased(Where.DatePart.YEAR, column, "=", value, AND);
+        return addDateBased(DatePart.YEAR, column, "=", value, AND);
     }
 
     /**
@@ -267,7 +267,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder whereYear(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.YEAR, column, operator, value, AND);
+        return addDateBased(DatePart.YEAR, column, operator, value, AND);
     }
 
     /**
@@ -280,7 +280,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException if the value is a list, map, array or builder
      */
     public final Builder orWhereYear(String column, Object value) {
-        return addDateBased(Where.DatePart.YEAR, column, "=", value, OR);
+        return addDateBased(DatePart.YEAR, column, "=", value, OR);
     }
 
     /**
@@ -294,7 +294,7 @@ abstract class DateWheres extends RangeWheres {
      * @throws IllegalArgumentException as for {@link Builder#where(String, String, Object)}
      */
     public final Builder orWhereYear(String column, String operator, Object value) {
-        return addDateBased(Where.DatePart.YEAR, column, operator, value, OR);
+        return addDateBased(DatePart.YEAR, column, operator, value, OR);
     }
 
     // ---- all, any, none ----
@@ -461,7 +461,7 @@ abstract class DateWheres extends RangeWheres {
         return addMultiColumn(columns, operator, value, OR + NOT, OR);
     }
 
-    Builder addDateBased(Where.DatePart part, String column, String operator, Object value,
+    Builder addDateBased(DatePart part, String column, String operator, Object value,
             String conjunction) {
         Objects.requireNonNull(column, "column");
         Objects.requireNonNull(operator, "operator");

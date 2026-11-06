@@ -19,7 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
-import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import org.junit.jupiter.api.Test;
 
 /** The per-instance cast overlay: {@code mergeCasts} on top of the class casts. */

@@ -45,7 +45,7 @@ abstract class ModelAccessors extends ModelCasts {
      * @param key the attribute, never {@code null}
      * @return the value, or {@code null} when absent or {@code null}
      * @throws NullPointerException if {@code key} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.casts.InvalidCastException if a cast cannot
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidCastException if a cast cannot
      *     read the stored value
      */
     @Override
@@ -75,7 +75,7 @@ abstract class ModelAccessors extends ModelCasts {
      * @return this model
      * @throws NullPointerException if {@code key} is {@code null}
      * @throws ClassCastException if the setter does not accept the value's type
-     * @throws org.aristonis.diwan.database.eloquent.casts.InvalidCastException if a cast cannot
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidCastException if a cast cannot
      *     store the value
      */
     @Override
@@ -102,7 +102,7 @@ abstract class ModelAccessors extends ModelCasts {
      *
      * @param key the attribute, never {@code null}
      * @return the value, or {@code null} when absent or {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.casts.InvalidCastException if a cast cannot
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidCastException if a cast cannot
      *     read the stored value
      */
     @Override

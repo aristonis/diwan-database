@@ -19,8 +19,8 @@ import org.aristonis.diwan.database.eloquent.casts.Attribute;
 import org.aristonis.diwan.database.eloquent.casts.BackedValue;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
-import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
-import org.aristonis.diwan.database.eloquent.json.JsonException;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import org.junit.jupiter.api.Test;
 
 /** The map and JSON forms: hidden, visible and appended keys, and the serialized value forms. */

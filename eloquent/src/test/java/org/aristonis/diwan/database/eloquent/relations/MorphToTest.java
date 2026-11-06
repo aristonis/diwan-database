@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
-import org.aristonis.diwan.database.eloquent.ClassMorphViolationException;
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.relations.MorphToModels.Comment;
 import org.aristonis.diwan.database.eloquent.relations.MorphToModels.Post;

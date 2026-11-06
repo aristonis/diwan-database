@@ -10,9 +10,9 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabaseLockedException;
 import android.database.sqlite.SQLiteException;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.QueryException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,7 +45,7 @@ public class AndroidSqliteFailuresTest {
         db.statement("create table p (id integer primary key)");
         db.statement("create table k (p_id integer references p (id))");
 
-        assertThrows(org.aristonis.diwan.database.ForeignKeyViolationException.class,
+        assertThrows(org.aristonis.diwan.database.exception.ForeignKeyViolationException.class,
                 () -> db.insert("insert into k values (?)", 9));
         database.close();
     }

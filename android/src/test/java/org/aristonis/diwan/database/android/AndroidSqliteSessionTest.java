@@ -18,7 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.junit.After;
 import org.junit.Before;

@@ -11,9 +11,9 @@ import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastSerializer;
 import org.aristonis.diwan.database.eloquent.casts.CastValues;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
-import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import org.aristonis.diwan.database.eloquent.internal.VisitPath;
-import org.aristonis.diwan.database.eloquent.json.JsonException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 
 /**
  * The serialization layer of {@link Model}: the map and JSON forms, shaped by the hidden, visible

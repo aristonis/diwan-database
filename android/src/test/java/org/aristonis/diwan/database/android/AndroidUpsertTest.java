@@ -10,7 +10,7 @@ import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
-import org.aristonis.diwan.database.sqlite.SqliteVersion;
+import org.aristonis.diwan.database.sqlite.SQLiteVersion;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,7 +48,7 @@ public class AndroidUpsertTest {
         String version = db.getDriverInfo().databaseVersion();
         List<Map<String, Object>> rows = List.of(Map.of("email", "a@x", "name", "A"));
 
-        if (SqliteVersion.atLeast(version, 3, 24, 0)) {
+        if (SQLiteVersion.atLeast(version, 3, 24, 0)) {
             query.table("users").upsert(rows, List.of("email"));
             query.table("users").upsert(List.of(Map.of("email", "a@x", "name", "A2")), List.of("email"));
             assertEquals(1L, query.table("users").count());

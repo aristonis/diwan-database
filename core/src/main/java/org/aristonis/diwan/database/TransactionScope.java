@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.exception.QueryException;
+
 /**
  * Holds a transaction open until it is committed or closed, for use with try-with-resources.
  *

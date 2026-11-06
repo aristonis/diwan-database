@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.LazyLoadingViolationException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

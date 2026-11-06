@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;

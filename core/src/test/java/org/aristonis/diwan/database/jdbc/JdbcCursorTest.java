@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.driver.DriverCapability;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.RowCursor;
 import org.junit.jupiter.api.AfterEach;

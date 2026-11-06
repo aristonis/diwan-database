@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.eloquent.ScopeFixtures.Country;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Post;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Statement;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.User;
-import org.aristonis.diwan.database.eloquent.SoftDeletingScope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

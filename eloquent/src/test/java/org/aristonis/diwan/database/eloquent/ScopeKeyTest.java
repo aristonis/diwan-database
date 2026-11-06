@@ -1,5 +1,10 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.scope.Scope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
+import org.aristonis.diwan.database.eloquent.EloquentBuilder;
+import org.aristonis.diwan.database.eloquent.Model;
+import org.aristonis.diwan.database.eloquent.ScopeFixtures;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;

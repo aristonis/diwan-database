@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Map;

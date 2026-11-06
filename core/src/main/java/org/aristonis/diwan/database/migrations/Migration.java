@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationChecksumException;
 import java.util.Optional;
 import org.aristonis.diwan.database.schema.Schema;
 

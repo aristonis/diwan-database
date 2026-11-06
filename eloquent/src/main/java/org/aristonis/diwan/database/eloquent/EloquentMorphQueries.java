@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

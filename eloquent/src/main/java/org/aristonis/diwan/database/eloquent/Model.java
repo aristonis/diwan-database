@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.exception.MassAssignmentException;
+import org.aristonis.diwan.database.eloquent.exception.ModelNotFoundException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -213,7 +215,7 @@ public abstract class Model extends ModelSoftDeletes {
      *
      * @return {@code true} when saved or already clean, {@code false} when a hook vetoed it
      * @throws IllegalStateException if the model has no connection
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public boolean save() {
         return save(null);
@@ -241,7 +243,7 @@ public abstract class Model extends ModelSoftDeletes {
      * @return {@code true} when saved or already clean, {@code false} when a hook vetoed it
      * @throws IllegalStateException if the model has no connection, or it is a new
      *     non-incrementing model with no attributes and no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public boolean saveOrFail() {
         QueryFactory outer = getQueryFactory();
@@ -565,7 +567,7 @@ public abstract class Model extends ModelSoftDeletes {
      *
      * @return this model; unchanged when it does not exist
      * @throws ModelNotFoundException if the row is gone
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a loaded
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a loaded
      *     relation was set under a name the model's relation map does not have
      */
     public Model refresh() {

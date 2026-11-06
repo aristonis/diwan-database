@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationFailedException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -9,7 +10,7 @@ import java.util.Collections;
 import java.util.Optional;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Schema;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

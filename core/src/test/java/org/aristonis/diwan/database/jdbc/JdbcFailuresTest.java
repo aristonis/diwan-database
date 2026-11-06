@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.SQLException;
 import java.util.Set;
 import org.aristonis.diwan.database.driver.DriverCapability;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.junit.jupiter.api.Test;
 
 class JdbcFailuresTest {

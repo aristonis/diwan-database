@@ -1,5 +1,14 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationChecksumException;
+import org.aristonis.diwan.database.exception.MigrationFailedException;
+import org.aristonis.diwan.database.exception.MissingMigrationsException;
+import org.aristonis.diwan.database.migrations.event.MigrationEvent;
+import org.aristonis.diwan.database.migrations.event.MigrationListener;
+import org.aristonis.diwan.database.migrations.event.MigrationsEvent;
+import org.aristonis.diwan.database.migrations.internal.MigrationChecksums;
+import org.aristonis.diwan.database.migrations.internal.MigrationNames;
+import org.aristonis.diwan.database.migrations.internal.MigrationNotifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -15,10 +24,10 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.driver.DriverCapability;
-import org.aristonis.diwan.database.migrations.MigrationFailedException.Direction;
-import org.aristonis.diwan.database.migrations.MigrationFailedException.Phase;
+import org.aristonis.diwan.database.exception.MigrationFailedException.Direction;
+import org.aristonis.diwan.database.exception.MigrationFailedException.Phase;
 import org.aristonis.diwan.database.migrations.MigrationResult.Outcome;
-import org.aristonis.diwan.database.schema.ForeignKeysOffRequiredException;
+import org.aristonis.diwan.database.exception.ForeignKeysOffRequiredException;
 import org.aristonis.diwan.database.schema.Schema;
 
 /**
@@ -117,7 +126,7 @@ public final class Migrator {
      * @throws MigrationChecksumException if a migration that ran declares a different checksum than
      *     the one recorded; nothing runs then
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading or creating the migrations
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading or creating the migrations
      *     table fails
      */
     public List<MigrationResult> run() {
@@ -134,7 +143,7 @@ public final class Migrator {
      * @throws MigrationChecksumException if a migration that ran declares a different checksum than
      *     the one recorded; nothing runs then
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading or creating the migrations
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading or creating the migrations
      *     table fails
      */
     public List<MigrationResult> run(boolean step) {
@@ -187,7 +196,7 @@ public final class Migrator {
      *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> rollback() {
         ensureNoOpenTransaction();
@@ -207,7 +216,7 @@ public final class Migrator {
      *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> rollbackSteps(int steps) {
         if (steps < 1) {
@@ -229,7 +238,7 @@ public final class Migrator {
      *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> rollbackBatch(int batch) {
         ensureNoOpenTransaction();
@@ -247,7 +256,7 @@ public final class Migrator {
      *     unless {@link Builder#allowMissingOnRollback()} was set; nothing is undone then
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration fails
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> reset() {
         ensureNoOpenTransaction();
@@ -263,7 +272,7 @@ public final class Migrator {
      * @return the given migrations in name order, then entries of the migrations table that the
      *     migrator was not given; unmodifiable, never {@code null}
      * @throws IllegalStateException if the migrations table exists without a {@code checksum} column
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationStatus> status() {
         requireCurrentTable();
@@ -297,7 +306,7 @@ public final class Migrator {
      * @throws MigrationChecksumException if a migration that ran declares a different checksum than
      *     the one recorded
      * @throws MigrationFailedException if a migration throws while its SQL is collected
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> pretendRun() {
         ensureNoOpenTransaction();
@@ -327,7 +336,7 @@ public final class Migrator {
      * @return one result per entry of the last batch, newest first
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration throws while its SQL is collected
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> pretendRollback() {
         ensureNoOpenTransaction();
@@ -340,7 +349,7 @@ public final class Migrator {
      * @return one result per entry, newest first
      * @throws IllegalStateException if a connection is inside a transaction
      * @throws MigrationFailedException if a migration throws while its SQL is collected
-     * @throws org.aristonis.diwan.database.QueryException if reading the migrations table fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the migrations table fails
      */
     public List<MigrationResult> pretendReset() {
         ensureNoOpenTransaction();
@@ -388,7 +397,7 @@ public final class Migrator {
      * @throws NullPointerException if the list or an element is {@code null}
      * @throws IllegalStateException if a connection is inside a transaction, or the migrations
      *     table has no {@code checksum} column
-     * @throws org.aristonis.diwan.database.QueryException if reading or writing the migrations table
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading or writing the migrations table
      *     fails
      */
     public int repairChecksums(List<Migration> migrations) {
@@ -425,7 +434,7 @@ public final class Migrator {
      * @return how many records held a checksum, 0 when the migrations table does not exist
      * @throws IllegalStateException if a connection is inside a transaction, or the migrations
      *     table has no {@code checksum} column
-     * @throws org.aristonis.diwan.database.QueryException if reading or writing the migrations table
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading or writing the migrations table
      *     fails
      */
     public int clearChecksums() {

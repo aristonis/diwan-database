@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.sqlite.SQLiteSqlTokens;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -7,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Path;
 import java.util.Arrays;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.schema.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

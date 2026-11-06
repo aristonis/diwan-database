@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.driver;
 
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.Internal;
 
 /**

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;

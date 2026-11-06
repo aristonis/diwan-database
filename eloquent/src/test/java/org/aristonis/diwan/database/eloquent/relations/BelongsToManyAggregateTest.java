@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -15,7 +16,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
-import org.aristonis.diwan.database.eloquent.ModelPage;
+import org.aristonis.diwan.database.eloquent.page.ModelPage;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.pgsql.PostgresQuery;
 import org.junit.jupiter.api.AfterEach;

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.SoftDeletingScope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.Db;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.Order;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.StringKeyUser;

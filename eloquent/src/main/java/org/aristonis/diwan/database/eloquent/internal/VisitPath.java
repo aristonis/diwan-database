@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,6 +34,7 @@ import org.aristonis.diwan.database.query.QueryFactory;
  * transaction's factory and the connection it was opened on, so the walk can run each owner on
  * the transaction instead of the connection the transaction holds.
  */
+@Internal
 public final class VisitPath {
 
     private final Set<Model> path =

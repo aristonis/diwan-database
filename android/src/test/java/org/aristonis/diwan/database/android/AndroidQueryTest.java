@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.values.Instants;

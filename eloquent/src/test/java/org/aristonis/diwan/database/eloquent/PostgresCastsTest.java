@@ -19,7 +19,7 @@ import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
-import org.aristonis.diwan.database.eloquent.json.JsonException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import org.aristonis.diwan.database.pgsql.PostgresQuery;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.BeforeEach;

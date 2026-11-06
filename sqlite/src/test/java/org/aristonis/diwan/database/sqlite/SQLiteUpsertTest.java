@@ -10,9 +10,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.query.Builder;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -172,22 +172,22 @@ class SQLiteUpsertTest {
 
     @Test
     void sqliteVersionComparesEachPartAsAWholeNumber() {
-        assertTrue(SqliteVersion.atLeast("3.45.1", 3, 24, 0));
-        assertTrue(SqliteVersion.atLeast("3.24", 3, 24, 0));
-        assertTrue(SqliteVersion.atLeast("4.0", 3, 24, 0));
-        assertTrue(SqliteVersion.atLeast("3.45.1-rc1", 3, 45, 1));
-        assertFalse(SqliteVersion.atLeast("3.9.9", 3, 24, 0));
-        assertFalse(SqliteVersion.atLeast("3.22.0", 3, 24, 0));
-        assertFalse(SqliteVersion.atLeast("3.45.0", 3, 45, 1));
-        assertFalse(SqliteVersion.atLeast("junk", 3, 24, 0));
-        assertFalse(SqliteVersion.atLeast("3.x", 3, 24, 0));
-        assertFalse(SqliteVersion.atLeast("", 3, 24, 0));
-        assertFalse(SqliteVersion.atLeast(null, 3, 24, 0));
-        assertTrue(SqliteVersion.isReadable("3.45.1-rc1"));
-        assertTrue(SqliteVersion.isReadable("3"));
-        assertFalse(SqliteVersion.isReadable("junk"));
-        assertFalse(SqliteVersion.isReadable("3.x"));
-        assertFalse(SqliteVersion.isReadable(""));
-        assertFalse(SqliteVersion.isReadable(null));
+        assertTrue(SQLiteVersion.atLeast("3.45.1", 3, 24, 0));
+        assertTrue(SQLiteVersion.atLeast("3.24", 3, 24, 0));
+        assertTrue(SQLiteVersion.atLeast("4.0", 3, 24, 0));
+        assertTrue(SQLiteVersion.atLeast("3.45.1-rc1", 3, 45, 1));
+        assertFalse(SQLiteVersion.atLeast("3.9.9", 3, 24, 0));
+        assertFalse(SQLiteVersion.atLeast("3.22.0", 3, 24, 0));
+        assertFalse(SQLiteVersion.atLeast("3.45.0", 3, 45, 1));
+        assertFalse(SQLiteVersion.atLeast("junk", 3, 24, 0));
+        assertFalse(SQLiteVersion.atLeast("3.x", 3, 24, 0));
+        assertFalse(SQLiteVersion.atLeast("", 3, 24, 0));
+        assertFalse(SQLiteVersion.atLeast(null, 3, 24, 0));
+        assertTrue(SQLiteVersion.isReadable("3.45.1-rc1"));
+        assertTrue(SQLiteVersion.isReadable("3"));
+        assertFalse(SQLiteVersion.isReadable("junk"));
+        assertFalse(SQLiteVersion.isReadable("3.x"));
+        assertFalse(SQLiteVersion.isReadable(""));
+        assertFalse(SQLiteVersion.isReadable(null));
     }
 }

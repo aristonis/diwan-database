@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.LoggedQuery;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.Schema;
 import org.junit.jupiter.api.BeforeEach;

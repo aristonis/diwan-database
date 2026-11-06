@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverCapability;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
 

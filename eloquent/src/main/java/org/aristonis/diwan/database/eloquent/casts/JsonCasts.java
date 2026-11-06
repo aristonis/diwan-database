@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -8,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
-import org.aristonis.diwan.database.eloquent.json.JsonException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 
 /**
  * The {@code json}, {@code array} and {@code json:unicode} casts.

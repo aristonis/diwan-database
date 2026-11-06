@@ -7,9 +7,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.query.Builder;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.Test;
 

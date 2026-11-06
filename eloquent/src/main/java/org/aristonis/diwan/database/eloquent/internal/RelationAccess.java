@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import org.aristonis.diwan.database.eloquent.relations.Relation;
  *
  * @implSpec An implementation keeps no state of its own and is safe to call from any thread.
  */
+@Internal
 public interface RelationAccess {
 
     /**
@@ -32,7 +34,7 @@ public interface RelationAccess {
      * @param relations the constraints by dot path, as parsed by
      *     {@link EloquentAccess#parseWith(String...)}, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names an unknown relation; no query has run
      * @throws IllegalStateException if a constraint sets a limit or an offset
      */
@@ -44,7 +46,7 @@ public interface RelationAccess {
      * @param models the parent models, never {@code null}, all of one class; empty does nothing
      * @param relations the constraints by dot path, as for {@link #load(List, Map)}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names an unknown relation
      * @throws IllegalStateException if a constraint sets a limit or an offset
      */
@@ -64,7 +66,7 @@ public interface RelationAccess {
      * @throws NullPointerException if {@code outer}, {@code relation} or {@code operator} is
      *     {@code null}
      * @throws IllegalArgumentException if the operator is not one of the seven
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the path
      *     names an unknown relation
      */
     void addExistence(EloquentBuilder<?> outer, String relation, String operator, long count, boolean or,
@@ -86,7 +88,7 @@ public interface RelationAccess {
      * @throws NullPointerException if an argument other than {@code constraint} is {@code null}
      * @throws IllegalArgumentException if the operator is unknown, the name is a dot path or not a
      *     morph-to relation, or a type is neither a model class nor a string
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if a type cannot
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if a type cannot
      *     be resolved; nothing has been added
      */
     void addMorphExistence(EloquentBuilder<?> outer, String relation, List<Object> types, String operator,
@@ -105,7 +107,7 @@ public interface RelationAccess {
      * @throws NullPointerException if {@code outer} or {@code relation} is {@code null}
      * @throws IllegalArgumentException if the name is a dot path or not a morph-to relation, the
      *     collection is empty, a model has no key, or the target is of another kind
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if a class or
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if a class or
      *     alias cannot be resolved
      */
     void whereMorphedTo(EloquentBuilder<?> outer, String relation, Object target, boolean not, boolean or);
@@ -118,7 +120,7 @@ public interface RelationAccess {
      * @param plain the constraint that runs on every owner class, or {@code null} for none
      * @return the constraint, never {@code null}
      * @throws NullPointerException if {@code options} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if an option
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if an option
      *     names a class or alias that cannot be resolved
      */
     Consumer<EloquentBuilder<?>> morphEager(Consumer<MorphEagerOptions> options, Consumer<EloquentBuilder<?>> plain);
@@ -145,7 +147,7 @@ public interface RelationAccess {
      * @param relations the relations to load, by owner class, never {@code null}
      * @param isCount {@code true} to load counts instead of models
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name
      *     is unknown
      */
     void loadMorph(Collection<? extends Model> models, String relation,
@@ -165,7 +167,7 @@ public interface RelationAccess {
      * @throws NullPointerException if {@code outer}, {@code relations} or {@code column} is
      *     {@code null}
      * @throws IllegalArgumentException if the function is not one of the six
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name
      *     is unknown or is a dot path; the builder is unchanged
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     and groupBy; the builder is unchanged
@@ -190,7 +192,7 @@ public interface RelationAccess {
      *     {@code column} is {@code null}
      * @throws IllegalArgumentException if the models are not all of one class, the function is not
      *     one of the six, or the constraint bindings leave no room for a key; no query has run
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name
      *     is unknown or is a dot path; no query has run
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     and groupBy
@@ -211,7 +213,7 @@ public interface RelationAccess {
      * @param path the path and done set of the outermost call, never {@code null}; a new one per
      *     outermost call, never shared between threads
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidRelationException if the
      *     class's {@code touches()} names an unknown relation or one whose type does not support
      *     touches; checked once per class
      * @throws IllegalArgumentException if a loaded relation value is not a model, a collection of
@@ -227,9 +229,9 @@ public interface RelationAccess {
      * @param name the relation name, never {@code null}
      * @return the unconstrained relation, its name set, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     model class has no relation of that name
-     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidRelationException if the
      *     model class's relation map fails its check
      */
     Relation<?, ?> resolve(Model model, String name);
@@ -240,7 +242,7 @@ public interface RelationAccess {
      * @param type the model class, never {@code null}
      * @return the alias or the class name, never {@code null}
      * @throws NullPointerException if {@code type} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the class has
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the class has
      *     no alias and the morph map is required
      */
     String aliasOf(Class<? extends Model> type);
@@ -253,7 +255,7 @@ public interface RelationAccess {
      *     bootstrap loader
      * @return the model class, never {@code null}
      * @throws NullPointerException if {@code type} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the string
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the string
      *     cannot be resolved
      */
     Class<? extends Model> resolveMorph(String type, ClassLoader loader);

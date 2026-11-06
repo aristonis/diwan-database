@@ -139,7 +139,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @throws NullPointerException if a path is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class, or a
      *     {@code name:columns} path lists an empty column
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names no relation; checked before any query
      */
     public ModelCollection<T> load(String... relations) {
@@ -156,7 +156,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the path
      *     names no relation
      */
     public ModelCollection<T> load(String relation, Consumer<EloquentBuilder<?>> constraint) {
@@ -172,7 +172,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if the map, a path or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names no relation
      */
     public ModelCollection<T> load(Map<String, Consumer<EloquentBuilder<?>>> relations) {
@@ -189,7 +189,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if a path is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names no relation
      */
     public ModelCollection<T> loadMissing(String... relations) {
@@ -207,7 +207,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @param relations the relation paths to load, by owner class, never {@code null}
      * @return this collection
      * @throws NullPointerException if an argument, a class key or a path is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names no relation of its owner class
      */
     public ModelCollection<T> loadMorph(String relation, Map<Class<? extends Model>, List<String>> relations) {
@@ -226,7 +226,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @param relations the relation names to count, by owner class, never {@code null}
      * @return this collection
      * @throws NullPointerException if an argument, a class key or a name is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name
      *     is not a relation of its owner class
      */
     public ModelCollection<T> loadMorphCount(String relation, Map<Class<? extends Model>, List<String>> relations) {
@@ -247,7 +247,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if a name is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadCount(String... relations) {
@@ -262,7 +262,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -281,7 +281,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadMax(String relation, String column) {
@@ -297,7 +297,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -316,7 +316,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadMin(String relation, String column) {
@@ -332,7 +332,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -351,7 +351,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadSum(String relation, String column) {
@@ -367,7 +367,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -386,7 +386,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadAvg(String relation, String column) {
@@ -402,7 +402,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -420,7 +420,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if a name is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadExists(String... relations) {
@@ -436,7 +436,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -458,7 +458,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @throws NullPointerException if {@code relation} or {@code column} is {@code null}
      * @throws IllegalArgumentException if {@code function} is not one of those, or the models are
      *     of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadAggregate(String relation, String column, String function) {
@@ -477,7 +477,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @throws NullPointerException if the map, the column, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if {@code function} is not a supported function, or the
      *     models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
      *     or groupBy
@@ -496,7 +496,7 @@ public final class ModelCollection<T extends Model> extends AbstractList<T> impl
      * @return this collection
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the models are of more than one class
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path; checked before any query
      */
     public ModelCollection<T> loadAggregate(String relation, String column) {

@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.json;
 
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
+
 /**
  * Converts between JSON text and plain Java values.
  *

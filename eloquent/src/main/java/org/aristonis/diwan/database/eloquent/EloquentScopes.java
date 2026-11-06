@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.scope.Scope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;

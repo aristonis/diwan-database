@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

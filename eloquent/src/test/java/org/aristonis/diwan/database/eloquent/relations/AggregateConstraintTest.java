@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -15,7 +16,7 @@ import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.relations.ChainedFactoryTest.Blogger;
 import org.aristonis.diwan.database.eloquent.relations.RelationModels.User;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

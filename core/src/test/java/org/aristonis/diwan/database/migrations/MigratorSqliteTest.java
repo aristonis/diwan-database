@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationFailedException;
+import org.aristonis.diwan.database.exception.MissingMigrationsException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -14,7 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.schema.Schema;
 import org.aristonis.diwan.database.sqlite.SQLiteSchema;
 import org.junit.jupiter.api.BeforeEach;

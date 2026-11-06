@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;

@@ -48,7 +48,7 @@ final class MorphExistence {
      * @throws NullPointerException if an argument other than {@code constraint} is {@code null}
      * @throws IllegalArgumentException if the operator is unknown, the name is a dot path or not a
      *     morph-to relation, or a type is neither a model class nor a string
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if a type cannot
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if a type cannot
      *     be resolved; nothing has been added
      */
     static void hasMorph(EloquentBuilder<?> outer, String relation, List<Object> types, String operator,
@@ -97,7 +97,7 @@ final class MorphExistence {
      * @throws IllegalArgumentException if the name is a dot path or not a morph-to relation, the
      *     collection is empty or holds a non-model, a model has no key, or the target is of another
      *     kind
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if a class or
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if a class or
      *     alias cannot be resolved
      */
     static void whereMorphedTo(EloquentBuilder<?> outer, String relation, Object target, boolean not, boolean or) {

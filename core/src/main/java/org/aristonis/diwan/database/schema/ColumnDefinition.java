@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.Expression;
+import org.aristonis.diwan.database.schema.internal.SchemaNames;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;

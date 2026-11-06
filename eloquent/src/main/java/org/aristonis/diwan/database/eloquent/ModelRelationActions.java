@@ -12,7 +12,7 @@ import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.TouchScope;
 import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
-import org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
@@ -276,13 +276,13 @@ abstract class ModelRelationActions extends ModelMorphRelations {
      * a small thread stack (Android). Owners of a class in a
      * {@link #withoutTouching(Class, Runnable)} scope are skipped.
      *
-     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if a name in
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidRelationException if a name in
      *     {@code touches()} is not a relation of this model or names a relation type that does not
      *     support touches
      * @throws IllegalArgumentException if a loaded relation value is not a model, a collection of
      *     models or null
      * @throws IllegalStateException if the model class has no {@link ModelQuery} entry
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses an update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses an update
      */
     public void touchOwners() {
         Model model = self();
@@ -402,7 +402,7 @@ abstract class ModelRelationActions extends ModelMorphRelations {
      * @throws IllegalArgumentException if a loaded relation value is not a model, a collection of
      *     models or null
      * @throws IllegalStateException if a model to save has no connection
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public boolean push() {
         return push(new VisitPath());

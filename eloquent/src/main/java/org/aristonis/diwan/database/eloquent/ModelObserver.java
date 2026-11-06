@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.ModelEvents;
+import org.aristonis.diwan.database.eloquent.Model;
+
 /**
  * A set of model event hooks in one class, registered with {@link ModelEvents#observe}. Every
  * method defaults to doing nothing, or to {@code true} for the halting ones, so an observer

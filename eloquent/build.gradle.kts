@@ -12,11 +12,6 @@ dependencies {
     testImplementation("org.postgresql:postgresql:42.7.5")
 }
 
-// The internal bridges are not API; keep them out of the published Javadoc.
-tasks.javadoc {
-    exclude("**/internal/**")
-}
-
 // Javadoc never reads the internal bridges, so doclint at compile time is their only docs check.
 tasks.named<JavaCompile>("compileJava") {
     options.compilerArgs.addAll(

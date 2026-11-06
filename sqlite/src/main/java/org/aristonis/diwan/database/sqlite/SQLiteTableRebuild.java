@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.sqlite.SQLiteSchemaGrammar;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -9,10 +11,10 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
-import org.aristonis.diwan.database.schema.Command;
+import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
-import org.aristonis.diwan.database.schema.ForeignKeysOffRequiredException;
+import org.aristonis.diwan.database.exception.ForeignKeysOffRequiredException;
 
 /**
  * Compiles the commands of one blueprint that changes an existing SQLite table, rebuilding the

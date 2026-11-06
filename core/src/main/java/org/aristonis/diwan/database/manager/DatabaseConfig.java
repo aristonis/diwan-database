@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.manager;
 
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;

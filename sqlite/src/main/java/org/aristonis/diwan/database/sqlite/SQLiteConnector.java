@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.sqlite.SingleConnectionDataSource;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -12,7 +13,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
-import org.aristonis.diwan.database.manager.DatabaseConfigException;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
 

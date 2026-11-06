@@ -73,7 +73,7 @@ public interface MigrationRepository {
      *     the migrator never checks
      * @throws NullPointerException if {@code name} is {@code null}
      * @throws IllegalArgumentException if the name is invalid or {@code batch} is below 1
-     * @throws org.aristonis.diwan.database.UniqueConstraintViolationException if the name is
+     * @throws org.aristonis.diwan.database.exception.UniqueConstraintViolationException if the name is
      *     already recorded
      */
     void log(String name, int batch, String checksum);

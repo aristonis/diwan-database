@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Arrays;
 import java.util.List;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.Schema;

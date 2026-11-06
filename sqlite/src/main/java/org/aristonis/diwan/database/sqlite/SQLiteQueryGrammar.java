@@ -301,11 +301,11 @@ public class SQLiteQueryGrammar extends QueryGrammar {
      */
     @Override
     protected void checkUpsert(String databaseVersion) {
-        if (!SqliteVersion.isReadable(databaseVersion)) {
+        if (!SQLiteVersion.isReadable(databaseVersion)) {
             throw new UnsupportedOperationException("Cannot read the SQLite version '" + databaseVersion
                     + "'; upsert needs SQLite 3.24 or later");
         }
-        if (!SqliteVersion.atLeast(databaseVersion, UPSERT_MAJOR, UPSERT_MINOR, 0)) {
+        if (!SQLiteVersion.atLeast(databaseVersion, UPSERT_MAJOR, UPSERT_MINOR, 0)) {
             throw new UnsupportedOperationException("Upsert needs SQLite 3.24 or later (Android API 30+); "
                     + "this database is " + databaseVersion);
         }

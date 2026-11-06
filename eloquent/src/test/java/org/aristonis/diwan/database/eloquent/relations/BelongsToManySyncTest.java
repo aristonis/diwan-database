@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.eloquent.relations.BtmWriteModels.TsRole;
 import org.aristonis.diwan.database.eloquent.relations.BtmWriteModels.TsUser;
 import org.aristonis.diwan.database.jdbc.JdbcConnectionProvider;

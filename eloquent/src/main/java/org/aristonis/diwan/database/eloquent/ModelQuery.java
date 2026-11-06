@@ -1,5 +1,10 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.ModelEvents;
+import org.aristonis.diwan.database.eloquent.exception.MassAssignmentException;
+import org.aristonis.diwan.database.eloquent.exception.ModelNotFoundException;
+import org.aristonis.diwan.database.eloquent.scope.Scope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -15,7 +20,7 @@ import java.util.function.UnaryOperator;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.ClassCache;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.aristonis.diwan.database.query.QueryFactory;
 
 /**
@@ -176,7 +181,7 @@ public final class ModelQuery<T extends Model> {
      * {@code Model::preventLazyLoading}.
      *
      * <p>While on, reading a relation that is not loaded from a model that came in a result of more
-     * than one row throws {@link org.aristonis.diwan.database.eloquent.relations.LazyLoadingViolationException}
+     * than one row throws {@link org.aristonis.diwan.database.eloquent.exception.LazyLoadingViolationException}
      * before any query runs. Models from single-row results, new models, loaded relations and typed
      * relation queries such as {@code user.posts().get()} are never blocked. Only models hydrated
      * while the switch is on are marked, and a marked model is blocked only while it stays on.

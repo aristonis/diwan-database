@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.Access;
@@ -64,7 +64,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the same model
      * @throws NullPointerException if {@code model} is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R save(R model) {
         return save(model, Collections.<String, Object>emptyMap(), true);
@@ -78,7 +78,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the same model
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R save(R model, Map<String, ?> pivotAttributes) {
         return save(model, pivotAttributes, true);
@@ -95,7 +95,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the same model
      * @throws NullPointerException if {@code model} or {@code pivotAttributes} is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R save(R model, Map<String, ?> pivotAttributes, boolean touch) {
         Objects.requireNonNull(model, "model");
@@ -115,7 +115,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the models, in order, unmodifiable, never {@code null}
      * @throws NullPointerException if {@code models} or an element is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final List<R> saveMany(Collection<? extends R> models) {
         Objects.requireNonNull(models, "models");
@@ -134,7 +134,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @throws NullPointerException if an argument or an element is {@code null}
      * @throws IllegalArgumentException if the two collections differ in size
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final List<R> saveMany(Collection<? extends R> models, List<? extends Map<String, ?>> pivotAttributes) {
         Objects.requireNonNull(models, "models");
@@ -162,9 +162,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the saved model, never {@code null}
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R create(Map<String, ?> attributes) {
         return create(attributes, Collections.<String, Object>emptyMap(), true);
@@ -179,9 +179,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the saved model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R create(Map<String, ?> attributes, Map<String, ?> pivotAttributes) {
         return create(attributes, pivotAttributes, true);
@@ -197,9 +197,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the saved model, never {@code null}
      * @throws NullPointerException if {@code attributes} or {@code pivotAttributes} is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R create(Map<String, ?> attributes, Map<String, ?> pivotAttributes, boolean touch) {
         Objects.requireNonNull(attributes, "attributes");
@@ -215,9 +215,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the saved models, in order, unmodifiable, never {@code null}
      * @throws NullPointerException if {@code records} or an element is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement; every
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement; every
      *     record of the call is rolled back
      */
     public final List<R> createMany(List<? extends Map<String, ?>> records) {
@@ -236,9 +236,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @throws NullPointerException if an argument or an element is {@code null}
      * @throws IllegalArgumentException if the two lists differ in size
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement; every
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement; every
      *     record of the call is rolled back
      */
     public final List<R> createMany(List<? extends Map<String, ?>> records,
@@ -298,7 +298,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @param values more attributes for a new model, never {@code null}
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute of a new model
      */
     public final R firstOrNew(Map<String, ?> attributes, Map<String, ?> values) {
@@ -312,7 +312,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the model, never {@code null}
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R firstOrCreate(Map<String, ?> attributes) {
         return firstOrCreate(attributes, Collections.<String, Object>emptyMap(),
@@ -328,7 +328,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R firstOrCreate(Map<String, ?> attributes, Map<String, ?> values) {
         return firstOrCreate(attributes, values, Collections.<String, Object>emptyMap());
@@ -346,7 +346,7 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R firstOrCreate(Map<String, ?> attributes, Map<String, ?> values,
             Map<String, ?> pivotAttributes) {
@@ -437,9 +437,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R updateOrCreate(Map<String, ?> attributes, Map<String, ?> values) {
         return updateOrCreate(attributes, values, Collections.<String, Object>emptyMap());
@@ -456,9 +456,9 @@ abstract class PivotModelWrites<R extends Model> extends PivotSync<R> {
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the parent has no key
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final R updateOrCreate(Map<String, ?> attributes, Map<String, ?> values,
             Map<String, ?> pivotAttributes) {

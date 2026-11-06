@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.exception.MassAssignmentException;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -10,7 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.query.Builder;
 
 /**
@@ -248,7 +250,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      *
      * @param values the columns and values, never {@code null}
      * @return the affected rows
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int update(Map<String, ?> values) {
         return scoped().update(addUpdatedAtColumn(values));
@@ -469,7 +471,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @throws NullPointerException if an argument or a row is {@code null}
      * @throws IllegalArgumentException if {@code uniqueBy} is empty or the rows are not alike
      * @throws UnsupportedOperationException if the database cannot upsert, as SQLite before 3.24
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy) {
         return upsert(rows, uniqueBy, null);
@@ -490,7 +492,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @throws NullPointerException if {@code rows}, {@code uniqueBy} or a row is {@code null}
      * @throws IllegalArgumentException if {@code uniqueBy} is empty or the rows are not alike
      * @throws UnsupportedOperationException if the database cannot upsert, as SQLite before 3.24
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy, List<String> update) {
         Objects.requireNonNull(rows, "rows");
@@ -510,7 +512,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @param row the columns and values, never {@code null}
      * @return the number of rows inserted, 0 or 1
      * @throws NullPointerException if {@code row} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnore(Map<String, ?> row) {
         return insertOrIgnore(Collections.singletonList(Objects.requireNonNull(row, "row")));
@@ -526,7 +528,7 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
      * @return the number of rows inserted, as the database reports it; 0 for no rows
      * @throws NullPointerException if {@code rows} or a row is {@code null}
      * @throws IllegalArgumentException if the rows are not alike
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnore(List<? extends Map<String, ?>> rows) {
         Objects.requireNonNull(rows, "rows");

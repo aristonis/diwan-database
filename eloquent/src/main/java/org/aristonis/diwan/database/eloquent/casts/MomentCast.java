@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

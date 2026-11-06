@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -27,7 +28,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return what the connection returns for the insert
      * @throws NullPointerException if {@code row} is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final boolean insert(Map<String, ?> row) {
         return insert(Collections.singletonList(Objects.requireNonNull(row, "row")));
@@ -41,7 +42,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if {@code rows} or a row is {@code null}
      * @throws IllegalArgumentException if the rows have different columns
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final boolean insert(List<? extends Map<String, ?>> rows) {
         Objects.requireNonNull(rows, "rows");
@@ -75,7 +76,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if {@code row} is {@code null}
      * @throws UnsupportedOperationException if the processor cannot return a key
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final Object insertGetId(Map<String, ?> row) {
         return insertGetId(row, DEFAULT_KEY);
@@ -90,7 +91,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws UnsupportedOperationException if the processor cannot return a key
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final Object insertGetId(Map<String, ?> row, String sequence) {
         Objects.requireNonNull(row, "row");
@@ -113,7 +114,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return the number of rows inserted, as the connection reports it
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertUsing(List<String> columns, Builder query) {
         Objects.requireNonNull(columns, "columns");
@@ -131,7 +132,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return the number of rows inserted, as the connection reports it
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertUsing(List<String> columns, Consumer<Builder> query) {
         return insertUsing(columns, subQuery(query));
@@ -149,7 +150,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the grammar cannot ignore errors, as the base
      *     grammar cannot; nothing runs then
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnoreUsing(List<String> columns, Builder query) {
         Objects.requireNonNull(columns, "columns");
@@ -169,7 +170,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws UnsupportedOperationException if the grammar cannot ignore errors
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnoreUsing(List<String> columns, Consumer<Builder> query) {
         return insertOrIgnoreUsing(columns, subQuery(query));
@@ -185,7 +186,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the grammar cannot ignore errors, as the base
      *     grammar cannot; nothing runs then
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnore(Map<String, ?> row) {
         return insertOrIgnore(Collections.singletonList(Objects.requireNonNull(row, "row")));
@@ -209,7 +210,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the grammar cannot ignore errors, as the base
      *     grammar cannot; nothing runs then
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
      */
     public final int insertOrIgnore(List<? extends Map<String, ?>> rows) {
         Objects.requireNonNull(rows, "rows");
@@ -247,7 +248,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the grammar or the database version cannot upsert;
      *     SQLite older than 3.24, as in Android before API 30, refuses it; nothing runs then
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy) {
         return upsert(rows, uniqueBy, (List<String>) null);
@@ -270,7 +271,7 @@ abstract class WriteQueries extends AggregateQueries {
      *     rows have different columns
      * @throws UnsupportedOperationException if the grammar or the database version cannot upsert
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy, List<String> update) {
         Objects.requireNonNull(rows, "rows");
@@ -297,7 +298,7 @@ abstract class WriteQueries extends AggregateQueries {
      *     rows have different columns or a value is a list, map or array
      * @throws UnsupportedOperationException if the grammar or the database version cannot upsert
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final int upsert(List<? extends Map<String, ?>> rows, List<String> uniqueBy, Map<String, ?> update) {
         Objects.requireNonNull(rows, "rows");
@@ -348,7 +349,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return {@code true}
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final boolean updateOrInsert(Map<String, ?> attributes) {
         return updateOrInsert(attributes, Collections.emptyMap());
@@ -369,7 +370,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the query has joins and the grammar cannot update
      *     with joins
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final boolean updateOrInsert(Map<String, ?> attributes, Map<String, ?> values) {
         Objects.requireNonNull(attributes, "attributes");
@@ -402,7 +403,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the query has joins and the grammar cannot
      *     update with joins
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int update(Map<String, ?> values) {
         Objects.requireNonNull(values, "values");
@@ -424,7 +425,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return the number of rows changed
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int increment(String column) {
         return increment(column, 1);
@@ -439,7 +440,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int increment(String column, Number amount) {
         return increment(column, amount, Collections.emptyMap());
@@ -455,7 +456,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int increment(String column, Number amount, Map<String, ?> extra) {
         return incrementEach(singleAmount(column, amount), extra);
@@ -468,7 +469,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @return the number of rows changed
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int decrement(String column) {
         return decrement(column, 1);
@@ -483,7 +484,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int decrement(String column, Number amount) {
         return decrement(column, amount, Collections.emptyMap());
@@ -499,7 +500,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int decrement(String column, Number amount, Map<String, ?> extra) {
         return decrementEach(singleAmount(column, amount), extra);
@@ -513,7 +514,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if {@code amounts}, a column or an amount is {@code null}
      * @throws IllegalArgumentException if an amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int incrementEach(Map<String, ? extends Number> amounts) {
         return incrementEach(amounts, Collections.emptyMap());
@@ -529,7 +530,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument, a column or an amount is {@code null}
      * @throws IllegalArgumentException if an amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int incrementEach(Map<String, ? extends Number> amounts, Map<String, ?> extra) {
         return step(amounts, extra, " + ");
@@ -543,7 +544,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if {@code amounts}, a column or an amount is {@code null}
      * @throws IllegalArgumentException if an amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int decrementEach(Map<String, ? extends Number> amounts) {
         return decrementEach(amounts, Collections.emptyMap());
@@ -558,7 +559,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if an argument, a column or an amount is {@code null}
      * @throws IllegalArgumentException if an amount is not finite or not a standard number type
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int decrementEach(Map<String, ? extends Number> amounts, Map<String, ?> extra) {
         return step(amounts, extra, " - ");
@@ -572,7 +573,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws UnsupportedOperationException if the query has joins and the grammar cannot
      *     delete with joins
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the delete
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the delete
      */
     public final int delete() {
         requireTable();
@@ -590,7 +591,7 @@ abstract class WriteQueries extends AggregateQueries {
      * @throws NullPointerException if {@code id} is {@code null}
      * @throws IllegalArgumentException if {@code id} is a list, map, array or builder
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the delete
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the delete
      */
     public final int delete(Object id) {
         Objects.requireNonNull(id, "id");
@@ -603,7 +604,7 @@ abstract class WriteQueries extends AggregateQueries {
      * unless the connection is already inside one.
      *
      * @throws IllegalStateException if the query reads no table, as after {@link Builder#fromSub}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement;
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement;
      *     inside the transaction, every statement is then undone
      */
     public final void truncate() {

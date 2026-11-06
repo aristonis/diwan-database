@@ -105,7 +105,7 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
      * @throws NullPointerException if {@code ids} or {@code attributes} is {@code null}
      * @throws IllegalArgumentException as {@link #attach(Object)}
      * @throws IllegalStateException if the parent has no key value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses an insert, such as a
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses an insert, such as a
      *     unique index on an id already linked
      */
     public void attach(Object ids, Map<String, ?> attributes, boolean touch) {
@@ -203,7 +203,7 @@ abstract class PivotWrites<R extends Model> extends PivotReads<R> {
      * and no event. Nothing runs when the related class keeps no timestamps, has no update column, has
      * its touches switched off on this thread, or the parent has no key value.
      *
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     @Override
     public void touch() {

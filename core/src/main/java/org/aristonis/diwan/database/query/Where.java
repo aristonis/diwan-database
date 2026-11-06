@@ -1,7 +1,7 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.util.List;
-import java.util.Locale;
 import org.aristonis.diwan.database.Internal;
 
 /**
@@ -789,34 +789,6 @@ public interface Where {
         /** Returns the own builder, for the package's grammar and copy code, which never change it. */
         Builder builder() {
             return query;
-        }
-    }
-
-    /**
-     * The part of a date or time a {@link DateBased} condition compares.
-     *
-     * @apiNote Internal: read by dialect grammars; may change without notice.
-     */
-    @Internal
-    enum DatePart {
-        /** The date. */
-        DATE,
-        /** The time of day. */
-        TIME,
-        /** The day of the month. */
-        DAY,
-        /** The month. */
-        MONTH,
-        /** The year. */
-        YEAR;
-
-        /**
-         * Returns the name Laravel's base grammar uses as the SQL function.
-         *
-         * @return the lower-case name, never {@code null}
-         */
-        public String sqlName() {
-            return name().toLowerCase(Locale.ROOT);
         }
     }
 }

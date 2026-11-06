@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.SoftDeletingScope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.Country;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.Db;
 import org.aristonis.diwan.database.eloquent.relations.OneOfManyModels.Order;

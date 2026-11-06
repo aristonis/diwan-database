@@ -173,7 +173,7 @@ public final class MorphTo<R extends Model> extends Relation<R, MorphTo<R>> {
      * @return the child
      * @throws NullPointerException if {@code model} is {@code null}
      * @throws IllegalStateException if the owner has no key value, such as before it is saved
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the owner's
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the owner's
      *     class has no alias and the morph map is required
      */
     public Model associate(Model model) {
@@ -215,7 +215,7 @@ public final class MorphTo<R extends Model> extends Relation<R, MorphTo<R>> {
      * Sets the owner's update timestamp to now, as {@link Relation#touch()} does. A child with
      * no type or no id has no owner, so nothing runs.
      *
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     @Override
     public void touch() {

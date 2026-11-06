@@ -44,7 +44,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if the query has no order: "You must specify an orderBy
      *     clause when using this function."
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunk(int count, Predicate<List<Map<String, Object>>> callback) {
         Objects.requireNonNull(callback, "callback");
@@ -60,7 +60,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @return {@code false} if the callback stopped the run, else {@code true}
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalStateException if the query has no order
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean each(Predicate<Map<String, Object>> callback) {
         return each(callback, ChunkSupport.DEFAULT_COUNT);
@@ -76,7 +76,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if the query has no order
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean each(Predicate<Map<String, Object>> callback, int count) {
         Objects.requireNonNull(callback, "callback");
@@ -91,7 +91,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @return the results in row order, unmodifiable, never {@code null}, may contain {@code null}
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalStateException if the query has no order
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final <T> List<T> chunkMap(Function<Map<String, Object>, T> callback) {
         return chunkMap(callback, ChunkSupport.DEFAULT_COUNT);
@@ -107,7 +107,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if the query has no order
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final <T> List<T> chunkMap(Function<Map<String, Object>, T> callback, int count) {
         Objects.requireNonNull(callback, "callback");
@@ -138,7 +138,7 @@ abstract class ChunkQueries extends WriteQueries {
      *
      * @param chunkSize the rows per page, at least 1
      * @return the rows in order, never {@code null}; the iterator's {@code hasNext} and
-     *     {@code next} may throw {@link org.aristonis.diwan.database.QueryException}
+     *     {@code next} may throw {@link org.aristonis.diwan.database.exception.QueryException}
      * @throws IllegalArgumentException if {@code chunkSize} is below 1
      * @throws IllegalStateException if the query has no order
      */
@@ -161,7 +161,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no {@code id} value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkById(int count, Predicate<List<Map<String, Object>>> callback) {
         return chunkById(count, callback, DEFAULT_KEY, DEFAULT_KEY);
@@ -177,7 +177,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no value under {@code column}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkById(int count, Predicate<List<Map<String, Object>>> callback, String column) {
         return chunkById(count, callback, column, column);
@@ -197,7 +197,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no value under {@code alias}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkById(int count, Predicate<List<Map<String, Object>>> callback, String column,
             String alias) {
@@ -213,7 +213,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no {@code id} value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkByIdDesc(int count, Predicate<List<Map<String, Object>>> callback) {
         return chunkByIdDesc(count, callback, DEFAULT_KEY, DEFAULT_KEY);
@@ -229,7 +229,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no value under {@code column}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkByIdDesc(int count, Predicate<List<Map<String, Object>>> callback, String column) {
         return chunkByIdDesc(count, callback, column, column);
@@ -247,7 +247,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no value under {@code alias}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean chunkByIdDesc(int count, Predicate<List<Map<String, Object>>> callback, String column,
             String alias) {
@@ -262,7 +262,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @return {@code false} if the callback stopped the run, else {@code true}
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalStateException if a page's last row has no {@code id} value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean eachById(Predicate<Map<String, Object>> callback) {
         return eachById(callback, ChunkSupport.DEFAULT_COUNT);
@@ -279,7 +279,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if {@code callback} is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no {@code id} value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean eachById(Predicate<Map<String, Object>> callback, int count) {
         return eachById(callback, count, DEFAULT_KEY, DEFAULT_KEY);
@@ -297,7 +297,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if {@code count} is below 1
      * @throws IllegalStateException if a page's last row has no value under {@code alias}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a page
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a page
      */
     public final boolean eachById(Predicate<Map<String, Object>> callback, int count, String column, String alias) {
         Objects.requireNonNull(callback, "callback");
@@ -338,7 +338,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @param alias the key's name in the rows, never {@code null}
      * @return the rows in key order, never {@code null}; the iterator throws
      *     {@link IllegalStateException} when a full page's last row has no value under
-     *     {@code alias}, and may throw {@link org.aristonis.diwan.database.QueryException}
+     *     {@code alias}, and may throw {@link org.aristonis.diwan.database.exception.QueryException}
      * @throws NullPointerException if {@code column} or {@code alias} is {@code null}
      * @throws IllegalArgumentException if {@code chunkSize} is below 1
      */
@@ -410,7 +410,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws IllegalStateException if a cursor is already open on the connection's session, or the
      *     query has a row lock that needs a transaction and none is open
      * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final QueryCursor<Map<String, Object>> cursor() {
         checkLockTransaction();

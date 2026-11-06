@@ -12,7 +12,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 
 /**

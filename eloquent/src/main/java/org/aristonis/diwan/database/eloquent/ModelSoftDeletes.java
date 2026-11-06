@@ -140,7 +140,7 @@ abstract class ModelSoftDeletes extends ModelEventHooks {
      * @return {@code true} when deleted; {@code false} when a hook vetoed it or the model does not
      *     exist
      * @throws IllegalStateException if the model does not soft-delete, or has no primary key
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public boolean forceDelete() {
         requireSoftDeletes("forceDelete");
@@ -171,7 +171,7 @@ abstract class ModelSoftDeletes extends ModelEventHooks {
      *
      * @return {@code true} when saved or already clean; {@code false} when a hook vetoed it
      * @throws IllegalStateException if the model does not soft-delete
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public boolean restore() {
         requireSoftDeletes("restore");

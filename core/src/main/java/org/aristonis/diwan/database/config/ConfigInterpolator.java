@@ -2,7 +2,7 @@ package org.aristonis.diwan.database.config;
 
 import java.util.Objects;
 import java.util.Optional;
-import org.aristonis.diwan.database.manager.DatabaseConfigException;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 
 /**
  * Replaces {@code ${NAME}} references in a configuration value.

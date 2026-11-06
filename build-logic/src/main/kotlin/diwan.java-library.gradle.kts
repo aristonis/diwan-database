@@ -47,11 +47,19 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))
 }
 
+// Internal packages are not API: their pages are left out, but Javadoc still reads their sources
+// through the source path, because API classes import them.
 tasks.javadoc {
+    exclude("**/internal/**")
+    (options as StandardJavadocDocletOptions).addPathOption("sourcepath").value = sourceSets.main.get().java.srcDirs.toList()
     (options as StandardJavadocDocletOptions).apply {
         encoding = "UTF-8"
         addStringOption("-release", baseline.toString())
         addBooleanOption("Xdoclint:all", true)
+        // The doc check skips the internal packages read through the source path.
+        addBooleanOption("Xdoclint/package:-org.aristonis.diwan.database.internal,"
+            + "-org.aristonis.diwan.database.query.internal,-org.aristonis.diwan.database.schema.internal,"
+            + "-org.aristonis.diwan.database.migrations.internal,-org.aristonis.diwan.database.eloquent.internal", true)
         addBooleanOption("Werror", true)
         // The JDK's own contract tags; the documentation standard relies on all three.
         tags("apiNote:a:API Note:", "implSpec:a:Implementation Requirements:", "implNote:a:Implementation Note:")

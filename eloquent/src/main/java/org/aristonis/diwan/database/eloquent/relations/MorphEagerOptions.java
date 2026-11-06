@@ -49,7 +49,7 @@ public final class MorphEagerOptions {
      * @return this object
      * @throws NullPointerException if an argument or a path is {@code null}
      * @throws IllegalArgumentException if the key is {@code "*"}, not a string or a model class
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the key names
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the key names
      *     no model class in the morph map
      */
     public MorphEagerOptions morphWith(Object classOrAlias, String... relations) {
@@ -66,7 +66,7 @@ public final class MorphEagerOptions {
      * @return this object
      * @throws NullPointerException if an argument or a name is {@code null}
      * @throws IllegalArgumentException if the key is {@code "*"}, not a string or a model class
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the key names
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the key names
      *     no model class in the morph map
      */
     public MorphEagerOptions morphWithCount(Object classOrAlias, String... relations) {
@@ -83,7 +83,7 @@ public final class MorphEagerOptions {
      * @return this object
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the key is {@code "*"}, not a string or a model class
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the key names
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the key names
      *     no model class in the morph map
      */
     public MorphEagerOptions constrain(Object classOrAlias, Consumer<EloquentBuilder<?>> constraint) {

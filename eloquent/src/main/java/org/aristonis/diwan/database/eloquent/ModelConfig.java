@@ -242,7 +242,7 @@ abstract class ModelConfig {
      * <p>The map names the relations that {@code relation(name)}, eager loading and existence
      * queries reach. It is read and checked once per model class, on first use, so it must not
      * depend on instance state; a subclass inherits its parent's map. A bad map throws
-     * {@link org.aristonis.diwan.database.eloquent.relations.InvalidRelationException} on that
+     * {@link org.aristonis.diwan.database.eloquent.exception.InvalidRelationException} on that
      * first use.
      *
      * @return the relation map, never {@code null}
@@ -268,7 +268,7 @@ abstract class ModelConfig {
      * <p>Each name must be a key of {@link #relations()} whose relation is a {@code HasOne},
      * {@code HasMany} or {@code BelongsTo}. The set is read and checked once per model class, on
      * first use, so it must not depend on instance state; a bad name throws
-     * {@link org.aristonis.diwan.database.eloquent.relations.InvalidRelationException} naming the
+     * {@link org.aristonis.diwan.database.eloquent.exception.InvalidRelationException} naming the
      * class and the relation. A check that fails only because a related class has no
      * {@link ModelQuery} entry yet is not cached and runs again on the next save. The bad entry
      * is reported on first use, after the save that triggered it has written its row, so the

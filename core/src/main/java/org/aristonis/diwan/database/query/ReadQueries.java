@@ -22,7 +22,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * Runs the query and returns its rows.
      *
      * @return the rows as {@link Processor#processSelect} returns them, never {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      * @throws UnsupportedOperationException if the grammar does not support a clause
      */
     public final List<Map<String, Object>> get() {
@@ -34,7 +34,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * the builder itself; here the builder is left as it was.
      *
      * @return the first row, empty if there is none
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Map<String, Object>> first() {
         List<Map<String, Object>> rows = self().clone().limit(1).get();
@@ -48,7 +48,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * @return the row, empty if there is none
      * @throws NullPointerException if {@code id} is {@code null}
      * @throws IllegalArgumentException if {@code id} is a list, map, array or builder
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Map<String, Object>> find(Object id) {
         Objects.requireNonNull(id, "id");
@@ -62,7 +62,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * @param column the column name, never {@code null}
      * @return the value, empty if there is no row or the value is SQL {@code NULL}
      * @throws NullPointerException if {@code column} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Object> value(String column) {
         Objects.requireNonNull(column, "column");
@@ -79,7 +79,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * @param column the column name, never {@code null}; a table prefix or alias is allowed
      * @return the values in row order, unmodifiable, never {@code null}, may contain {@code null}
      * @throws NullPointerException if {@code column} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final List<Object> pluck(String column) {
         Objects.requireNonNull(column, "column");
@@ -98,7 +98,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * @param key the key column, never {@code null}
      * @return the values by key in row order, unmodifiable, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Map<Object, Object> pluck(String column, String key) {
         Objects.requireNonNull(column, "column");
@@ -116,7 +116,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * Returns whether any row matches.
      *
      * @return {@code true} if at least one row matches
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final boolean exists() {
         List<Map<String, Object>> rows = connection.select(grammar.compileExists(withoutLock()),
@@ -132,7 +132,7 @@ abstract class ReadQueries extends SubqueryClauses {
      * Returns whether no row matches.
      *
      * @return {@code true} if no row matches
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final boolean doesntExist() {
         return !exists();

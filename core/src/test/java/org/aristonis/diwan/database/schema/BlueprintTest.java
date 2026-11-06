@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.Expression;
+import org.aristonis.diwan.database.schema.grammar.Command;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;

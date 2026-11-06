@@ -11,7 +11,7 @@ import java.sql.SQLException;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.aristonis.diwan.database.eloquent.relations.BtmModels.Membership;
 import org.aristonis.diwan.database.eloquent.relations.BtmModels.Role;
 import org.aristonis.diwan.database.eloquent.relations.BtmModels.User;

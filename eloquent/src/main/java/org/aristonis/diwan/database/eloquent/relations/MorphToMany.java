@@ -103,7 +103,7 @@ public final class MorphToMany<R extends Model> extends BelongsToMany<R> {
      * related model's when the relation is inverse. It is read on every call.
      *
      * @return the morph class, never {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the class has
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the class has
      *     no alias and the morph map is required
      */
     public String getMorphClass() {

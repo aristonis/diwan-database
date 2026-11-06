@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
@@ -27,7 +28,7 @@ import org.aristonis.diwan.database.Connection;
  * narrow it.
  *
  * <p>A right join needs SQLite 3.39 or later (Android 14 and later ships it); on an older SQLite
- * the database's own error passes through as a {@link org.aristonis.diwan.database.QueryException}.
+ * the database's own error passes through as a {@link org.aristonis.diwan.database.exception.QueryException}.
  *
  * <p>Mutable and not thread-safe, like every builder. The outer query keeps a private copy, so
  * changing a clause after the join was added changes nothing.

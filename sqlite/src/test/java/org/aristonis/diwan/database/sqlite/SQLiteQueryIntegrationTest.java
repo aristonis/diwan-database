@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Arrays;
 import java.util.Collections;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;

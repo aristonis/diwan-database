@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.schema.grammar.Command;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -136,7 +139,7 @@ class SchemaTest {
     void severalStatementsRunInOneTransactionOnTransactionalDdl() {
         Schema schema = Schema.of(db, new TestGrammar());
 
-        assertThrows(org.aristonis.diwan.database.QueryException.class, () -> schema.create("users", t -> {
+        assertThrows(org.aristonis.diwan.database.exception.QueryException.class, () -> schema.create("users", t -> {
             t.string("email").unique("app_users");
         }));
 

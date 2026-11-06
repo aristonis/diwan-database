@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

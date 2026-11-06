@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidRelationException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -239,7 +240,7 @@ public final class BelongsTo<R extends Model> extends Relation<R, BelongsTo<R>> 
      * Sets the owner's update timestamp to now, as {@link Relation#touch()} does. A child whose
      * foreign key is {@code null} has no owner, so nothing runs.
      *
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     @Override
     public void touch() {

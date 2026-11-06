@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
-import org.aristonis.diwan.database.eloquent.SoftDeletingScope;
+import org.aristonis.diwan.database.eloquent.scope.SoftDeletingScope;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

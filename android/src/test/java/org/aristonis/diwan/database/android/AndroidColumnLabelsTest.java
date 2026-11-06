@@ -5,7 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

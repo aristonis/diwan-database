@@ -9,7 +9,7 @@ import java.util.Optional;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.migrations.Migration;
 import org.aristonis.diwan.database.migrations.MigrationChecksum;
-import org.aristonis.diwan.database.migrations.MigrationChecksumException;
+import org.aristonis.diwan.database.exception.MigrationChecksumException;
 import org.aristonis.diwan.database.migrations.Migrator;
 import org.aristonis.diwan.database.schema.Schema;
 import org.junit.jupiter.api.Test;

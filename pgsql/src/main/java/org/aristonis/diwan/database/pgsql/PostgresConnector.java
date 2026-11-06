@@ -8,7 +8,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
-import org.aristonis.diwan.database.manager.DatabaseConfigException;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;

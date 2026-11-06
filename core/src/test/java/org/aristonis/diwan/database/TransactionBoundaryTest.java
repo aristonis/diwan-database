@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.event.ConnectionListener;
+import org.aristonis.diwan.database.event.TransactionEvent;
+import org.aristonis.diwan.database.exception.QueryException;
 import static org.aristonis.diwan.database.FakeDriver.failure;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

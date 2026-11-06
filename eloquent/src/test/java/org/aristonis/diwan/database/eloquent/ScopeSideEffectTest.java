@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.EloquentAggregates;
+import org.aristonis.diwan.database.eloquent.EloquentBuilder;
+import org.aristonis.diwan.database.eloquent.ScopeFixtures;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

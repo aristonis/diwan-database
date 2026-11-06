@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.scope.Scope;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -180,7 +181,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param relation the relation name or dot path, never {@code null}
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> has(String relation) {
@@ -200,7 +201,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the operator is not one of the seven
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> has(String relation, String operator, long count) {
@@ -213,7 +214,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param relation the relation name or dot path, never {@code null}
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orHas(String relation) {
@@ -227,7 +228,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param relation the relation name or dot path, never {@code null}
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> doesntHave(String relation) {
@@ -240,7 +241,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param relation the relation name or dot path, never {@code null}
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orDoesntHave(String relation) {
@@ -256,7 +257,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param constraint the constraint on the related query, or {@code null} for none
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> whereHas(String relation, Consumer<EloquentBuilder<?>> constraint) {
@@ -275,7 +276,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @return this builder
      * @throws NullPointerException if {@code relation} or {@code operator} is {@code null}
      * @throws IllegalArgumentException if the operator is not one of the seven
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> whereHas(String relation, Consumer<EloquentBuilder<?>> constraint,
@@ -290,7 +291,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param constraint the constraint on the related query, or {@code null} for none
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orWhereHas(String relation, Consumer<EloquentBuilder<?>> constraint) {
@@ -304,7 +305,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param constraint the constraint on the related query, or {@code null} for none
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> whereDoesntHave(String relation, Consumer<EloquentBuilder<?>> constraint) {
@@ -318,7 +319,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @param constraint the constraint on the related query, or {@code null} for none
      * @return this builder
      * @throws NullPointerException if {@code relation} is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orWhereDoesntHave(String relation, Consumer<EloquentBuilder<?>> constraint) {
@@ -335,7 +336,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @return this builder
      * @throws NullPointerException if {@code relation} or {@code column} is {@code null}
      * @throws IllegalArgumentException if the related builder refuses the value
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> whereRelation(String relation, String column, Object value) {
@@ -356,7 +357,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code relation}, {@code column} or {@code operator} is
      *     {@code null}
      * @throws IllegalArgumentException if the related builder refuses the value
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> whereRelation(String relation, String column, String operator, Object value) {
@@ -374,7 +375,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @return this builder
      * @throws NullPointerException if {@code relation} or {@code column} is {@code null}
      * @throws IllegalArgumentException if the related builder refuses the value
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orWhereRelation(String relation, String column, Object value) {
@@ -393,7 +394,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code relation}, {@code column} or {@code operator} is
      *     {@code null}
      * @throws IllegalArgumentException if the related builder refuses the value
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the
      *     path names an unknown relation
      */
     public final EloquentBuilder<T> orWhereRelation(String relation, String column, String operator, Object value) {

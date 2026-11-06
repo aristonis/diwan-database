@@ -9,13 +9,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.ConnectionListener;
+import org.aristonis.diwan.database.event.ConnectionListener;
 import org.aristonis.diwan.database.LoggedQuery;
-import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.QueryExecuted;
-import org.aristonis.diwan.database.QueryFailed;
+import org.aristonis.diwan.database.exception.QueryException;
+import org.aristonis.diwan.database.event.QueryExecuted;
+import org.aristonis.diwan.database.event.QueryFailed;
 import org.aristonis.diwan.database.QueryKind;
-import org.aristonis.diwan.database.TransactionEvent;
+import org.aristonis.diwan.database.event.TransactionEvent;
 import org.junit.jupiter.api.Test;
 
 /** Query events, the query log and commit callbacks against a real PostgreSQL; skipped when it is not installed. */

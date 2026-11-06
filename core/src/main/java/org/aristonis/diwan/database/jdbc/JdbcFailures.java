@@ -6,7 +6,7 @@ import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 
 /** Translates JDBC failures into {@link DriverException}s without exposing database text. */

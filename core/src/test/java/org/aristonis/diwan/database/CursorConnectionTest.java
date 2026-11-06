@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.exception.QueryException;
 import static org.aristonis.diwan.database.FakeDriver.failure;
 import static org.aristonis.diwan.database.FakeDriver.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,7 +15,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.Test;

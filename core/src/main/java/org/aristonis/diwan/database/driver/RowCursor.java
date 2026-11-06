@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.driver;
 
+import org.aristonis.diwan.database.exception.DriverException;
 import java.util.Iterator;
 import java.util.Map;
 import org.aristonis.diwan.database.Internal;
@@ -50,7 +51,7 @@ public interface RowCursor extends Iterator<Map<String, Object>>, Iterable<Map<S
      * @return {@code true} if {@link #next()} returns a row; {@code false} at the end or after
      *     {@link #close()}
      * @throws DriverException if reading the next row fails (driver level)
-     * @throws org.aristonis.diwan.database.QueryException if reading the next row fails (connection
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the next row fails (connection
      *     level; the cursor is then already closed)
      */
     @Override
@@ -63,7 +64,7 @@ public interface RowCursor extends Iterator<Map<String, Object>>, Iterable<Map<S
      * @throws java.util.NoSuchElementException if no row is left
      * @throws IllegalStateException if the cursor is closed
      * @throws DriverException if reading the row fails (driver level)
-     * @throws org.aristonis.diwan.database.QueryException if reading the row fails (connection
+     * @throws org.aristonis.diwan.database.exception.QueryException if reading the row fails (connection
      *     level; the cursor is then already closed)
      */
     @Override
@@ -83,7 +84,7 @@ public interface RowCursor extends Iterator<Map<String, Object>>, Iterable<Map<S
      * Releases the statement and everything the cursor holds; a second call does nothing.
      *
      * @throws DriverException if releasing fails (driver level); the statement is released anyway
-     * @throws org.aristonis.diwan.database.QueryException if releasing fails (connection level);
+     * @throws org.aristonis.diwan.database.exception.QueryException if releasing fails (connection level);
      *     the session is released anyway
      */
     @Override

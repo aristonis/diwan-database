@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.schema.Schema;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.junit.jupiter.api.Test;
 
 /** A driver that reports labels in upper case and numbers as text, as some databases and cursors do. */

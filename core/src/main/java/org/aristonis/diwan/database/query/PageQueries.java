@@ -25,7 +25,7 @@ abstract class PageQueries extends ChunkQueries {
      * @param perPage the rows per page, at least 1
      * @return the page, never {@code null}
      * @throws IllegalArgumentException if {@code perPage} is below 1
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a query
      */
     public final LengthAwarePage paginate(int perPage) {
         return paginate(perPage, 1);
@@ -39,7 +39,7 @@ abstract class PageQueries extends ChunkQueries {
      * @return the page, never {@code null}
      * @throws IllegalArgumentException if {@code perPage} or {@code page} is below 1
      * @throws ArithmeticException if the page's offset does not fit in an {@code int}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a query
      */
     public final LengthAwarePage paginate(int perPage, int page) {
         return paginate(perPage, page, Collections.<String>emptyList());
@@ -59,7 +59,7 @@ abstract class PageQueries extends ChunkQueries {
      * @throws NullPointerException if {@code columns} or a column is {@code null}
      * @throws IllegalArgumentException if {@code perPage} or {@code page} is below 1
      * @throws ArithmeticException if the page's offset does not fit in an {@code int}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a query
      */
     public final LengthAwarePage paginate(int perPage, int page, List<String> columns) {
         checkPage(perPage, page);
@@ -77,7 +77,7 @@ abstract class PageQueries extends ChunkQueries {
      * @param perPage the rows per page, at least 1
      * @return the page, never {@code null}
      * @throws IllegalArgumentException if {@code perPage} is below 1
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final SimplePage simplePaginate(int perPage) {
         return simplePaginate(perPage, 1);
@@ -92,7 +92,7 @@ abstract class PageQueries extends ChunkQueries {
      * @return the page, never {@code null}
      * @throws IllegalArgumentException if {@code perPage} or {@code page} is below 1
      * @throws ArithmeticException if the page's offset does not fit in an {@code int}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final SimplePage simplePaginate(int perPage, int page) {
         return simplePaginate(perPage, page, Collections.<String>emptyList());
@@ -110,7 +110,7 @@ abstract class PageQueries extends ChunkQueries {
      * @throws NullPointerException if {@code columns} or a column is {@code null}
      * @throws IllegalArgumentException if {@code perPage} or {@code page} is below 1
      * @throws ArithmeticException if the page's offset does not fit in an {@code int}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final SimplePage simplePaginate(int perPage, int page, List<String> columns) {
         checkPage(perPage, page);
@@ -128,7 +128,7 @@ abstract class PageQueries extends ChunkQueries {
      * @return the page, as for {@link Builder#cursorPaginate(int, Cursor, List)}
      * @throws IllegalArgumentException if {@code perPage} is below 1
      * @throws IllegalStateException if the query is not ordered by a column
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final CursorPage cursorPaginate(int perPage) {
         return cursorPaginate(perPage, null);
@@ -143,7 +143,7 @@ abstract class PageQueries extends ChunkQueries {
      * @throws IllegalArgumentException if {@code perPage} is below 1, or the cursor's parameters are
      *     not the query's order columns
      * @throws IllegalStateException if the query is not ordered by a column
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final CursorPage cursorPaginate(int perPage, Cursor cursor) {
         return cursorPaginate(perPage, cursor, Collections.<String>emptyList());
@@ -171,7 +171,7 @@ abstract class PageQueries extends ChunkQueries {
      *     not the query's order columns, or a row's order value cannot be kept in a {@link Cursor}
      * @throws IllegalStateException if the query is not ordered by a column: "You must specify an
      *     orderBy clause when using this function."
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final CursorPage cursorPaginate(int perPage, Cursor cursor, List<String> columns) {
         checkPage(perPage, 1);

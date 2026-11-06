@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Expression;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -93,7 +94,7 @@ final class Clauses {
     }
 
     /** Formats a date value the way Laravel formats it for each date-based where. */
-    static Object datePart(Where.DatePart part, Object value) {
+    static Object datePart(DatePart part, Object value) {
         if (value == null || value instanceof Expression) {
             return value;
         }

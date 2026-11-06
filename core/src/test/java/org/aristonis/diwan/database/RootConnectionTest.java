@@ -1,5 +1,11 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.ConnectionBuilder;
+import org.aristonis.diwan.database.FakeDriver;
+import org.aristonis.diwan.database.exception.MultipleColumnsSelectedException;
+import org.aristonis.diwan.database.exception.QueryException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import static org.aristonis.diwan.database.FakeDriver.failure;
 import static org.aristonis.diwan.database.FakeDriver.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,7 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.junit.jupiter.api.Test;
 

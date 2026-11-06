@@ -7,7 +7,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.ConnectionListener;
+import org.aristonis.diwan.database.event.ConnectionListener;
 import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;

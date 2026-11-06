@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.driver;
 
+import org.aristonis.diwan.database.exception.DriverException;
+
 /**
  * Classifies a {@link DriverException} so the core can react without knowing the database.
  *

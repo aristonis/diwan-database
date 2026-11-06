@@ -16,7 +16,7 @@ import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastColumns;
 import org.aristonis.diwan.database.eloquent.casts.CastComparator;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
-import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
 import org.junit.jupiter.api.Test;
 

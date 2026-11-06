@@ -12,7 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.eloquent.relations.BtmWriteModels.TsRole;
 import org.aristonis.diwan.database.eloquent.relations.BtmWriteModels.TsUser;

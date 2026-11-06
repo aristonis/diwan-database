@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * The lifecycle events of a model. A halting event runs before the change and a listener can veto
  * it by returning {@code false}; the others run after the change, or on a read, and cannot.

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.event.QueryExecuted;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.Duration;

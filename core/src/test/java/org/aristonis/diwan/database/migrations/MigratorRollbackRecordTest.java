@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationFailedException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;

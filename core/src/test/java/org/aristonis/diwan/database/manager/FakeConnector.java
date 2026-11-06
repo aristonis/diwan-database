@@ -13,7 +13,7 @@ import org.aristonis.diwan.database.query.Processor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.schema.Schema;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 
 /** A connector for the manager tests: counts what the manager asks of it and runs no SQL. */
 public final class FakeConnector implements Connector {

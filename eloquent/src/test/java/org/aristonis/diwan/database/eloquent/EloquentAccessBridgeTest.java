@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.TestModels.User;
 import org.aristonis.diwan.database.eloquent.internal.Access;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.junit.jupiter.api.Test;
 
 class EloquentAccessBridgeTest {

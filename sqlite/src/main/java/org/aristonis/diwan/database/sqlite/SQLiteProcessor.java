@@ -50,7 +50,7 @@ public class SQLiteProcessor extends Processor {
      * @return the new key: a {@code Long} when it is a whole number, else as SQLite returned it;
      *     {@code null} when nothing ran, as in pretend mode
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if SQLite refuses the insert
+     * @throws org.aristonis.diwan.database.exception.QueryException if SQLite refuses the insert
      */
     @Override
     public Object processInsertGetId(Builder query, String sql, List<Object> values, String sequence) {
@@ -78,9 +78,9 @@ public class SQLiteProcessor extends Processor {
      * part as a whole number; a version that cannot be read counts as older.
      *
      * @param version the version the database reports, may be {@code null}
-     * @return {@code true} if {@code returning} is available; see {@link SqliteVersion}
+     * @return {@code true} if {@code returning} is available; see {@link SQLiteVersion}
      */
     static boolean supportsReturning(String version) {
-        return SqliteVersion.atLeast(version, RETURNING_MAJOR, RETURNING_MINOR, 0);
+        return SQLiteVersion.atLeast(version, RETURNING_MAJOR, RETURNING_MINOR, 0);
     }
 }

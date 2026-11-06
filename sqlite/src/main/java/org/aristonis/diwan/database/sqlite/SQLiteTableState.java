@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.sqlite.SQLiteSchemaGrammar;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;

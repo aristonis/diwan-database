@@ -1,0 +1,363 @@
+package org.aristonis.diwan.database.internal;
+
+import org.aristonis.diwan.database.event.TransactionPhase;
+import org.aristonis.diwan.database.LoggedQuery;
+import org.aristonis.diwan.database.PretendCallback;
+import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.TransactionScope;
+import org.aristonis.diwan.database.exception.QueryException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Consumer;
+import org.aristonis.diwan.database.exception.DriverException;
+import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.RowCursor;
+
+/**
+ * Runs every statement on the session of one transaction and nests further transactions through
+ * savepoints. Confined to the thread that opened the transaction; only the ended flag is volatile,
+ * so a leaked connection used elsewhere fails instead of reaching the session.
+ */
+class TransactionalConnection extends AbstractConnection {
+
+    private static final String EXTERNAL_MESSAGE = "afterCommit is refused inside a transaction opened outside"
+            + " this library: the commit of the caller is not known";
+    private static final String ENDED_MESSAGE = "This transaction already ended; the connection passed to a"
+            + " transaction callback may only be used inside that callback";
+
+    private final TransactionState state;
+    private TransactionScopeConnection openChild;
+    private volatile boolean ended;
+
+    TransactionalConnection(ConnectionSettings settings, TransactionState state) {
+        super(settings);
+        this.state = state;
+    }
+
+    final TransactionState state() {
+        return state;
+    }
+
+    /** Refuses any further use of this callback connection; run when its attempt ends. */
+    final void end() {
+        ended = true;
+    }
+
+    /** Fails when this connection may no longer be used at all. */
+    void ensureOpen() {
+        if (ended) {
+            throw new IllegalStateException(ENDED_MESSAGE);
+        }
+    }
+
+    /** Fails when this connection may not send anything more to the database. */
+    final void ensureUsable() {
+        ensureOpen();
+        if (state.isRollbackOnly()) {
+            throw rollbackOnlyFailure();
+        }
+    }
+
+    /** Builds the rollback-only refusal, caused by the recorded concurrency failure when there is one. */
+    final IllegalStateException rollbackOnlyFailure() {
+        return new IllegalStateException(TransactionState.ROLLBACK_ONLY_MESSAGE, state.concurrencyFailure());
+    }
+
+    @Override
+    final <T> T run(PendingStatement<T> statement) {
+        ensureUsable();
+        state.cursorGuard().check();
+        try {
+            return statement.runOn(state.session());
+        } catch (DriverException failure) {
+            throw failed(statement.sql(), failure);
+        }
+    }
+
+    @Override
+    final RowCursor openCursor(String sql, List<Object> bindings) {
+        ensureUsable();
+        CursorGuard guard = state.cursorGuard();
+        guard.check();
+        RowCursor driverCursor;
+        try {
+            driverCursor = state.session().cursor(sql, bindings);
+        } catch (DriverException failure) {
+            throw failed(sql, failure);
+        }
+        TranslatingCursor cursor = new TranslatingCursor(getName(), driverCursor, failure -> failed(sql, failure),
+                failure -> guard.release());
+        guard.register(cursor, cursorLevel());
+        return cursor;
+    }
+
+    /** Returns the transaction level whose end closes a cursor opened here now. */
+    int cursorLevel() {
+        return state.depth();
+    }
+
+    /** Closes the open cursor of the session when it was opened at {@code level} or deeper. */
+    final void closeCursorsFrom(int level) {
+        state.cursorGuard().closeFrom(level);
+    }
+
+    /** Closes as {@link #closeCursorsFrom(int)} does, returning a failure instead of throwing it. */
+    final Throwable closeCursorsQuietlyFrom(int level) {
+        return state.cursorGuard().closeQuietlyFrom(level);
+    }
+
+    @Override
+    public final void afterCommit(Runnable callback) {
+        Objects.requireNonNull(callback, "callback");
+        ensureOpen();
+        if (state.isExternal()) {
+            throw new IllegalStateException(EXTERNAL_MESSAGE);
+        }
+        state.callbacks().onCommit(cursorLevel(), callback);
+    }
+
+    @Override
+    public final boolean canDeferUntilCommit() {
+        return !state.isExternal();
+    }
+
+    @Override
+    public final void afterRollback(Runnable callback) {
+        Objects.requireNonNull(callback, "callback");
+        ensureOpen();
+        state.callbacks().onRollback(cursorLevel(), callback);
+    }
+
+    /** Tells the listeners that {@code phase} happened at {@code level} of this transaction. */
+    final void fire(TransactionPhase phase, int level) {
+        TransactionState.fire(settings(), phase, level, level > 1 || state.isExternal());
+    }
+
+    /** Runs a transaction command, translating its failure like a statement failure. */
+    final void control(String description, Consumer<DriverSession> command) {
+        state.cursorGuard().check();
+        try {
+            command.accept(state.session());
+        } catch (DriverException failure) {
+            throw failed(description, failure);
+        }
+    }
+
+    private QueryException failed(String sql, DriverException failure) {
+        QueryException error = queryFailure(sql, Collections.<Object>emptyList(), failure);
+        // The database may already have dropped the whole transaction.
+        if (failure.isConcurrencyFailure()) {
+            state.recordConcurrencyFailure(error);
+        }
+        return error;
+    }
+
+    /**
+     * Ends the outermost level successfully: commits, or releases the savepoint of an external
+     * transaction. A commit failure is never a retryable concurrency failure; the commit may have landed.
+     */
+    final void commitOutermost() {
+        closeCursorsFrom(1);
+        if (state.isRollbackOnly()) {
+            throw rollbackOnlyFailure();
+        }
+        state.cursorGuard().check();
+        fire(TransactionPhase.COMMITTING, 1);
+        state.markCommitAttempted();
+        if (state.isExternal()) {
+            releaseSavepoint(TransactionState.OUTERMOST_SAVEPOINT);
+            return;
+        }
+        try {
+            state.session().commit();
+        } catch (DriverException failure) {
+            throw queryFailure("commit", Collections.<Object>emptyList(), failure);
+        }
+    }
+
+    /** Undoes the outermost level; inside an external transaction only its own savepoint. */
+    final void rollbackOutermost() {
+        Throwable cursorFailure = closeCursorsQuietlyFrom(1);
+        try {
+            if (state.isExternal()) {
+                String name = TransactionState.OUTERMOST_SAVEPOINT;
+                control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
+            } else {
+                control("rollback", DriverSession::rollback);
+            }
+            state.markRolledBack();
+        } catch (RuntimeException | Error rollbackFailure) {
+            if (cursorFailure != null) {
+                Sessions.suppress(rollbackFailure, cursorFailure);
+            }
+            throw rollbackFailure;
+        }
+        if (cursorFailure != null) {
+            Sessions.rethrow(cursorFailure);
+        }
+    }
+
+    final void releaseSavepoint(String name) {
+        if (state.canReleaseSavepoints()) {
+            control("release savepoint " + name, session -> session.releaseSavepoint(name));
+        }
+    }
+
+    /** Ends the savepoint of {@code level} successfully; its after-commit callbacks move up a level. */
+    final void commitLevel(String name, int level) {
+        fire(TransactionPhase.COMMITTING, level);
+        releaseSavepoint(name);
+        state.callbacks().releaseLevel(level);
+    }
+
+    /**
+     * Rolls back to the savepoint of {@code level} and queues the after-rollback callbacks of that level
+     * and deeper, whether or not the command worked. Returns the first failure, or {@code null}.
+     */
+    final Throwable rollbackLevelTo(String name, int level) {
+        Throwable failure = sendRollbackTo(name);
+        if (failure == null) {
+            try {
+                fire(TransactionPhase.ROLLED_BACK, level);
+            } catch (Throwable listenerFailure) {
+                failure = listenerFailure;
+            }
+        }
+        state.callbacks().rollbackLevel(level);
+        return failure;
+    }
+
+    private Throwable sendRollbackTo(String name) {
+        try {
+            control("rollback to savepoint " + name, session -> session.rollbackToSavepoint(name));
+            return null;
+        } catch (Throwable rollbackFailure) {
+            state.markRollbackOnly();
+            return rollbackFailure;
+        }
+    }
+
+    /** Opens a savepoint one level deeper, which becomes the depth, and returns its name. */
+    final String enterSavepoint() {
+        ensureUsable();
+        int level = state.depth() + 1;
+        String name = state.nextSavepointName(level);
+        control("savepoint " + name, session -> session.savepoint(name));
+        state.setDepth(level);
+        try {
+            fire(TransactionPhase.BEGINNING, level);
+        } catch (RuntimeException | Error failure) {
+            state.setDepth(level - 1);
+            Throwable undoFailure = sendRollbackTo(name);
+            if (undoFailure != null) {
+                Sessions.suppress(failure, undoFailure);
+            }
+            throw failure;
+        }
+        return name;
+    }
+
+    /** Rolls back a scope this connection opened and its callback or owner left open. */
+    final void closeOpenChild() {
+        TransactionScopeConnection child = openChild;
+        if (child != null) {
+            child.close();
+        }
+    }
+
+    // Ends only a scope opened deeper than level, so a nested transaction never closes a scope its
+    // caller opened before entering it.
+    private void closeOpenChildAbove(int level) {
+        TransactionScopeConnection child = openChild;
+        if (child != null && child.level() > level) {
+            child.close();
+        }
+    }
+
+    final void childEnded(TransactionScopeConnection child) {
+        if (openChild == child) {
+            openChild = null;
+        }
+    }
+
+    @Override
+    public final <T> T transaction(TransactionCallback<T> callback) {
+        return transaction(callback, 1);
+    }
+
+    // Attempts are ignored below the outermost level: a concurrency failure is rethrown at once so
+    // the outermost transaction decides whether to retry.
+    @Override
+    public final <T> T transaction(TransactionCallback<T> callback, int attempts) {
+        Objects.requireNonNull(callback, "callback");
+        if (attempts < 1) {
+            throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
+        }
+        String savepoint = enterSavepoint();
+        int level = state.depth();
+        boolean isCommitted = false;
+        T result;
+        try {
+            result = callback.run(this);
+            closeOpenChildAbove(level);
+            closeCursorsFrom(level);
+            if (!state.isRollbackOnly()) {
+                commitLevel(savepoint, level);
+                isCommitted = true;
+            }
+        } catch (RuntimeException | Error failure) {
+            closeChildAfterFailure(level, failure);
+            Throwable cursorFailure = closeCursorsQuietlyFrom(level);
+            if (cursorFailure != null) {
+                Sessions.suppress(failure, cursorFailure);
+            }
+            Throwable rollbackFailure = rollbackLevelTo(savepoint, level);
+            if (rollbackFailure != null) {
+                Sessions.suppress(failure, rollbackFailure);
+            }
+            throw failure;
+        } finally {
+            state.setDepth(level - 1);
+        }
+        // Outside the try, so a listener failure here cannot roll back a savepoint already released.
+        if (isCommitted) {
+            fire(TransactionPhase.COMMITTED, level);
+        }
+        return result;
+    }
+
+    private void closeChildAfterFailure(int level, Throwable failure) {
+        try {
+            closeOpenChildAbove(level);
+        } catch (Throwable childFailure) {
+            Sessions.suppress(failure, childFailure);
+        }
+    }
+
+    @Override
+    public final TransactionScope beginTransaction() {
+        ensureOpen();
+        if (openChild != null) {
+            throw new IllegalStateException("An inner transaction scope is still open; begin the next one on it,"
+                    + " or end it first");
+        }
+        String savepoint = enterSavepoint();
+        TransactionScopeConnection child = new TransactionScopeConnection(settings(), state, state.depth(),
+                savepoint, this, null);
+        openChild = child;
+        return child;
+    }
+
+    @Override
+    public final List<LoggedQuery> pretend(PretendCallback callback) {
+        ensureOpen();
+        return PretendConnection.record(settings(), callback);
+    }
+
+    @Override
+    public final int transactionLevel() {
+        ensureOpen();
+        return state.depth();
+    }
+}

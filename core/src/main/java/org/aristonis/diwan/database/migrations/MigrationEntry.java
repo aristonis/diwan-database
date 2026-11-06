@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.migrations.internal.MigrationNames;
 import java.util.Objects;
 import java.util.Optional;
 

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.Internal;
 import java.io.PrintWriter;
 import java.sql.Array;
 import java.sql.Blob;

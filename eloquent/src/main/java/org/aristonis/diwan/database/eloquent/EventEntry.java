@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.eloquent.ModelObserver;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;

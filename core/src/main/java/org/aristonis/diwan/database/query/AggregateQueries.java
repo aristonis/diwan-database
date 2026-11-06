@@ -24,7 +24,7 @@ abstract class AggregateQueries extends ReadQueries {
      * offset apply.
      *
      * @return the count
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final long count() {
         return count("*");
@@ -36,7 +36,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @param column the column name, never {@code null}
      * @return the count
      * @throws NullPointerException if {@code column} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final long count(String column) {
         return aggregate("count", Objects.requireNonNull(column, "column"))
@@ -49,7 +49,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @param column the column name, never {@code null}
      * @return the value as the database returned it, empty if no row matches
      * @throws NullPointerException if {@code column} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Object> min(String column) {
         return aggregate("min", Objects.requireNonNull(column, "column"));
@@ -61,7 +61,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @param column the column name, never {@code null}
      * @return the value as the database returned it, empty if no row matches
      * @throws NullPointerException if {@code column} is {@code null}
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Object> max(String column) {
         return aggregate("max", Objects.requireNonNull(column, "column"));
@@ -75,7 +75,7 @@ abstract class AggregateQueries extends ReadQueries {
      *     with one as a {@code BigDecimal}; {@code 0L} when no row matches
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalStateException if the database returns text that is not a number
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Number sum(String column) {
         return aggregate("sum", Objects.requireNonNull(column, "column")).map(Results::number).orElse(0L);
@@ -88,7 +88,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @return the average, converted as for {@link Builder#sum(String)}; empty if no row matches
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalStateException if the database returns text that is not a number
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Number> avg(String column) {
         return aggregate("avg", Objects.requireNonNull(column, "column")).map(Results::number);
@@ -101,7 +101,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @return the average, empty if no row matches
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalStateException if the database returns text that is not a number
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final Optional<Number> average(String column) {
         return avg(column);
@@ -122,7 +122,7 @@ abstract class AggregateQueries extends ReadQueries {
      * drops the columns and counts every matching row, giving a total that disagrees with the pages.
      *
      * @return the count, never negative
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final long getCountForPagination() {
         return getCountForPagination(Collections.singletonList("*"));
@@ -136,7 +136,7 @@ abstract class AggregateQueries extends ReadQueries {
      * @return the count, never negative
      * @throws NullPointerException if {@code columns} or a column is {@code null}
      * @throws IllegalArgumentException if {@code columns} is empty
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final long getCountForPagination(List<String> columns) {
         Objects.requireNonNull(columns, "columns");

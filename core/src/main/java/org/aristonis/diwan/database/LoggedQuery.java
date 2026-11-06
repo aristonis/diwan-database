@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.internal.Bindings;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;

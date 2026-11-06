@@ -58,7 +58,7 @@ public abstract class MorphOneOrMany<R extends Model, S extends MorphOneOrMany<R
      * class name when the map is not required. It is read on every call.
      *
      * @return the parent's morph class, never {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.ClassMorphViolationException if the parent's
+     * @throws org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException if the parent's
      *     class has no alias and the morph map is required
      */
     public final String getMorphClass() {

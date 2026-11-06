@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import org.aristonis.diwan.database.eloquent.ClassMorphViolationException;
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import org.aristonis.diwan.database.eloquent.Model;
 
 /**

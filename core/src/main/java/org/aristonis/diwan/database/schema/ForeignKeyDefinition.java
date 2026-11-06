@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.schema.internal.SchemaNames;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;

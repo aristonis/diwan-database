@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.Objects;
 
 /**
@@ -13,6 +14,7 @@ import java.util.Objects;
  * <p>Internal: not API. Safe to use from any thread: each holder publishes its value through a
  * {@code volatile} field and refuses a second value.
  */
+@Internal
 public final class Access {
 
     private static final Holder<EloquentAccess> ELOQUENT = new Holder<>("eloquent");

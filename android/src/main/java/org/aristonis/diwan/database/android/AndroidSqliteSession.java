@@ -18,11 +18,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.RowCursor;
-import org.aristonis.diwan.database.driver.SqliteScripts;
-import org.aristonis.diwan.database.driver.SqliteText;
+import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
+import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
 
 /**
  * One session over the shared {@link SQLiteDatabase}.
@@ -142,7 +142,7 @@ final class AndroidSqliteSession implements DriverSession {
         ensureOpen();
         // execSQL runs only the first statement of a string; a script runs whole.
         try {
-            for (String statement : SqliteScripts.split(Objects.requireNonNull(sql, "sql"))) {
+            for (String statement : SQLiteScripts.split(Objects.requireNonNull(sql, "sql"))) {
                 database.execSQL(statement);
             }
         } catch (RuntimeException e) {
@@ -301,13 +301,13 @@ final class AndroidSqliteSession implements DriverSession {
         }
     }
 
-    // SQLite has four value types; dates and decimals arrive here as SqliteText already wrote them.
+    // SQLite has four value types; dates and decimals arrive here as SQLiteText already wrote them.
     static List<Object> convert(List<Object> bindings) {
         Objects.requireNonNull(bindings, "bindings");
         List<Object> values = new ArrayList<>(bindings.size());
         for (Object value : bindings) {
-            SqliteText.refuseNonFinite(value, values.size() + 1);
-            values.add(convert(SqliteText.toStorage(value)));
+            SQLiteText.refuseNonFinite(value, values.size() + 1);
+            values.add(convert(SQLiteText.toStorage(value)));
         }
         return values;
     }

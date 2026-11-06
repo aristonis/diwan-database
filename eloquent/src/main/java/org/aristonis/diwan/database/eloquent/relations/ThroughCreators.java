@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.Access;
@@ -69,7 +69,7 @@ abstract class ThroughCreators<R extends Model, S extends ThroughReads<R, S>> ex
      * @param values more attributes for a new model, never {@code null}
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related model's
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related model's
      *     guards refuse an attribute
      */
     public final R firstOrNew(Map<String, ?> attributes, Map<String, ?> values) {
@@ -100,7 +100,7 @@ abstract class ThroughCreators<R extends Model, S extends ThroughReads<R, S>> ex
      * @param values more attributes for a new model, never {@code null}
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related model's
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related model's
      *     guards refuse an attribute
      * @throws UniqueConstraintViolationException if the insert is refused and no match is found
      */
@@ -134,7 +134,7 @@ abstract class ThroughCreators<R extends Model, S extends ThroughReads<R, S>> ex
      * @param values more attributes for the new model, never {@code null}
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related model's
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related model's
      *     guards refuse an attribute
      * @throws UniqueConstraintViolationException if the insert is refused and no match is found
      *     through the relation
@@ -165,7 +165,7 @@ abstract class ThroughCreators<R extends Model, S extends ThroughReads<R, S>> ex
      * @param values the attributes to set, never {@code null}
      * @return the model, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related model's
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related model's
      *     guards refuse an attribute
      * @throws UniqueConstraintViolationException if the insert is refused and no match is found
      */

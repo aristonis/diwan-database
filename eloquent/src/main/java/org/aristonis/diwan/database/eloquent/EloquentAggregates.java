@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -9,7 +10,7 @@ import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
 import org.aristonis.diwan.database.query.Builder;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 
 /**
  * The relation aggregate methods of {@link EloquentBuilder}: {@code withCount}, {@code withMax},
@@ -60,7 +61,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     {@code null}; none changes nothing
      * @return this builder
      * @throws NullPointerException if a name is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withCount(String... relations) {
@@ -74,7 +75,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     {@code "name as alias"}, no key or value {@code null}; an empty map changes nothing
      * @return this builder
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
@@ -90,7 +91,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     {@code null}; none changes nothing
      * @return this builder
      * @throws NullPointerException if a name is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withExists(String... relations) {
@@ -105,7 +106,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     {@code "name as alias"}, no key or value {@code null}; an empty map changes nothing
      * @return this builder
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withExists(Map<String, Consumer<EloquentBuilder<?>>> relations) {
@@ -122,7 +123,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withMax(String relation, String column) {
@@ -137,7 +138,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the related column, never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
@@ -152,7 +153,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the expression, never {@code null}; it is neither quoted nor qualified
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withMax(String relation, Expression column) {
@@ -167,7 +168,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withMin(String relation, String column) {
@@ -182,7 +183,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the related column, never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
@@ -197,7 +198,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the expression, never {@code null}; it is neither quoted nor qualified
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withMin(String relation, Expression column) {
@@ -212,7 +213,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withSum(String relation, String column) {
@@ -227,7 +228,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the related column, never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
@@ -244,7 +245,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the expression, never {@code null}; it is neither quoted nor qualified
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withSum(String relation, Expression column) {
@@ -259,7 +260,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAvg(String relation, String column) {
@@ -274,7 +275,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the related column, never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
@@ -289,7 +290,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the expression, never {@code null}; it is neither quoted nor qualified
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAvg(String relation, Expression column) {
@@ -311,7 +312,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @return this builder
      * @throws NullPointerException if {@code relation} or {@code column} is {@code null}
      * @throws IllegalArgumentException if {@code function} is not one of those
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAggregate(String relation, String column, String function) {
@@ -330,7 +331,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if the map, the column, a name or a constraint is {@code null}
      * @throws IllegalArgumentException if {@code function} is not a supported function, or a
      *     constraint adds a groupBy, having, distinct or union
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAggregate(Map<String, Consumer<EloquentBuilder<?>>> relations,
@@ -349,7 +350,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @return this builder
      * @throws NullPointerException if {@code relation} or {@code column} is {@code null}
      * @throws IllegalArgumentException if {@code function} is not a supported function
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAggregate(String relation, Expression column, String function) {
@@ -364,7 +365,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @param column the related column, never {@code null}
      * @return this builder
      * @throws NullPointerException if an argument is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if the name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
      *     is not a relation of the model or is a dotted path
      */
     public final EloquentBuilder<T> withAggregate(String relation, String column) {
@@ -387,7 +388,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @return this builder
      * @throws NullPointerException if {@code casts} or a key in it is {@code null}
      * @throws IllegalArgumentException if a value is {@code null} or neither a cast nor a string
-     * @throws org.aristonis.diwan.database.eloquent.casts.InvalidCastException if a cast string
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidCastException if a cast string
      *     cannot be resolved
      */
     public final EloquentBuilder<T> withCasts(Map<String, ?> casts) {

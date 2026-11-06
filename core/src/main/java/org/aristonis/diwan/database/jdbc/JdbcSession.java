@@ -28,9 +28,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverCapability;
-import org.aristonis.diwan.database.driver.DriverException;
-import org.aristonis.diwan.database.driver.SqliteScripts;
-import org.aristonis.diwan.database.driver.SqliteText;
+import org.aristonis.diwan.database.exception.DriverException;
+import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
+import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
@@ -285,7 +285,7 @@ final class JdbcSession implements DriverSession {
         Objects.requireNonNull(sql, "sql");
         // The SQLite driver runs only a string's first statement; a script runs whole, as on PDO.
         List<String> statements = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
-                ? SqliteScripts.split(sql) : Collections.singletonList(sql);
+                ? SQLiteScripts.split(sql) : Collections.singletonList(sql);
         try (Statement statement = connection.createStatement()) {
             for (String one : statements) {
                 statement.execute(one);
@@ -573,10 +573,10 @@ final class JdbcSession implements DriverSession {
 
     private static void bind(PreparedStatement statement, int index, Object value, DatabaseFamily family)
             throws SQLException {
-        SqliteText.refuseNonFinite(value, index);
+        SQLiteText.refuseNonFinite(value, index);
         if (family == DatabaseFamily.SQLITE) {
             // One text for dates and decimals on every SQLite driver, so values sort and compare.
-            value = SqliteText.toStorage(value);
+            value = SQLiteText.toStorage(value);
         }
         if (family == DatabaseFamily.POSTGRESQL) {
             if (value == null) {

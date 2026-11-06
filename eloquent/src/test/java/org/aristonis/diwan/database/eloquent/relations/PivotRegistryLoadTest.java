@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

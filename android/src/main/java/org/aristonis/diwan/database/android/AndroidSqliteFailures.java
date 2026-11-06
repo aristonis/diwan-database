@@ -7,7 +7,7 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 
 /** Turns Android's SQLite exceptions into driver failures, the way the JDBC driver does for SQLite. */

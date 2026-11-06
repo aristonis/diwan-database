@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.query.Processor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.schema.Schema;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sqlite.SQLiteDataSource;

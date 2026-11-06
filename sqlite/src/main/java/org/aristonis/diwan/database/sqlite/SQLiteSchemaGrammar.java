@@ -1,5 +1,9 @@
 package org.aristonis.diwan.database.sqlite;
 
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.sqlite.SQLiteSqlTokens;
+import org.aristonis.diwan.database.sqlite.SQLiteTableRebuild;
+import org.aristonis.diwan.database.sqlite.SQLiteTableState;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -13,15 +17,15 @@ import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
-import org.aristonis.diwan.database.schema.Command;
+import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
-import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
+import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
-import org.aristonis.diwan.database.schema.SchemaQuery;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
 /**
  * Writes SQLite SQL, following Laravel's {@code SQLiteGrammar}.
@@ -349,7 +353,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      *     columns, which may need a rebuild on older SQLite versions
      */
     @Override
-    protected boolean requiresForeignKeysOff(Blueprint blueprint) {
+    public boolean requiresForeignKeysOff(Blueprint blueprint) {
         return !blueprint.isCreating() && (hasAny(blueprint, KEY_CHANGES) || hasRebuildingAdd(blueprint)
                 || hasAny(blueprint, new String[] {Command.DROP_COLUMN, Command.RENAME_COLUMN}));
     }
@@ -361,7 +365,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      *     at it, when the blueprint may have rebuilt the table
      */
     @Override
-    protected List<SchemaQuery> compileForeignKeyChecks(Blueprint blueprint, Connection connection) {
+    public List<SchemaQuery> compileForeignKeyChecks(Blueprint blueprint, Connection connection) {
         if (!requiresForeignKeysOff(blueprint)) {
             return Collections.emptyList();
         }

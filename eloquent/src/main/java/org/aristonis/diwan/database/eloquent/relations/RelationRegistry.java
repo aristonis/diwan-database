@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidRelationException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -10,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.EloquentAccess;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 
 /**
  * The checked {@code relations()} map of one model class, cached on the class's

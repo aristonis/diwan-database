@@ -3,9 +3,9 @@
  *
  * <p>This package holds {@link org.aristonis.diwan.database.driver.Driver}, the
  * {@link org.aristonis.diwan.database.driver.DriverSession} it opens, the
- * {@link org.aristonis.diwan.database.driver.DriverInfo} it reports, and the unchecked
- * {@link org.aristonis.diwan.database.driver.DriverException} every driver failure is reported
- * as. No signature here uses a {@code java.sql} or {@code javax.sql} type, so a driver that is not
+ * {@link org.aristonis.diwan.database.driver.DriverInfo} it reports. Every driver failure is
+ * reported as the unchecked {@link org.aristonis.diwan.database.exception.DriverException}. No
+ * signature here uses a {@code java.sql} or {@code javax.sql} type, so a driver that is not
  * built on JDBC, such as one over Android SQLite, can implement it.
  *
  * <p>This package does not hold any driver implementation, connection pooling, transaction nesting

@@ -1,5 +1,12 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.ModelObserver;
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.eloquent.EventEntry;
+import org.aristonis.diwan.database.eloquent.EventListeners;
+import org.aristonis.diwan.database.eloquent.Model;
+import org.aristonis.diwan.database.eloquent.ModelEvent;
+import org.aristonis.diwan.database.eloquent.ModelQuery;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;

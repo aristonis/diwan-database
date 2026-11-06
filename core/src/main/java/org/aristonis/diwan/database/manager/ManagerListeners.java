@@ -3,8 +3,8 @@ package org.aristonis.diwan.database.manager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import org.aristonis.diwan.database.ConnectionListener;
-import org.aristonis.diwan.database.migrations.MigrationListener;
+import org.aristonis.diwan.database.event.ConnectionListener;
+import org.aristonis.diwan.database.migrations.event.MigrationListener;
 
 /** The listeners a {@link DatabaseManager.Builder} collected, in registration order. */
 final class ManagerListeners {

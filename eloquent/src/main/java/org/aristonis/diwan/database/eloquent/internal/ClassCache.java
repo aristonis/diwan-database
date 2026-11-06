@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -24,6 +25,7 @@ import java.util.function.Function;
  *
  * @param <V> the cached value type
  */
+@Internal
 public interface ClassCache<V> {
 
     /**

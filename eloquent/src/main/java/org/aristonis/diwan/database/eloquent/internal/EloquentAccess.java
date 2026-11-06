@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +25,7 @@ import org.aristonis.diwan.database.query.QueryFactory;
  * @implSpec An implementation keeps no state of its own and is safe to call from any thread; the
  *     builders and models it is given are not shared, so it needs no lock.
  */
+@Internal
 public interface EloquentAccess {
 
     /**

@@ -16,8 +16,8 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.UniqueConstraintViolationException;
+import org.aristonis.diwan.database.exception.QueryException;
+import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.junit.jupiter.api.Test;
 
 /** Values written and read back on a real PostgreSQL, under several JVM time zones. */

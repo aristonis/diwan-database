@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;

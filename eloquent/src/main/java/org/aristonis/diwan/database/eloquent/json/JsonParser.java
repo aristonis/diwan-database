@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.json;
 
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;

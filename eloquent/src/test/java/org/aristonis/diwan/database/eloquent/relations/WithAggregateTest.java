@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -17,12 +18,12 @@ import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
 import org.aristonis.diwan.database.query.QueryCursor;
-import org.aristonis.diwan.database.eloquent.ModelPage;
+import org.aristonis.diwan.database.eloquent.page.ModelPage;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.relations.RelationModels.Post;
 import org.aristonis.diwan.database.eloquent.relations.RelationModels.User;
 import org.aristonis.diwan.database.pgsql.PostgresQuery;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -95,7 +96,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalStateException if the parent has no local key value, such as before it is
      *     saved
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
      */
     public final R make(Map<String, ?> attributes) {
@@ -117,7 +118,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      * @throws NullPointerException if {@code model} is {@code null}
      * @throws IllegalStateException if the parent has no local key value, or the model has no
      *     connection
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final R save(R model) {
         Objects.requireNonNull(model, "model");
@@ -137,7 +138,7 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      * @return the models, in order, never {@code null}
      * @throws NullPointerException if {@code models} or an element is {@code null}
      * @throws IllegalStateException if the parent has no local key value
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final List<R> saveMany(Collection<? extends R> models) {
         Objects.requireNonNull(models, "models");
@@ -157,9 +158,9 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      * @return the saved related model, never {@code null}
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalStateException if the parent has no local key value
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the statement
      */
     public final R create(Map<String, ?> attributes) {
         R instance = make(attributes);
@@ -175,9 +176,9 @@ public abstract class HasOneOrMany<R extends Model, S extends HasOneOrMany<R, S>
      * @return the saved related models, in order, never {@code null}
      * @throws NullPointerException if {@code records} or an element is {@code null}
      * @throws IllegalStateException if the parent has no local key value
-     * @throws org.aristonis.diwan.database.eloquent.MassAssignmentException if the related
+     * @throws org.aristonis.diwan.database.eloquent.exception.MassAssignmentException if the related
      *     model's guards refuse an attribute
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses a statement
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
      */
     public final List<R> createMany(List<? extends Map<String, ?>> records) {
         Objects.requireNonNull(records, "records");

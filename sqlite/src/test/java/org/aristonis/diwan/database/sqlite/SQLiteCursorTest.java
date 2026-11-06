@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.jdbc.JdbcConnectionProvider;
 import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.QueryFactory;

@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import org.aristonis.diwan.database.eloquent.ClassMorphViolationException;
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.relations.MorphToModels.Comment;

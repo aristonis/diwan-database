@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
-import org.aristonis.diwan.database.eloquent.json.JsonException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import org.junit.jupiter.api.Test;
 
 class JsonCastTest {

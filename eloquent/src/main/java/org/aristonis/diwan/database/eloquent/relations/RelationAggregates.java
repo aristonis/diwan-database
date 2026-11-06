@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,7 +17,7 @@ import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.query.Builder;
-import org.aristonis.diwan.database.query.Expression;
+import org.aristonis.diwan.database.Expression;
 
 /**
  * Adds one aggregate subselect per relation to a query, as Laravel's

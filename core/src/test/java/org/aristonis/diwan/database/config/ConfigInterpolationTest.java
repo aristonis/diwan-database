@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashMap;
 import java.util.Map;
-import org.aristonis.diwan.database.manager.DatabaseConfigException;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.junit.jupiter.api.Test;
 
 class ConfigInterpolationTest {

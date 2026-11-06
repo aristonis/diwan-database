@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.event.QueryExecuted;
+import org.aristonis.diwan.database.event.Registration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;

@@ -167,7 +167,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * model's own {@link Model#freshTimestampValue()}: its clock and stored form, the same text or
      * {@code Instant} an ordinary save of that model writes, whatever the parent's clock is.
      *
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public void touch() {
         String column = touchColumn();
@@ -202,7 +202,7 @@ public abstract class Relation<R extends Model, S extends Relation<R, S>> extend
      * @throws NullPointerException if {@code attributes} is {@code null}
      * @throws IllegalArgumentException if {@code attributes} is empty or a value is a list, map or
      *     array
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses the update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the update
      */
     public final int rawUpdate(Map<String, ?> attributes) {
         Objects.requireNonNull(attributes, "attributes");

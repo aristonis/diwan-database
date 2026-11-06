@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.CursorPage;
 import org.aristonis.diwan.database.query.LengthAwarePage;

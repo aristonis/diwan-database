@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import org.aristonis.diwan.database.eloquent.exception.ClassMorphViolationException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -192,7 +193,7 @@ abstract class ModelMorphRelations extends ModelThroughRelations {
      * @param relations the relation paths to load, by owner class, never {@code null}
      * @return this model
      * @throws NullPointerException if an argument, a class key or a path is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a path
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a path
      *     names no relation of the owner's class
      */
     public Model loadMorph(String relation, Map<Class<? extends Model>, List<String>> relations) {
@@ -211,7 +212,7 @@ abstract class ModelMorphRelations extends ModelThroughRelations {
      * @param relations the relation names to count, by owner class, never {@code null}
      * @return this model
      * @throws NullPointerException if an argument, a class key or a name is {@code null}
-     * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if a name
      *     is not a relation of the owner's class
      */
     public Model loadMorphCount(String relation, Map<Class<? extends Model>, List<String>> relations) {

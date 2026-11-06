@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.migrations.internal.MigrationNames;
+import org.aristonis.diwan.database.migrations.internal.MigrationTableSql;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -9,7 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.schema.Schema;
 
 /**

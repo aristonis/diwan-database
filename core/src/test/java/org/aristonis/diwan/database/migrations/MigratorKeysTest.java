@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.migrations;
 
+import org.aristonis.diwan.database.exception.MigrationFailedException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -10,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.migrations.MigratorSqliteTest.TestMigration;
-import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
+import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.Schema;
 import org.aristonis.diwan.database.sqlite.SQLiteSchema;
 import org.junit.jupiter.api.BeforeEach;

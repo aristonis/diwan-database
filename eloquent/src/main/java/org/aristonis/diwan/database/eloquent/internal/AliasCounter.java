@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.internal;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * Numbers the table aliases of self-relation existence subqueries: {@code laravel_reserved_0},
  * {@code laravel_reserved_1}, and so on.
@@ -11,6 +13,7 @@ package org.aristonis.diwan.database.eloquent.internal;
  *
  * <p>Internal: not API. Not thread-safe; a counter belongs to one builder chain on one thread.
  */
+@Internal
 public final class AliasCounter {
 
     /** The prefix Laravel gives a self-relation alias. */

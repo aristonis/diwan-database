@@ -8,15 +8,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.internal.Access;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 import org.aristonis.diwan.database.eloquent.relations.BelongsTo;
 import org.aristonis.diwan.database.eloquent.relations.HasMany;
 import org.aristonis.diwan.database.eloquent.relations.HasOne;
-import org.aristonis.diwan.database.eloquent.relations.LazyLoadingViolationException;
+import org.aristonis.diwan.database.eloquent.exception.LazyLoadingViolationException;
 import org.aristonis.diwan.database.eloquent.relations.Pivot;
 import org.aristonis.diwan.database.eloquent.relations.Relation;
-import org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import org.aristonis.diwan.database.support.Inflector;
 
 /**
@@ -250,7 +250,7 @@ abstract class ModelRelations extends ModelSerialization {
      * @throws NullPointerException if {@code name} is {@code null}
      * @throws RelationNotFoundException if the map has no relation of that name; the message lists
      *     the names it has
-     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidRelationException if the
      *     class's map fails its check, now or on an earlier call
      * @throws IllegalStateException if the model class has no {@link ModelQuery} entry
      */
@@ -392,7 +392,7 @@ abstract class ModelRelations extends ModelSerialization {
      * @throws NullPointerException if {@code name} is {@code null}
      * @throws RelationNotFoundException if the relation is not loaded and {@link #relations()}
      *     has no relation of that name
-     * @throws org.aristonis.diwan.database.eloquent.relations.InvalidRelationException if the
+     * @throws org.aristonis.diwan.database.eloquent.exception.InvalidRelationException if the
      *     class's map fails its check
      * @throws LazyLoadingViolationException if the relation is not loaded, this model came in a
      *     result of more than one row and {@link ModelQuery#preventsLazyLoading()} is on; no query

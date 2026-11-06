@@ -1,5 +1,12 @@
 package org.aristonis.diwan.database;
 
+import org.aristonis.diwan.database.event.ConnectionListener;
+import org.aristonis.diwan.database.event.QueryFailed;
+import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.FakeDriver;
+import org.aristonis.diwan.database.QueryKind;
+import org.aristonis.diwan.database.RecordingListener;
+import org.aristonis.diwan.database.exception.QueryException;
 import static org.aristonis.diwan.database.FakeDriver.failure;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -9,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.junit.jupiter.api.Test;
 
 /** What a failed statement reports to a listener, and how a broken listener leaves the caller's error. */

@@ -9,14 +9,14 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
-import org.aristonis.diwan.database.schema.Command;
+import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
-import org.aristonis.diwan.database.schema.SchemaGrammar;
-import org.aristonis.diwan.database.schema.SchemaQuery;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
 /**
  * Turns a blueprint into PostgreSQL statements, following Laravel's PostgreSQL grammar.

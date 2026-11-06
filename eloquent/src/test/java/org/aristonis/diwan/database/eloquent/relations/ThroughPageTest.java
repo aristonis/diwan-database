@@ -9,7 +9,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelPage;
+import org.aristonis.diwan.database.eloquent.page.ModelPage;
 import org.aristonis.diwan.database.eloquent.relations.ThroughModels.Country;
 import org.aristonis.diwan.database.eloquent.relations.ThroughModels.Post;
 import org.junit.jupiter.api.AfterEach;

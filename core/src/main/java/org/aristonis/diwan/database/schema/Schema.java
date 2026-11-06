@@ -1,5 +1,13 @@
 package org.aristonis.diwan.database.schema;
 
+import org.aristonis.diwan.database.Expression;
+import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
+import org.aristonis.diwan.database.exception.ForeignKeysOffRequiredException;
+import org.aristonis.diwan.database.schema.grammar.Command;
+import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
+import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
+import org.aristonis.diwan.database.schema.internal.DropColumnGuard;
+import org.aristonis.diwan.database.schema.internal.SchemaNames;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -113,7 +121,7 @@ public final class Schema {
      * @throws IllegalArgumentException if a name is invalid, the table has no column, a column is
      *     added twice or a generated index name is too long
      * @throws UnsupportedOperationException if the grammar does not support a command or type
-     * @throws org.aristonis.diwan.database.QueryException if a statement fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
      */
     public void create(String table, Consumer<Blueprint> callback) {
         Blueprint blueprint = blueprint(table, true);
@@ -131,7 +139,7 @@ public final class Schema {
      * @throws IllegalArgumentException if a name is invalid, a column is added twice or a
      *     generated index name is too long
      * @throws UnsupportedOperationException if the grammar does not support a command or type
-     * @throws org.aristonis.diwan.database.QueryException if a statement fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
      */
     public void table(String table, Consumer<Blueprint> callback) {
         Blueprint blueprint = blueprint(table, false);
@@ -145,7 +153,7 @@ public final class Schema {
      * @param table the table name without prefix, never {@code null}
      * @throws NullPointerException if {@code table} is {@code null}
      * @throws IllegalArgumentException if the name is invalid
-     * @throws org.aristonis.diwan.database.QueryException if the table does not exist or the
+     * @throws org.aristonis.diwan.database.exception.QueryException if the table does not exist or the
      *     statement fails
      */
     public void drop(String table) {
@@ -158,7 +166,7 @@ public final class Schema {
      * @param table the table name without prefix, never {@code null}
      * @throws NullPointerException if {@code table} is {@code null}
      * @throws IllegalArgumentException if the name is invalid
-     * @throws org.aristonis.diwan.database.QueryException if the statement fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
      */
     public void dropIfExists(String table) {
         single(table, Command.DROP_IF_EXISTS, Collections.<String, Object>emptyMap());
@@ -172,7 +180,7 @@ public final class Schema {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if a name is invalid
      * @throws UnsupportedOperationException if the grammar does not support renaming
-     * @throws org.aristonis.diwan.database.QueryException if the statement fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
      */
     public void rename(String from, String to) {
         String target = prefixed(to);
@@ -258,7 +266,7 @@ public final class Schema {
      * @throws IllegalArgumentException if the name is invalid
      * @throws UnsupportedOperationException if the grammar does not support the check
      * @throws IllegalStateException if the query does not return a count
-     * @throws org.aristonis.diwan.database.QueryException if the query fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
      */
     public boolean hasTable(String table) {
         SchemaQuery query = grammar.compileTableExists(connection, prefixed(table));
@@ -282,7 +290,7 @@ public final class Schema {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if a name is invalid
      * @throws UnsupportedOperationException if the grammar does not support the listing
-     * @throws org.aristonis.diwan.database.QueryException if the query fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
      */
     public boolean hasColumn(String table, String column) {
         String wanted = SchemaNames.check("column", column).toLowerCase(Locale.ROOT);
@@ -314,7 +322,7 @@ public final class Schema {
      * @param sql the statement, never {@code null} or blank
      * @throws NullPointerException if {@code sql} is {@code null}
      * @throws IllegalArgumentException if {@code sql} is blank
-     * @throws org.aristonis.diwan.database.QueryException if the statement fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
      */
     public void statement(String sql) {
         connection.statement(ColumnDefinition.trustedSql("statement", sql));

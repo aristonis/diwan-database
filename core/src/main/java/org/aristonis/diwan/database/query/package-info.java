@@ -7,8 +7,9 @@
  * supplies its own grammar and processor; the core never depends on one and holds only the base
  * grammar, which writes Laravel's generic SQL.
  *
- * <p>This package holds the builder, its clause records, the base grammar and the raw-SQL
- * {@link org.aristonis.diwan.database.query.Expression}. It does not hold database-specific SQL,
+ * <p>This package holds the builder, its clause records and the base grammar; raw SQL is an
+ * {@link org.aristonis.diwan.database.Expression} from the root package. It does not hold
+ * database-specific SQL,
  * schema building, or a row type: rows are plain maps, as {@link org.aristonis.diwan.database.Connection}
  * returns them.
  */

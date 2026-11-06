@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import org.aristonis.diwan.database.QueryException;
+import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Comment;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Country;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Memo;

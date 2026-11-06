@@ -70,3 +70,10 @@ tasks.withType<Test>().configureEach {
         excludes = listOf("jdk.internal.*")
     }
 }
+
+// android.jar is not a Java module, so this module cannot have a module-info; the manifest names it.
+tasks.jar {
+    manifest {
+        attributes("Automatic-Module-Name" to "org.aristonis.diwan.database.android")
+    }
+}

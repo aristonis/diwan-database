@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.eloquent.relations;
 
+import org.aristonis.diwan.database.eloquent.exception.InvalidRelationException;
+import org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +12,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.internal.EloquentAccess;
-import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
+import org.aristonis.diwan.database.eloquent.exception.UnregisteredModelException;
 import org.aristonis.diwan.database.eloquent.internal.VisitPath;
 import org.aristonis.diwan.database.query.QueryFactory;
 
@@ -217,7 +219,7 @@ final class RelationTouches {
      * @throws IllegalArgumentException if a loaded relation value is not a model, a collection of
      *     models or {@code null}
      * @throws IllegalStateException if a model's class has no {@code ModelQuery} entry
-     * @throws org.aristonis.diwan.database.QueryException if the database refuses an update
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses an update
      */
     static void touchOwners(Model model, VisitPath path) {
         Objects.requireNonNull(model, "model");

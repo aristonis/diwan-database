@@ -9,9 +9,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.ForeignKeyViolationException;
-import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.driver.DriverException;
+import org.aristonis.diwan.database.exception.ForeignKeyViolationException;
+import org.aristonis.diwan.database.exception.QueryException;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.junit.jupiter.api.Test;
 
