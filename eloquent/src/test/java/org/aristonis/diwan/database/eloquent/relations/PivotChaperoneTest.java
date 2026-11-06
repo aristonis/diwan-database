@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.eloquent.ModelPage;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.junit.jupiter.api.AfterEach;
@@ -361,7 +361,7 @@ class PivotChaperoneTest {
         for (BtmModels.Role role : ann.memberships().chaperone().lazy()) {
             lazily.add(role);
         }
-        try (ModelCursor<BtmModels.Role> rows = ann.memberships().chaperone().cursor()) {
+        try (QueryCursor<BtmModels.Role> rows = ann.memberships().chaperone().cursor()) {
             for (BtmModels.Role role : rows) {
                 cursored.add(role);
             }

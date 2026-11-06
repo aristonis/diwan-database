@@ -192,6 +192,51 @@ class PrimitiveCastsTest {
         });
     }
 
+    @Test
+    void stringReadsBooleansAsPhpDoes() {
+        assertEquals("1", stringCast.get(null, KEY, true, NO_ATTRIBUTES));
+        assertEquals("", stringCast.get(null, KEY, false, NO_ATTRIBUTES));
+        assertEquals("", stringCast.set(null, KEY, Boolean.FALSE, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringReadsWholeDoublesAsIntegerText() {
+        assertEquals("1", stringCast.get(null, KEY, 1.0d, NO_ATTRIBUTES));
+        assertEquals("-2", stringCast.get(null, KEY, -2.0d, NO_ATTRIBUTES));
+        assertEquals("1.5", stringCast.get(null, KEY, 1.5d, NO_ATTRIBUTES));
+        assertEquals("1.0E20", stringCast.get(null, KEY, 1e20d, NO_ATTRIBUTES));
+        assertEquals("Infinity", stringCast.get(null, KEY, Double.POSITIVE_INFINITY, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringReadsWholeFloatsAsIntegerText() {
+        assertEquals("2", stringCast.get(null, KEY, 2.0f, NO_ATTRIBUTES));
+        assertEquals("0.5", stringCast.get(null, KEY, 0.5f, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringReadsNegativeZeroWithItsSign() {
+        assertEquals("-0", stringCast.get(null, KEY, -0.0d, NO_ATTRIBUTES));
+        assertEquals("-0", stringCast.get(null, KEY, -0.0f, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringReadsNotANumberAsJavaText() {
+        assertEquals("NaN", stringCast.get(null, KEY, Double.NaN, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringReadsLargeAndTinyFractionsInJavaExponentForm() {
+        assertEquals("1.23456785E7", stringCast.get(null, KEY, 12345678.5d, NO_ATTRIBUTES));
+        assertEquals("1.0E-4", stringCast.get(null, KEY, 0.0001d, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void stringComparesBooleanTrueWithStoredOne() {
+        assertTrue(stringCast.compare(null, KEY, "1", true));
+        assertFalse(stringCast.compare(null, KEY, "1", false));
+    }
+
     // Review fix 4: float reads a Boolean as int does.
     @Test
     void floatAcceptsBooleanAsOneOrZero() {

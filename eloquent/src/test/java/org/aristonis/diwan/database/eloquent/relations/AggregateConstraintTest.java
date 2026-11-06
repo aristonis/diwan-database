@@ -23,8 +23,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The aggregate constraint closure, the function allow-list and the column
- * forms: the closure runs in a where group, its limit, offset and groupBy are
- * carried to the subselect, and any other clause kind is refused before the outer query changes.
+ * forms: the closure runs on the aggregate subselect with the rules of {@code whereHas}, so joins are
+ * allowed, its wheres are grouped, its columns, orders, limit and offset are cleared, and a groupBy,
+ * having, distinct or union is refused before the outer query changes.
  */
 class AggregateConstraintTest {
 
@@ -78,7 +79,7 @@ class AggregateConstraintTest {
         for (EloquentBuilder<User> query : both()) {
             EloquentBuilder<User> counted = query.withCount(one("posts", q -> q.where("published", true)));
 
-            assertEquals(countWith(" and (\"published\" = ?)"), counted.toSql());
+            assertEquals(countWith(" and \"published\" = ?"), counted.toSql());
             assertEquals(Collections.singletonList(true), counted.getBindings());
         }
     }
@@ -107,27 +108,63 @@ class AggregateConstraintTest {
     }
 
     @Test
-    void closureLimitKept() {
+    void closureLimitAndOffsetCleared() {
         for (EloquentBuilder<User> query : both()) {
-            assertEquals(countWith(" limit 1"), query.withCount(one("posts", q -> q.limit(1))).toSql());
+            assertEquals(PLAIN_COUNT, query.withCount(one("posts", q -> q.limit(1).offset(2))).toSql());
         }
     }
 
     @Test
-    void closureOffsetKept() {
-        String sql = users().withCount(one("posts", q -> q.limit(1).offset(2))).toSql();
+    void closureOrderByAndLimitRenderNoneAndCountAllRows() {
+        List<User> rows = users().withCount(one("posts", q -> q.orderBy("title").limit(1))).orderBy("id").get();
 
-        assertEquals(countWith(" limit 1 offset 2"), sql);
+        assertEquals(PLAIN_COUNT, users().withCount(one("posts", q -> q.orderBy("title").limit(1))).toSql());
+        assertEquals(3L, ((Number) rows.get(0).getAttribute("posts_count")).longValue());
+        assertEquals(1L, ((Number) rows.get(1).getAttribute("posts_count")).longValue());
     }
 
     @Test
-    void closureGroupByKeptWithItsBindings() {
-        EloquentBuilder<User> counted = users().withCount(one("posts",
-                q -> q.where("title", "a").query(b -> b.groupBy("title").groupByRaw("length(title) > ?",
-                        Collections.singletonList(3)))));
+    void closureJoinIsAllowedAndRunsOnSqlite() {
+        db.seed("comments", Map.of("id", 1, "post_id", 1, "body", "x"));
+        db.seed("comments", Map.of("id", 2, "post_id", 1, "body", "y"));
+        db.seed("comments", Map.of("id", 3, "post_id", 3, "body", "z"));
+        EloquentBuilder<User> query = users().withCount(one("posts",
+                q -> q.join("comments", "comments.post_id", "=", "posts.id").where("comments.body", "x")));
 
-        assertEquals(countWith(" and (\"title\" = ?) group by \"title\", length(title) > ?"), counted.toSql());
-        assertEquals(Arrays.asList("a", 3), counted.getBindings());
+        assertTrue(query.toSql().contains("from \"posts\" inner join \"comments\" on"), query.toSql());
+        List<User> rows = query.orderBy("id").get();
+        assertEquals(1L, ((Number) rows.get(0).getAttribute("posts_count")).longValue());
+        assertEquals(0L, ((Number) rows.get(1).getAttribute("posts_count")).longValue());
+    }
+
+    @Test
+    void closureGroupByRefusedWithRelationName() {
+        for (EloquentBuilder<User> query : both()) {
+            IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                    () -> query.withCount(one("posts", q -> q.query(b -> b.groupBy("title")))));
+
+            assertTrue(thrown.getMessage().contains("[posts]"), thrown.getMessage());
+            assertTrue(thrown.getMessage().contains("groupBy/having"), thrown.getMessage());
+            assertEquals("select * from \"users\"", query.toSql());
+        }
+    }
+
+    @Test
+    void sumClosureSelectDoesNotLeakColumns() {
+        String sql = users().withSum(one("posts", q -> q.select("title")), "id").toSql();
+
+        assertEquals(SELECT + "(select sum(\"posts\".\"id\") " + POSTS + ") as \"posts_sum_id\"" + FROM, sql);
+    }
+
+    @Test
+    void existsClosureRunsAndDropsOrdersKeepsLimit() {
+        EloquentBuilder<User> query = users().withExists(one("posts", q -> q.where("title", "c")));
+        List<User> rows = query.orderBy("id").get();
+
+        assertEquals(Boolean.FALSE, rows.get(0).getAttribute("posts_exists"));
+        assertEquals(Boolean.TRUE, rows.get(1).getAttribute("posts_exists"));
+        assertEquals(SELECT + "exists(select * " + POSTS + " limit 1) as \"posts_exists\"" + FROM,
+                users().withExists(one("posts", q -> q.orderBy("title").limit(1))).toSql());
     }
 
     @Test
@@ -174,22 +211,17 @@ class AggregateConstraintTest {
 
     @Test
     void distinctRefused() {
-        assertRefused(q -> q.query(b -> b.distinct()), "distinct");
-    }
-
-    @Test
-    void joinRefused() {
-        assertRefused(q -> q.query(b -> b.join("comments", "comments.post_id", "=", "posts.id")), "join");
+        assertRefused(q -> q.query(b -> b.distinct()));
     }
 
     @Test
     void havingRefused() {
-        assertRefused(q -> q.query(b -> b.groupBy("title").having("title", "a")), "having");
+        assertRefused(q -> q.query(b -> b.groupBy("title").having("title", "a")));
     }
 
     @Test
     void unionRefused() {
-        assertRefused(q -> q.query(b -> b.union(db.db.table("posts"))), "union");
+        assertRefused(q -> q.query(b -> b.union(db.db.table("posts"))));
     }
 
     @Test
@@ -199,21 +231,19 @@ class AggregateConstraintTest {
         relations.put("posts as distinct_posts", q -> q.query(b -> b.distinct()));
         EloquentBuilder<User> query = users();
 
-        assertThrows(IllegalStateException.class, () -> query.withCount(relations));
+        assertThrows(IllegalArgumentException.class, () -> query.withCount(relations));
 
         assertEquals("select * from \"users\"", query.toSql());
         assertTrue(query.getBindings().isEmpty());
     }
 
-    private void assertRefused(Consumer<EloquentBuilder<?>> constraint, String kind) {
+    private void assertRefused(Consumer<EloquentBuilder<?>> constraint) {
         EloquentBuilder<User> query = users();
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
                 () -> query.withCount(one("posts", constraint)));
 
-        assertTrue(thrown.getMessage().contains("[" + kind + "]"), thrown.getMessage());
         assertTrue(thrown.getMessage().contains("[posts]"), thrown.getMessage());
-        assertTrue(thrown.getMessage().contains(User.class.getName()), thrown.getMessage());
         assertEquals("select * from \"users\"", query.toSql());
     }
 

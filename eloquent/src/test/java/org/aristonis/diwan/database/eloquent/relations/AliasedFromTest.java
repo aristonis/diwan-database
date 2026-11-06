@@ -87,7 +87,7 @@ class AliasedFromTest {
         void whereHasQualifiesTheParentKeyWithTheAlias() {
             EloquentBuilder<User> query = users().whereHas("posts", q -> q.where("title", "a"));
 
-            assertEquals(USERS_AS_U + "exists (" + POSTS_OF_U + " and (\"title\" = ?))", query.toSql());
+            assertEquals(USERS_AS_U + "exists (" + POSTS_OF_U + " and \"title\" = ?)", query.toSql());
             assertEquals(Collections.singletonList(1L), keys(query.get()));
         }
 

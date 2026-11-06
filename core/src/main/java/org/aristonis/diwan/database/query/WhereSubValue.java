@@ -1,12 +1,17 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * The single value a subquery returns, compared with a value: {@code (select ...) > ?}.
  *
  * <p>Laravel compiles the subquery to an expression and stores a basic condition on it; here the
  * subquery is kept, as a private copy taken when the condition was added, so a database grammar
  * compiles it with its own rules. Its bindings come first in the where bucket, then the value's.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public final class WhereSubValue implements Where {
     private final String conjunction;
     private final Builder query;

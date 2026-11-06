@@ -139,8 +139,7 @@ SQL output and copies
 Values
 
 - Instants are stored as each database stores `Blueprint.instant`: whole microseconds on SQLite,
-  `timestamptz` on PostgreSQL. Money is bound explicitly with `toMinor()`, `toText()` or
-  `amount()`; a `MoneyAmount` value is refused. Other values follow the connection's binding rules.
+  `timestamptz` on PostgreSQL. Other values follow the connection's binding rules.
 
 ## 4. Non-functional requirements
 

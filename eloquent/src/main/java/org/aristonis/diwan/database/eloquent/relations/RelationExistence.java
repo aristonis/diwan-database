@@ -17,9 +17,12 @@ import org.aristonis.diwan.database.query.Builder;
  * query, as Laravel's {@code QueriesRelationships::has}.
  *
  * <p>{@code >= 1} and {@code < 1} compile to {@code exists} and {@code not exists}; any other
- * operator and count compile to {@code (select count(*) ...) op ?}. A constraint always runs
- * inside a where group, which is left out when the constraint adds no condition. A dot
- * path nests one existence query per segment; the operator and count apply to the last one.
+ * operator and count compile to {@code (select count(*) ...) op ?}. A constraint runs on the
+ * existence subquery itself, so it may add joins, orders, a limit and groups; the wheres it adds
+ * are wrapped in one where group. An exists form drops orders and keeps the limit and offset. A
+ * count comparison replaces the columns with {@code count(*)}, drops orders, limit and offset, and
+ * refuses groups, havings, {@code distinct} and unions. A dot path nests one existence query per
+ * segment; the operator and count apply to the last one.
  * A self relation numbers its table alias from the outermost query's {@link AliasCounter}.
  */
 final class RelationExistence {
@@ -68,8 +71,8 @@ final class RelationExistence {
      * @param count the count compared with
      * @param or {@code true} to join the condition with {@code or}
      * @param constraint the constraint on the related query, or {@code null} for none
-     * @throws IllegalArgumentException if the operator is not one of the seven
-     * @throws IllegalStateException if the constraint adds a join
+     * @throws IllegalArgumentException if the operator is not one of the seven, or if the constraint of a
+     *     count comparison adds a group by or a having
      */
     static void addResolved(EloquentBuilder<?> outer, Relation<?, ?> resolved, String name, String operator,
             long count, boolean or, Consumer<EloquentBuilder<?>> constraint) {
@@ -78,15 +81,17 @@ final class RelationExistence {
         EloquentBuilder<?> sub = resolved.existenceQuery(outer, aliases);
         Access.eloquent().shareAliases(outer, sub);
         if (constraint != null) {
-            constrain(sub, name, constraint);
+            ExistenceConstraint.run(sub, constraint);
         }
         resolved.completeExistence(sub);
         if (isExistsCheck(operator, count)) {
+            sub.query(base -> base.reorder());
             Builder exists = sub.toBase();
             boolean not = LESS_THAN.equals(operator);
             outer.query(base -> addExists(base, exists, or, not));
             return;
         }
+        ExistenceConstraint.prepareValue(sub, name, "count existence");
         sub.query(base -> base.selectRaw("count(*)"));
         Builder counted = sub.toBase();
         Long value = count;
@@ -125,20 +130,6 @@ final class RelationExistence {
         String relatedFrom = related.toBase().getFrom();
         String parentFrom = parent.toBase().getFrom();
         return relatedFrom != null && parentFrom != null && table(relatedFrom).equals(table(parentFrom));
-    }
-
-    // The group only merges wheres and scope removals back into the subquery, so a join added
-    // inside it would be dropped without a word; it is refused instead.
-    private static void constrain(EloquentBuilder<?> sub, String relation, Consumer<EloquentBuilder<?>> constraint) {
-        Builder[] group = new Builder[1];
-        Access.eloquent().constraintGroup(sub, q -> {
-            constraint.accept(q);
-            group[0] = q.toBase();
-        });
-        if (group[0] != null && !group[0].getJoins().isEmpty()) {
-            throw new IllegalStateException("The constraint of relation [" + relation
-                    + "] adds a join; an existence constraint supports only where clauses");
-        }
     }
 
     /**

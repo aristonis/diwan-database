@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.driver.RowCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
@@ -151,7 +151,7 @@ class SQLiteChunkingTest {
 
     @Test
     void builderCursorStreamsEveryRow() {
-        try (RowCursor cursor = db.table("users").where("team", 0).orderBy("id").cursor()) {
+        try (QueryCursor<Map<String, Object>> cursor = db.table("users").where("team", 0).orderBy("id").cursor()) {
             assertEquals(java.util.Arrays.asList(3L, 6L, 9L, 12L, 15L, 18L, 21L, 24L), ids(cursor));
         }
     }

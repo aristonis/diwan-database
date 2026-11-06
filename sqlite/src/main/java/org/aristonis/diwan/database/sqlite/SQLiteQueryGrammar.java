@@ -370,7 +370,7 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     /**
      * Converts bindings to what SQLite stores: each {@link Instant} becomes its whole
      * microseconds since the epoch, what an {@code instant} column holds; other values pass
-     * unchanged. Money is not converted: bind {@code Money.toMinor} or {@code Money.toText}.
+     * unchanged.
      *
      * @param bindings the bindings, never {@code null}, may contain {@code null}
      * @return the converted bindings, unmodifiable, never {@code null}

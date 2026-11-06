@@ -1,12 +1,17 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * A column compared with the single value a subquery returns: {@code "a" = (select ...)}.
  *
  * <p>The subquery is a private copy taken when the condition was added, and its bindings were
  * copied into the where bucket at that moment, so the SQL and the bindings never drift apart.
  * {@link #query()} hands out another copy; the stored one is never changed.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public final class WhereSub implements Where {
     private final String conjunction;
     private final String column;

@@ -8,14 +8,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.internal.Access;
+import org.aristonis.diwan.database.eloquent.internal.ClassCache;
 import org.aristonis.diwan.database.eloquent.internal.UnregisteredModelException;
 import org.aristonis.diwan.database.query.QueryFactory;
 
@@ -41,12 +40,14 @@ import org.aristonis.diwan.database.query.QueryFactory;
 public final class ModelQuery<T extends Model> {
 
     /**
-     * The model classes seen by {@link #of}, each with the constructor first registered for it.
-     * Entries are never removed: a class registered here stays reachable for the life of the
-     * process (and pins its class loader), and a later {@code of} for the same class with another
-     * constructor does not replace the first.
+     * The model classes seen by {@link #of}, each with the entry first registered for it. The
+     * entry lives on the class where the platform allows it, so a dropped class loader is
+     * collected with its models; a later {@code of} for the same class with another constructor
+     * does not replace the first. A lookup attaches an empty slot to the probed class, freed with
+     * the class.
      */
-    private static final ConcurrentMap<Class<?>, ModelQuery<?>> REGISTRY = new ConcurrentHashMap<>();
+    private static final ClassCache<AtomicReference<ModelQuery<?>>> REGISTRY =
+            ClassCache.of(type -> new AtomicReference<>());
 
     /**
      * Whether lazy loading is prevented: a process-wide boot setting, read on every
@@ -130,12 +131,12 @@ public final class ModelQuery<T extends Model> {
         ModelQuery<T> query = new ModelQuery<>(Objects.requireNonNull(type, "type"),
                 Objects.requireNonNull(constructor, "constructor"), null, null, null, new AtomicReference<>(),
                 new AtomicReference<>());
-        REGISTRY.putIfAbsent(type, query);
+        REGISTRY.get(type).compareAndSet(null, query);
         return query;
     }
 
     static ModelQuery<?> registered(Class<?> type) {
-        return REGISTRY.get(type);
+        return REGISTRY.get(type).get();
     }
 
     /**
@@ -213,7 +214,7 @@ public final class ModelQuery<T extends Model> {
      * @return the slot, never {@code null}
      */
     AtomicReference<Map<String, Scope>> scopeSlot() {
-        ModelQuery<?> registered = REGISTRY.get(type);
+        ModelQuery<?> registered = REGISTRY.get(type).get();
         return registered != null ? registered.scopes : scopes;
     }
 
@@ -224,7 +225,7 @@ public final class ModelQuery<T extends Model> {
      * @return the slot, never {@code null}
      */
     AtomicReference<EventListeners> eventSlot() {
-        ModelQuery<?> registered = REGISTRY.get(type);
+        ModelQuery<?> registered = REGISTRY.get(type).get();
         return registered != null ? registered.events : events;
     }
 

@@ -146,22 +146,11 @@ schema-qualified names, listings of tables and columns.
 - `hasTable`, `hasColumn`, `indexes` and `foreignKeys` read the current schema only.
 - `PostgresMigrationLock` keeps two processes from migrating at once.
 
-## Money
+## Decimals and moments
 
-- `money(column, scale)` stores whole minor units (cents at scale 2): `integer` on SQLite, `bigint`
-  on PostgreSQL. Exact everywhere, and sums and sorts in SQL.
-- `money(column, scale).asDecimal(precision)` stores an exact decimal: `numeric(precision, scale)` on
-  PostgreSQL; on SQLite, text in one spelling per number (`"1000.000000"` at scale 6), kept to that
-  shape by a check. Text does not sum or sort as numbers in SQL.
-- `unsigned()` on a money column refuses negative amounts.
-- `Money.toMinor`, `fromMinor`, `toText` and `fromText` convert values; nothing rounds, and errors
-  never show the amount. On SQLite a decimal money column takes exactly the text `Money.toText`
-  writes and returns text, read with `Money.fromText`; on PostgreSQL it takes and returns
-  `BigDecimal`.
 - A plain `decimal()` column keeps Laravel's SQLite type, `numeric`, which stores floating point.
-- `Money`, `MoneyAmount` and `Instants` live in the `values` package.
-- `MoneyAmount.read(stored, scale)` reads minor units, checked text or a decimal as the same amount;
-  write with `toMinor()`, `toText()` or `amount()` for the column at hand.
+  Diwan ships no money type; use `decimal()` or an integer column of minor units.
+- `Instants` lives in the `values` package.
 - `instant(column)` stores a moment as whole microseconds on SQLite and `timestamptz` on PostgreSQL;
   `Instants.toMicros` and `Instants.read` convert, and `Instants.now()` gives the current moment at
   microsecond precision. On SQLite the column refuses anything but an integer.

@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import org.aristonis.diwan.database.driver.RowCursor;
 import org.junit.jupiter.api.Test;
 
 class ChunkQueriesTest {
@@ -248,8 +247,8 @@ class ChunkQueriesTest {
         Builder query = db.db().table("users").where("id", ">", 1);
         db.returns(query.toSql(), List.of(row("id", 2L)));
 
-        try (RowCursor cursor = query.cursor()) {
-            assertEquals(2L, cursor.next().get("id"));
+        try (QueryCursor<Map<String, Object>> cursor = query.cursor()) {
+            assertEquals(2L, cursor.iterator().next().get("id"));
         }
 
         assertEquals(new RecordingConnection.Call("cursor", query.toSql(), List.of(1)), db.last());

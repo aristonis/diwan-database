@@ -26,27 +26,27 @@ class ClassCastTest {
     private static final String SPACED = "{\"a\": 1}";
     private static final String SECRET = "secret-value-that-must-not-leak";
 
-    /** A plain value object for the two-column money cast. */
-    static final class Money {
+    /** A plain value object for the two-column price cast. */
+    static final class Price {
         final BigDecimal amount;
         final String currency;
 
-        Money(BigDecimal amount, String currency) {
+        Price(BigDecimal amount, String currency) {
             this.amount = amount;
             this.currency = currency;
         }
     }
 
-    /** Stores {@link Money} in {@code amount} and {@code currency}. */
-    static final class MoneyCast implements Cast<Money> {
+    /** Stores {@link Price} in {@code amount} and {@code currency}. */
+    static final class PriceCast implements Cast<Price> {
         @Override
-        public Money get(Model model, String key, Object raw, Map<String, Object> attributes) {
-            return new Money(new BigDecimal(attributes.get("amount").toString()),
+        public Price get(Model model, String key, Object raw, Map<String, Object> attributes) {
+            return new Price(new BigDecimal(attributes.get("amount").toString()),
                     (String) attributes.get("currency"));
         }
 
         @Override
-        public Object set(Model model, String key, Money value, Map<String, Object> attributes) {
+        public Object set(Model model, String key, Price value, Map<String, Object> attributes) {
             Map<String, Object> columns = new LinkedHashMap<>();
             columns.put("amount", value.amount.toPlainString());
             columns.put("currency", value.currency);
@@ -117,7 +117,7 @@ class ClassCastTest {
         protected Map<String, Cast<?>> casts() {
             Map<String, Cast<?>> casts = new LinkedHashMap<>();
             casts.put("meta", Casts.json());
-            casts.put("money", new MoneyCast());
+            casts.put("price", new PriceCast());
             casts.put("doc", new CompactJsonCast());
             casts.put("label", new AlwaysSameCast());
             casts.put("ghost", new NullCast());
@@ -172,7 +172,7 @@ class ClassCastTest {
     void multiColumnSet() {
         Wallet wallet = stored("amount", "1.00", "currency", "USD");
 
-        wallet.setAttribute("money", new Money(new BigDecimal("2.50"), "EUR"));
+        wallet.setAttribute("price", new Price(new BigDecimal("2.50"), "EUR"));
 
         assertEquals("2.50", wallet.getAttributes().get("amount"));
         assertEquals("EUR", wallet.getAttributes().get("currency"));
@@ -307,7 +307,7 @@ class ClassCastTest {
         assertTrue(wallet.hasCast("meta", "JSON"));
         assertTrue(wallet.hasCast("total", "decimal:4"));
         assertTrue(wallet.hasCast("happened_at", "custom_datetime"));
-        assertTrue(wallet.hasCast("money", MoneyCast.class.getName()));
+        assertTrue(wallet.hasCast("price", PriceCast.class.getName()));
         assertFalse(wallet.hasCast("meta", "int"));
         assertFalse(wallet.hasCast("missing"));
     }

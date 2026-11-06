@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -27,6 +28,8 @@ final class TranslatingCursor implements RowCursor {
     private final Consumer<Throwable> release;
     private boolean isIterated;
     private volatile boolean isClosed;
+    // Won by exactly one closer, so the session is handed back once even when close() races a failure.
+    private final AtomicBoolean isHandedBack = new AtomicBoolean();
     // Set when the last row was read, so next() reports the end rather than a closed cursor.
     private volatile boolean isConsumed;
 
@@ -117,7 +120,9 @@ final class TranslatingCursor implements RowCursor {
             failure = closeFailure;
         }
         isClosed = true;
-        failure = handBack(failure);
+        if (isHandedBack.compareAndSet(false, true)) {
+            failure = handBack(failure);
+        }
         if (failure != null) {
             Sessions.rethrow(failure);
         }
@@ -138,7 +143,9 @@ final class TranslatingCursor implements RowCursor {
         } catch (Throwable closeFailure) {
             Sessions.suppress(failure, closeFailure);
         } finally {
-            handBack(failure);
+            if (isHandedBack.compareAndSet(false, true)) {
+                handBack(failure);
+            }
         }
         return failure;
     }

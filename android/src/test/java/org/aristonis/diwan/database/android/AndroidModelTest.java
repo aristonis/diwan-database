@@ -15,7 +15,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.MassAssignmentException;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelClock;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.TimestampFormat;
 import org.aristonis.diwan.database.eloquent.UniqueIdKind;
@@ -171,7 +171,7 @@ public class AndroidModelTest {
             accounts.create(row("name", "user" + i, "email", "u" + i + "@x", "votes", i));
         }
         List<Object> streamed = new ArrayList<>();
-        try (ModelCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
+        try (QueryCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
             for (Account account : cursor) {
                 assertTrue(account.exists());
                 streamed.add(account.getLong("id"));

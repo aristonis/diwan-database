@@ -94,8 +94,8 @@ class HasMorphTest {
                 (q, type) -> q.where("title", type == Post.class ? "post five" : "video five"));
 
         assertEquals(SELECT + "((" + TYPE + " = ? and exists (" + owner("morph_posts")
-                + " and (\"title\" = ?))) or (" + TYPE + " = ? and exists (" + owner("morph_videos")
-                + " and (\"title\" = ?))))", query.toSql());
+                + " and \"title\" = ?)) or (" + TYPE + " = ? and exists (" + owner("morph_videos")
+                + " and \"title\" = ?)))", query.toSql());
         assertEquals(Arrays.asList("post", "post five", "video", "video five"), query.getBindings());
         assertEquals(longs(1, 2, 6), ids(query.get()));
     }
@@ -313,7 +313,7 @@ class HasMorphTest {
 
         assertEquals(SELECT + "((" + TYPE + " = ? and exists (select * from \"morph_comments\" as"
                 + " \"laravel_reserved_0\" where \"laravel_reserved_0\".\"id\" = " + FK
-                + " and (\"body\" = ?))))", query.toSql());
+                + " and \"body\" = ?)))", query.toSql());
         assertEquals(longs(7), ids(query.get()));
     }
 

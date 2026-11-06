@@ -4,7 +4,7 @@ import static org.aristonis.diwan.database.FakeDriver.failure;
 import static org.aristonis.diwan.database.FakeDriver.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
-import org.aristonis.diwan.database.driver.RowCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.Test;
 
 class CursorConnectionTest {
@@ -30,7 +30,7 @@ class CursorConnectionTest {
         return Connection.builder().name("main").driver(driver).build();
     }
 
-    private static List<Object> ids(RowCursor cursor) {
+    private static List<Object> ids(QueryCursor<Map<String, Object>> cursor) {
         List<Object> ids = new ArrayList<>();
         for (Map<String, Object> row : cursor) {
             ids.add(row.get("id"));
@@ -40,11 +40,11 @@ class CursorConnectionTest {
 
     @Test
     void rootCursorStreamsRowsAndGivesTheSessionBackWhenExhausted() {
-        RowCursor cursor = connection().cursor(SELECT);
+        QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT);
 
         assertEquals(1, driver.openSessions());
         assertEquals(Arrays.asList(1L, 2L, 3L), ids(cursor));
-        assertTrue(cursor.isClosed());
+        assertEquals(0, driver.openCursors());
         assertEquals(0, driver.openSessions());
         assertEquals(Arrays.asList("open", "cursor " + SELECT + " []", "cursorClose", "close"), driver.calls());
         cursor.close();
@@ -52,8 +52,8 @@ class CursorConnectionTest {
 
     @Test
     void closingEarlyGivesTheSessionBack() {
-        try (RowCursor cursor = connection().cursor(SELECT, 7)) {
-            assertEquals(1L, cursor.next().get("id"));
+        try (QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT, 7)) {
+            assertEquals(1L, cursor.iterator().next().get("id"));
         }
 
         assertEquals(0, driver.openSessions());
@@ -63,36 +63,38 @@ class CursorConnectionTest {
 
     @Test
     void secondIterationIsRefused() {
-        try (RowCursor cursor = connection().cursor(SELECT)) {
+        try (QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT)) {
             Iterator<Map<String, Object>> first = cursor.iterator();
 
-            assertSame(cursor, first);
+            assertNotNull(first);
             assertThrows(IllegalStateException.class, cursor::iterator);
+            assertThrows(IllegalStateException.class, cursor::stream);
         }
     }
 
     @Test
     void nextAfterTheEndAndAfterCloseFailsClearly() {
-        RowCursor cursor = connection().cursor(SELECT);
-        ids(connection().cursor(SELECT));
-        while (cursor.hasNext()) {
-            cursor.next();
+        Iterator<Map<String, Object>> rows = connection().cursor(SELECT).iterator();
+        while (rows.hasNext()) {
+            rows.next();
         }
 
-        assertThrows(NoSuchElementException.class, cursor::next);
-        RowCursor closed = connection().cursor(SELECT);
+        assertThrows(NoSuchElementException.class, rows::next);
+        QueryCursor<Map<String, Object>> closed = connection().cursor(SELECT);
+        Iterator<Map<String, Object>> closedRows = closed.iterator();
         closed.close();
-        assertThrows(IllegalStateException.class, closed::next);
-        assertFalse(closed.hasNext());
+        assertFalse(closedRows.hasNext());
+        assertThrows(NoSuchElementException.class, closedRows::next);
     }
 
     @Test
     void rowsAreUnmodifiableAndRemoveIsRefused() {
-        try (RowCursor cursor = connection().cursor(SELECT)) {
-            Map<String, Object> row = cursor.next();
+        try (QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT)) {
+            Iterator<Map<String, Object>> rows = cursor.iterator();
+            Map<String, Object> row = rows.next();
 
             assertThrows(UnsupportedOperationException.class, () -> row.put("id", 9L));
-            assertThrows(UnsupportedOperationException.class, cursor::remove);
+            assertThrows(UnsupportedOperationException.class, rows::remove);
         }
     }
 
@@ -102,8 +104,8 @@ class CursorConnectionTest {
         Connection connection = connection();
 
         for (int i = 0; i < 50; i++) {
-            try (RowCursor cursor = connection.cursor(SELECT)) {
-                cursor.next();
+            try (QueryCursor<Map<String, Object>> cursor = connection.cursor(SELECT)) {
+                cursor.iterator().next();
             }
             assertEquals(3, ids(connection.cursor(SELECT)).size());
         }
@@ -118,11 +120,11 @@ class CursorConnectionTest {
         Connection connection = connection();
 
         for (int i = 0; i < 50; i++) {
-            RowCursor cursor = connection.cursor(SELECT);
-            cursor.next();
-            QueryException error = assertThrows(QueryException.class, cursor::next);
+            Iterator<Map<String, Object>> rows = connection.cursor(SELECT).iterator();
+            rows.next();
+            QueryException error = assertThrows(QueryException.class, rows::next);
             assertEquals(SELECT, error.getSql());
-            assertTrue(cursor.isClosed());
+            assertEquals(0, driver.openCursors());
         }
 
         assertEquals(0, driver.openSessions());
@@ -141,11 +143,11 @@ class CursorConnectionTest {
     @Test
     void aFailingCursorCloseStillGivesTheSessionBack() {
         driver.cursorFailsToClose(failure("XX001"));
-        RowCursor cursor = connection().cursor(SELECT);
+        QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT);
 
         assertThrows(QueryException.class, cursor::close);
 
-        assertTrue(cursor.isClosed());
+        assertEquals(0, driver.openCursors());
         assertEquals(0, driver.openSessions());
         cursor.close();
     }
@@ -162,7 +164,7 @@ class CursorConnectionTest {
         driver.returns("select 1", Arrays.asList(row("x", 1L)));
 
         connection().transaction(tx -> {
-            RowCursor cursor = tx.cursor(SELECT);
+            QueryCursor<Map<String, Object>> cursor = tx.cursor(SELECT);
             IllegalStateException refused = assertThrows(IllegalStateException.class, () -> tx.select("select 1"));
             assertTrue(refused.getMessage().contains("cursor is open"));
             assertThrows(IllegalStateException.class, () -> tx.cursor(SELECT));
@@ -189,7 +191,7 @@ class CursorConnectionTest {
 
     @Test
     void endingATransactionClosesItsOpenCursorBeforeTheCommit() {
-        connection().transaction(tx -> tx.cursor(SELECT).next());
+        connection().transaction(tx -> tx.cursor(SELECT).iterator().next());
 
         List<String> calls = driver.calls();
         assertTrue(calls.indexOf("cursorClose") < calls.indexOf("commit"));
@@ -200,7 +202,7 @@ class CursorConnectionTest {
     @Test
     void aFailedTransactionClosesItsCursorAndRollsBack() {
         assertThrows(IllegalArgumentException.class, () -> connection().transaction(tx -> {
-            tx.cursor(SELECT).next();
+            tx.cursor(SELECT).iterator().next();
             throw new IllegalArgumentException("boom");
         }));
 
@@ -212,9 +214,9 @@ class CursorConnectionTest {
     @Test
     void aNestedTransactionClosesOnlyTheCursorItOpened() {
         connection().transaction(tx -> {
-            tx.transaction(inner -> inner.cursor(SELECT).next());
+            tx.transaction(inner -> inner.cursor(SELECT).iterator().next());
             assertEquals(0, driver.openCursors());
-            return tx.cursor(SELECT).next();
+            return tx.cursor(SELECT).iterator().next();
         });
 
         assertEquals(0, driver.openCursors());
@@ -224,7 +226,7 @@ class CursorConnectionTest {
     void aCursorInAParentScopeBlocksTheChildScope() {
         try (TransactionScope scope = connection().beginTransaction()) {
             TransactionScope child = scope.beginTransaction();
-            RowCursor cursor = scope.cursor(SELECT);
+            QueryCursor<Map<String, Object>> cursor = scope.cursor(SELECT);
 
             assertThrows(IllegalStateException.class, () -> child.select(SELECT));
             assertThrows(IllegalStateException.class, child::beginTransaction);
@@ -241,15 +243,16 @@ class CursorConnectionTest {
     void endingAChildScopeClosesOnlyItsOwnCursor() {
         try (TransactionScope scope = connection().beginTransaction()) {
             TransactionScope child = scope.beginTransaction();
-            RowCursor cursor = child.cursor(SELECT);
+            QueryCursor<Map<String, Object>> cursor = child.cursor(SELECT);
 
             child.close();
 
-            assertTrue(cursor.isClosed());
+            assertEquals(0, driver.openCursors());
+            cursor.close();
             assertEquals(1L, scope.selectOne(SELECT).get().get("id"));
-            RowCursor outer = scope.cursor(SELECT);
+            scope.cursor(SELECT);
             scope.commit();
-            assertTrue(outer.isClosed());
+            assertEquals(0, driver.openCursors());
         }
         assertEquals(0, driver.openSessions());
     }
@@ -259,12 +262,10 @@ class CursorConnectionTest {
         try (TransactionScope scope = connection().beginTransaction()) {
             TransactionScope child = scope.beginTransaction();
             TransactionScope grandchild = child.beginTransaction();
-            RowCursor cursor = grandchild.cursor(SELECT);
-            cursor.next();
+            grandchild.cursor(SELECT).iterator().next();
 
             grandchild.commit();
 
-            assertTrue(cursor.isClosed());
             assertEquals(0, driver.openCursors());
             assertEquals(1L, child.selectOne(SELECT).get().get("id"));
             child.commit();
@@ -276,10 +277,11 @@ class CursorConnectionTest {
     @Test
     void aDriverRefusalOffTheOwnerThreadLeavesTheCursorForItsOwner() throws Exception {
         driver.cursorsOwnedByTheirThread();
-        RowCursor cursor = connection().cursor(SELECT);
+        QueryCursor<Map<String, Object>> cursor = connection().cursor(SELECT);
+        Iterator<Map<String, Object>> rows = cursor.iterator();
         List<Class<?>> refusals = new ArrayList<>();
         Thread other = new Thread(() -> {
-            for (Runnable use : Arrays.<Runnable>asList(cursor::hasNext, cursor::next, cursor::close)) {
+            for (Runnable use : Arrays.<Runnable>asList(rows::hasNext, rows::next, cursor::close)) {
                 try {
                     use.run();
                 } catch (IllegalStateException refused) {
@@ -291,11 +293,10 @@ class CursorConnectionTest {
         other.join();
 
         assertEquals(3, refusals.size());
-        assertFalse(cursor.isClosed());
+        assertEquals(1, driver.openCursors());
         assertEquals(1, driver.openSessions());
-        assertEquals(1L, cursor.next().get("id"));
+        assertEquals(1L, rows.next().get("id"));
         cursor.close();
-        assertTrue(cursor.isClosed());
         assertEquals(0, driver.openCursors());
         assertEquals(0, driver.openSessions());
     }
@@ -303,10 +304,10 @@ class CursorConnectionTest {
     @Test
     void aSessionCursorBorrowsTheSessionAndIsClosedWhenTheSessionEnds() {
         connection().session(held -> {
-            RowCursor cursor = held.cursor(SELECT);
+            QueryCursor<Map<String, Object>> cursor = held.cursor(SELECT);
             assertThrows(IllegalStateException.class, () -> held.select(SELECT));
             assertThrows(IllegalStateException.class, () -> held.transaction(tx -> null));
-            cursor.next();
+            cursor.iterator().next();
             return null;
         });
 
@@ -319,7 +320,7 @@ class CursorConnectionTest {
     @Test
     void aCursorOpenedInASessionBlocksATransactionStartedEarlierOnIt() {
         connection().session(held -> held.transaction(tx -> {
-            RowCursor cursor = held.cursor(SELECT);
+            QueryCursor<Map<String, Object>> cursor = held.cursor(SELECT);
             assertThrows(IllegalStateException.class, () -> tx.select(SELECT));
             cursor.close();
             return tx.select(SELECT);
@@ -417,9 +418,9 @@ class CursorConnectionTest {
     @Test
     void driverExceptionTypeIsNotLeakedFromIteration() {
         driver.cursorFailsAtRow(0, failure("XX000"));
-        RowCursor cursor = connection().cursor(SELECT);
+        Iterator<Map<String, Object>> rows = connection().cursor(SELECT).iterator();
 
-        RuntimeException error = assertThrows(RuntimeException.class, cursor::hasNext);
+        RuntimeException error = assertThrows(RuntimeException.class, rows::hasNext);
 
         assertFalse(error instanceof DriverException);
         assertTrue(error.getCause() instanceof DriverException);

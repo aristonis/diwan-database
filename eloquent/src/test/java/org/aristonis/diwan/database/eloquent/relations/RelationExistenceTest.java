@@ -117,7 +117,7 @@ class RelationExistenceTest {
     void whereHasGroupsTheConstraint() {
         EloquentBuilder<User> query = users().whereHas("posts", q -> q.where("title", "a"));
 
-        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and (\"title\" = ?))", query.toSql());
+        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and \"title\" = ?)", query.toSql());
         assertEquals(Collections.singletonList("a"), query.getBindings());
     }
 
@@ -126,28 +126,28 @@ class RelationExistenceTest {
         String sql = users().whereHas("posts", q -> q.where("title", "a"), ">", 2).toSql();
 
         assertEquals(USERS + "(select count(*) from \"posts\" where \"users\".\"id\" = \"posts\".\"user_id\""
-                + " and (\"title\" = ?)) > ?", sql);
+                + " and \"title\" = ?) > ?", sql);
     }
 
     @Test
     void orWhereHasJoinsWithOr() {
         String sql = users().where("name", "Ann").orWhereHas("posts", q -> q.where("title", "a")).toSql();
 
-        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and (\"title\" = ?))", sql);
+        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and \"title\" = ?)", sql);
     }
 
     @Test
     void whereDoesntHaveCompilesToNotExists() {
         String sql = users().whereDoesntHave("posts", q -> q.where("title", "a")).toSql();
 
-        assertEquals(USERS + "not exists (" + POSTS_OF_USER + " and (\"title\" = ?))", sql);
+        assertEquals(USERS + "not exists (" + POSTS_OF_USER + " and \"title\" = ?)", sql);
     }
 
     @Test
     void orWhereDoesntHaveJoinsWithOr() {
         String sql = users().where("name", "Ann").orWhereDoesntHave("posts", q -> q.where("title", "a")).toSql();
 
-        assertEquals(USERS + "\"name\" = ? or not exists (" + POSTS_OF_USER + " and (\"title\" = ?))", sql);
+        assertEquals(USERS + "\"name\" = ? or not exists (" + POSTS_OF_USER + " and \"title\" = ?)", sql);
     }
 
     // ---- edge cases
@@ -180,9 +180,9 @@ class RelationExistenceTest {
     void nestedSelfAliasesIncrement() {
         String sql = categories().has("children.children").toSql();
 
-        assertEquals(CATEGORIES + "exists (" + CHILDREN_0 + " and (exists (select * from \"categories\" as"
+        assertEquals(CATEGORIES + "exists (" + CHILDREN_0 + " and exists (select * from \"categories\" as"
                 + " \"laravel_reserved_1\" where \"laravel_reserved_0\".\"id\""
-                + " = \"laravel_reserved_1\".\"parent_id\")))",
+                + " = \"laravel_reserved_1\".\"parent_id\"))",
                 sql);
     }
 
@@ -190,7 +190,7 @@ class RelationExistenceTest {
     void constraintSeesAlias() {
         String sql = categories().whereHas("children", q -> q.where(q.getModel().qualifyColumn("name"), "x")).toSql();
 
-        assertEquals(CATEGORIES + "exists (" + CHILDREN_0 + " and (\"laravel_reserved_0\".\"name\" = ?))", sql);
+        assertEquals(CATEGORIES + "exists (" + CHILDREN_0 + " and \"laravel_reserved_0\".\"name\" = ?)", sql);
     }
 
     @Test
@@ -206,16 +206,16 @@ class RelationExistenceTest {
     void nestedDoesntHave() {
         String sql = users().doesntHave("posts.comments").toSql();
 
-        assertEquals(USERS + "not exists (" + POSTS_OF_USER + " and (exists (select * from \"comments\" where"
-                + " \"posts\".\"id\" = \"comments\".\"post_id\")))", sql);
+        assertEquals(USERS + "not exists (" + POSTS_OF_USER + " and exists (select * from \"comments\" where"
+                + " \"posts\".\"id\" = \"comments\".\"post_id\"))", sql);
     }
 
     @Test
     void nestedCountAppliesToLastSegment() {
         String sql = users().has("posts.comments", ">", 2).toSql();
 
-        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and ((select count(*) from \"comments\" where"
-                + " \"posts\".\"id\" = \"comments\".\"post_id\") > ?))", sql);
+        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and (select count(*) from \"comments\" where"
+                + " \"posts\".\"id\" = \"comments\".\"post_id\") > ?)", sql);
     }
 
     @Test
@@ -239,14 +239,12 @@ class RelationExistenceTest {
     }
 
     @Test
-    void closureJoinRefusedOnHasMany() {
-        db.clearLog();
+    void closureJoinRendersInsideTheSubquery() {
+        String sql = users().whereHas("posts", q -> q.join("comments", "comments.post_id", "=", "posts.id")).toSql();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> users().whereHas("posts", q -> q.join("comments", "comments.post_id", "=", "posts.id")));
-
-        assertTrue(e.getMessage().contains("posts"), e.getMessage());
-        assertEquals(Collections.emptyList(), db.sql());
+        assertEquals(USERS + "exists (select * from \"posts\" inner join \"comments\""
+                + " on \"comments\".\"post_id\" = \"posts\".\"id\""
+                + " where \"users\".\"id\" = \"posts\".\"user_id\")", sql);
     }
 
     @Test
@@ -255,11 +253,11 @@ class RelationExistenceTest {
         String or = users().where("name", "Ann").orWhereRelation("posts", "title", "a").toSql();
         String equal = users().whereRelation("posts", "title", "a").toSql();
 
-        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and (\"title\" like ?))", query.toSql());
+        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and \"title\" like ?)", query.toSql());
         assertEquals(Collections.singletonList("%x%"), query.getBindings());
-        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and (\"title\" = ?))", or);
-        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and (\"title\" = ?))", equal);
-        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and (\"title\" like ?))",
+        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and \"title\" = ?)", or);
+        assertEquals(USERS + "exists (" + POSTS_OF_USER + " and \"title\" = ?)", equal);
+        assertEquals(USERS + "\"name\" = ? or exists (" + POSTS_OF_USER + " and \"title\" like ?)",
                 users().where("name", "Ann").orWhereRelation("posts", "title", "like", "%x%").toSql());
     }
 

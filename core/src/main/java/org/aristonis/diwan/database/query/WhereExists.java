@@ -1,10 +1,15 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * A subquery that returns at least one row, or none: {@code exists (select ...)}.
  *
  * <p>The subquery is a private copy taken when the condition was added; see {@link WhereSub}.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public final class WhereExists implements Where {
     private final String conjunction;
     private final Builder query;

@@ -6,10 +6,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.eloquent.casts.Attribute;
 import org.aristonis.diwan.database.eloquent.casts.CastColumns;
+import org.aristonis.diwan.database.eloquent.internal.ClassCache;
 
 /**
  * The accessor layer of {@link Model}: applies the getters and setters from {@link #accessors()}
@@ -29,8 +29,9 @@ import org.aristonis.diwan.database.eloquent.casts.CastColumns;
  */
 abstract class ModelAccessors extends ModelCasts {
 
-    private static final ConcurrentMap<Class<?>, Map<String, Attribute<?>>> RESOLVED =
-            new ConcurrentHashMap<>();
+    /** One slot per class, filled on first use; a racing second resolve is dropped. */
+    private static final ClassCache<AtomicReference<Map<String, Attribute<?>>>> RESOLVED =
+            ClassCache.of(type -> new AtomicReference<>());
 
     private final Map<String, Object> accessorCache = new HashMap<>();
 
@@ -157,13 +158,13 @@ abstract class ModelAccessors extends ModelCasts {
     }
 
     private Map<String, Attribute<?>> resolvedAccessors() {
-        Map<String, Attribute<?>> cached = RESOLVED.get(getClass());
+        AtomicReference<Map<String, Attribute<?>>> slot = RESOLVED.get(getClass());
+        Map<String, Attribute<?>> cached = slot.get();
         if (cached != null) {
             return cached;
         }
         Map<String, Attribute<?>> resolved = resolve();
-        Map<String, Attribute<?>> raced = RESOLVED.putIfAbsent(getClass(), resolved);
-        return raced == null ? resolved : raced;
+        return slot.compareAndSet(null, resolved) ? resolved : slot.get();
     }
 
     private Map<String, Attribute<?>> resolve() {

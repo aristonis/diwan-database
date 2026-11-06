@@ -11,11 +11,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Tag;
 import org.aristonis.diwan.database.eloquent.TestModels.Note;
 import org.aristonis.diwan.database.eloquent.TestModels.User;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.QueryCursor;
+import org.aristonis.diwan.database.query.internal.MappingCursor;
 import org.junit.jupiter.api.Test;
 
 class EloquentBuilderTest {
@@ -274,18 +277,19 @@ class EloquentBuilderTest {
         fake.returns("select * from \"users\"", row("id", 1L), row("id", 2L));
 
         List<Object> keys = new ArrayList<>();
-        try (ModelCursor<User> cursor = users.query().cursor()) {
-            for (User user : cursor) {
-                keys.add(user.getKey());
+        try (QueryCursor<User> cursor = users.query().cursor()) {
+            Iterator<User> iterator = cursor.iterator();
+            while (iterator.hasNext()) {
+                keys.add(iterator.next().getKey());
             }
-            assertTrue(cursor.isClosed());
-            assertThrows(java.util.NoSuchElementException.class, cursor::next);
+            assertThrows(java.util.NoSuchElementException.class, iterator::next);
         }
         assertEquals(Arrays.asList(1L, 2L), keys);
-        ModelCursor<User> open = users.query().cursor();
-        assertTrue(open.hasNext());
+        QueryCursor<User> open = users.query().cursor();
+        Iterator<User> openRows = open.iterator();
+        assertTrue(openRows.hasNext());
         open.close();
-        assertFalse(open.hasNext());
+        assertFalse(openRows.hasNext());
     }
 
     @Test
@@ -376,13 +380,13 @@ class EloquentBuilderTest {
     @Test
     void aCursorClosesWhenHydrationFails() {
         FakeDb.ListCursor rows = new FakeDb.ListCursor(Collections.singletonList(row("id", 1L)));
-        ModelCursor<User> cursor = new ModelCursor<>(rows, r -> {
+        QueryCursor<User> cursor = new MappingCursor<User>(rows, r -> {
             throw new IllegalStateException("bad row");
         });
 
-        assertThrows(IllegalStateException.class, cursor::next);
+        assertThrows(IllegalStateException.class, () -> cursor.iterator().next());
 
-        assertTrue(cursor.isClosed());
+        assertTrue(rows.isClosed());
     }
 
     @Test

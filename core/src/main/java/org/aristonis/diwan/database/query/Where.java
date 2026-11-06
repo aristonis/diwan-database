@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.query;
 
 import java.util.List;
 import java.util.Locale;
+import org.aristonis.diwan.database.Internal;
 
 /**
  * One condition of a where clause, as the {@link Builder} records it and a {@link QueryGrammar}
@@ -21,7 +22,10 @@ import java.util.Locale;
  *
  * <p>Conditions that hold a subquery are top-level classes in this package: {@link WhereSub},
  * {@link WhereSubValue}, {@link WhereInSub}, {@link WhereExists}, plus {@link WhereRowValues}.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public interface Where {
 
     /**
@@ -33,7 +37,10 @@ public interface Where {
 
     /**
      * A column compared with a value: {@code "a" > ?}.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Basic implements Where {
         private final String conjunction;
         private final String column;
@@ -91,7 +98,10 @@ public interface Where {
 
     /**
      * Trusted SQL written as given.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Raw implements Where {
         private final String conjunction;
         private final String sql;
@@ -125,7 +135,10 @@ public interface Where {
 
     /**
      * A {@code like} or {@code not like} match.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Like implements Where {
         private final String conjunction;
         private final String column;
@@ -195,7 +208,10 @@ public interface Where {
 
     /**
      * A comparison that treats two nulls as equal.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class NullSafeEquals implements Where {
         private final String conjunction;
         private final String column;
@@ -241,7 +257,10 @@ public interface Where {
 
     /**
      * A column in a list of values; an empty list never matches.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class In implements Where {
         private final String conjunction;
         private final String column;
@@ -287,7 +306,10 @@ public interface Where {
 
     /**
      * A column not in a list of values; an empty list always matches.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class NotIn implements Where {
         private final String conjunction;
         private final String column;
@@ -333,7 +355,10 @@ public interface Where {
 
     /**
      * A column that is null.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Null implements Where {
         private final String conjunction;
         private final String column;
@@ -367,7 +392,10 @@ public interface Where {
 
     /**
      * A column that is not null.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class NotNull implements Where {
         private final String conjunction;
         private final String column;
@@ -401,7 +429,10 @@ public interface Where {
 
     /**
      * A column between two values, both ends included.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Between implements Where {
         private final String conjunction;
         private final String column;
@@ -459,7 +490,10 @@ public interface Where {
 
     /**
      * A column between two other columns.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class BetweenColumns implements Where {
         private final String conjunction;
         private final String column;
@@ -517,7 +551,10 @@ public interface Where {
 
     /**
      * A value between two columns.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class ValueBetween implements Where {
         private final String conjunction;
         private final Object value;
@@ -579,7 +616,10 @@ public interface Where {
      * <p>These compare the stored text of {@code date} and {@code dateTime} columns. They do not
      * work on {@code instant} columns, which store a number; use
      * {@link Builder#whereInstantBetween} there.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class DateBased implements Where {
         private final String conjunction;
         private final DatePart part;
@@ -649,7 +689,10 @@ public interface Where {
 
     /**
      * Two columns compared with each other.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Column implements Where {
         private final String conjunction;
         private final String first;
@@ -707,7 +750,10 @@ public interface Where {
 
     /**
      * A group of conditions in parentheses.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Nested implements Where {
         private final String conjunction;
         private final Builder query;
@@ -746,7 +792,12 @@ public interface Where {
         }
     }
 
-    /** The part of a date or time a {@link DateBased} condition compares. */
+    /**
+     * The part of a date or time a {@link DateBased} condition compares.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
+     */
+    @Internal
     enum DatePart {
         /** The date. */
         DATE,

@@ -494,20 +494,22 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
     }
 
     /**
-     * Orders the bindings of an update: the new values first, in column order, then every bucket
-     * except select (from, join, where and the rest). Laravel's base grammar puts the join
+     * Orders the bindings of an update of this query: the new values first, in column order, then
+     * the buckets the compiled statement writes, except select. Laravel's base grammar puts the join
      * bindings first, because its joined update writes the joins before {@code set}; the SQLite and
      * PostgreSQL rewrites put the joins in a subquery after {@code set}, so they come after the
-     * values here.
+     * values here. The buckets are every one but select when {@link #writesFullSelect} is
+     * {@code true}, otherwise from, join and where only, since a plain {@code update ... set ...
+     * where} writes no group, having, order or union clause.
      *
-     * @param bindings the query's bindings by bucket, never {@code null}
+     * @param query the query, never {@code null}
      * @param values the columns and new values, never {@code null}; {@link Expression} values are
      *     skipped, a {@link Builder} value contributes its own bindings in its place
      * @return the bindings, unmodifiable, never {@code null}
      * @throws NullPointerException if an argument is {@code null}
      */
-    public List<Object> prepareBindingsForUpdate(Map<BindingType, List<Object>> bindings, Map<String, ?> values) {
-        Objects.requireNonNull(bindings, "bindings");
+    public List<Object> prepareBindingsForUpdate(Builder query, Map<String, ?> values) {
+        Map<BindingType, List<Object>> bindings = writtenBindings(query);
         Objects.requireNonNull(values, "values");
         List<Object> result = new ArrayList<>();
         for (Object value : values.values()) {
@@ -526,30 +528,23 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
     }
 
     /**
-     * Orders the bindings of an update of this query, keeping only the buckets the compiled
-     * statement writes: those of {@link #prepareBindingsForUpdate(Map, Map)} when
-     * {@link #writesFullSelect} is {@code true}, otherwise from, join and where only, since a plain
-     * {@code update ... set ... where} writes no group, having, order or union clause.
-     *
-     * @param query the query, never {@code null}
-     * @param values the columns and new values, never {@code null}
-     * @return the bindings, unmodifiable, never {@code null}
-     * @throws NullPointerException if an argument is {@code null}
-     */
-    public List<Object> prepareBindingsForUpdate(Builder query, Map<String, ?> values) {
-        return prepareBindingsForUpdate(writtenBindings(query), values);
-    }
-
-    /**
-     * Orders the bindings of a delete of this query, keeping only the buckets the compiled
-     * statement writes, as for {@link #prepareBindingsForUpdate(Builder, Map)}.
+     * Orders the bindings of a delete of this query: the buckets the compiled statement writes,
+     * except select, in {@link BindingType} order. A delete has no new values, so no value bindings
+     * come first, unlike {@link #prepareBindingsForUpdate(Builder, Map)}.
      *
      * @param query the query, never {@code null}
      * @return the bindings, unmodifiable, never {@code null}
      * @throws NullPointerException if {@code query} is {@code null}
      */
     public List<Object> prepareBindingsForDelete(Builder query) {
-        return prepareBindingsForDelete(writtenBindings(query));
+        Map<BindingType, List<Object>> bindings = writtenBindings(query);
+        List<Object> result = new ArrayList<>();
+        for (BindingType type : BindingType.values()) {
+            if (type != BindingType.SELECT) {
+                result.addAll(bindings.getOrDefault(type, Collections.emptyList()));
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 
     /**
@@ -602,24 +597,6 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
      */
     protected String compileDeleteWithoutJoins(Builder query, String table, String where) {
         return "delete from " + table + " " + where;
-    }
-
-    /**
-     * Orders the bindings of a delete: every bucket except select.
-     *
-     * @param bindings the query's bindings by bucket, never {@code null}
-     * @return the bindings, unmodifiable, never {@code null}
-     * @throws NullPointerException if {@code bindings} is {@code null}
-     */
-    public List<Object> prepareBindingsForDelete(Map<BindingType, List<Object>> bindings) {
-        Objects.requireNonNull(bindings, "bindings");
-        List<Object> result = new ArrayList<>();
-        for (BindingType type : BindingType.values()) {
-            if (type != BindingType.SELECT) {
-                result.addAll(bindings.getOrDefault(type, Collections.emptyList()));
-            }
-        }
-        return Collections.unmodifiableList(result);
     }
 
     /**

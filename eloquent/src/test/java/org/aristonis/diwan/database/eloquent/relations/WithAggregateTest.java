@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.eloquent.ModelPage;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.relations.RelationModels.Post;
@@ -192,7 +192,7 @@ class WithAggregateTest {
                 .withCount(Collections.singletonMap("posts", q -> q.where("title", "a")));
 
         assertEquals("select \"users\".*, (select count(*) " + POSTS_OF_USER
-                + " and (\"title\" = ?)) as \"posts_count\" from \"users\" where \"name\" = ?", query.toSql());
+                + " and \"title\" = ?) as \"posts_count\" from \"users\" where \"name\" = ?", query.toSql());
         assertEquals(Arrays.asList("a", "Ann"), query.getBindings());
     }
 
@@ -316,7 +316,7 @@ class WithAggregateTest {
         }
         assertEquals(Arrays.asList(2L, 1L, 0L), lazy);
         List<Long> cursor = new ArrayList<>();
-        try (ModelCursor<User> rows = users().withCount("posts").orderBy("id").cursor()) {
+        try (QueryCursor<User> rows = users().withCount("posts").orderBy("id").cursor()) {
             for (User user : rows) {
                 cursor.add(number(user, "posts_count"));
             }

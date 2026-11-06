@@ -38,12 +38,12 @@ totals next to a page of results.
 
 Done when: an aggregate ignores the page's order and limit and the builder still works afterwards.
 
-### Store money and moments safely
+### Store moments safely
 
-As an application developer, I want money and moments to read back exactly as written, so that
+As an application developer, I want moments to read back exactly as written, so that
 totals never drift and times never shift by a time zone.
 
-Done when: a money amount and an `Instant` round-trip unchanged on every database.
+Done when: an `Instant` round-trips unchanged on every database.
 
 ### See the SQL
 

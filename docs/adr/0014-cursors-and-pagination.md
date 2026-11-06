@@ -19,6 +19,11 @@ thread, not to a cursor.
 
 1. `cursor()` returns a `RowCursor`: an `AutoCloseable` iterator that iterates once, closes itself
    when exhausted, and must otherwise be closed, best with try-with-resources.
+   *Update:* `RowCursor` is now the driver SPI type. `Connection.cursor` and `Builder.cursor`
+   return the public `QueryCursor<T>` (`Iterable`, `AutoCloseable`, once-only `iterator()`, lazy
+   `stream()` that closes the cursor, `map(fn)` sharing the close), which wraps the driver
+   cursor; the model builder returns the same type, mapped to models. The rules below apply to
+   it unchanged.
 2. Ownership. On the root connection the cursor opens a dedicated session and gives it back after
    the cursor closes. In a session or transaction the cursor borrows the held session and never
    closes it.
@@ -58,6 +63,8 @@ thread, not to a cursor.
   PostgreSQL an open server transaction that blocks vacuum. There is no backstop yet:
   `java.lang.ref.Cleaner` needs Android API 33 and the floor is 28. The README tells callers to
   use try-with-resources; a backstop is to be decided before 0.1.
+- `stream()` releases the connection only when the stream is closed. A bare `stream().forEach(...)`
+  that stops early, or a stream that is never consumed, keeps the session like any unclosed cursor.
 - One cursor per held session is stricter than some drivers allow.
 - A forged token is accepted, but its values are bound as parameters, so it can select other rows
   the query already allows and cannot inject SQL.

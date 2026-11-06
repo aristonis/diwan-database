@@ -6,7 +6,6 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +14,6 @@ import org.aristonis.diwan.database.QueryException;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.values.Instants;
-import org.aristonis.diwan.database.values.MoneyAmount;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -27,7 +25,6 @@ import org.robolectric.annotation.Config;
 @Config(sdk = 28)
 public class AndroidQueryTest {
 
-    private static final int MONEY_SCALE = 2;
     private static final int[] RIGHT_JOIN_SQLITE = {3, 39};
 
     private SQLiteDatabase database;
@@ -105,16 +102,12 @@ public class AndroidQueryTest {
     }
 
     @Test
-    public void moneyAndInstantRoundTrip() {
-        MoneyAmount price = MoneyAmount.of(new BigDecimal("12.34"), MONEY_SCALE);
+    public void instantRoundTrip() {
         Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
 
-        query.table("items").insert(Map.of("name", "m", "price", price.toMinor(),
-                "price_text", price.toText(), "at", at));
+        query.table("items").insert(Map.of("name", "m", "at", at));
         Map<String, Object> row = query.table("items").first().orElseThrow();
 
-        assertEquals(price, MoneyAmount.read(row.get("price"), MONEY_SCALE));
-        assertEquals(price, MoneyAmount.read(row.get("price_text"), MONEY_SCALE));
         assertEquals(at, Instants.read(row.get("at")));
     }
 

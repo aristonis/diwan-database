@@ -90,7 +90,8 @@ final class FakeDb {
             case "select":
                 return nextRows(sql);
             case "cursor":
-                return new ListCursor(nextRows(sql));
+                return new org.aristonis.diwan.database.query.internal.MappingCursor<Map<String, Object>>(
+                        new ListCursor(nextRows(sql)), java.util.function.Function.identity());
             case "insert":
             case "statement":
                 return true;

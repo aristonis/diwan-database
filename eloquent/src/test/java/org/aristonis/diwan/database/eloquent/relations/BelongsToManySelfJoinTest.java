@@ -101,7 +101,7 @@ class BelongsToManySelfJoinTest {
         EloquentBuilder<BtmModels.User> query = users().whereHas("friends",
                 q -> q.where(q.getModel().qualifyColumn("name"), "x"));
 
-        assertEquals(PLAIN_USERS + "exists (select * " + FRIENDS_0 + " and (\"laravel_reserved_0\".\"name\" = ?))",
+        assertEquals(PLAIN_USERS + "exists (select * " + FRIENDS_0 + " and \"laravel_reserved_0\".\"name\" = ?)",
                 query.toSql());
         assertEquals(Collections.singletonList("x"), query.getBindings());
     }
@@ -125,9 +125,9 @@ class BelongsToManySelfJoinTest {
     void nestedSelfQualifiesParentKeyAgainstOuterAlias() {
         EloquentBuilder<BtmModels.User> query = users().whereHas("friends", q -> q.has("friends"));
 
-        assertEquals(PLAIN_USERS + "exists (select * " + FRIENDS_0 + " and (exists (select * from \"users\" as"
+        assertEquals(PLAIN_USERS + "exists (select * " + FRIENDS_0 + " and exists (select * from \"users\" as"
                 + " \"laravel_reserved_1\" inner join \"user_user\" on \"laravel_reserved_1\".\"id\""
-                + " = \"user_user\".\"friend_id\" where \"laravel_reserved_0\".\"id\" = \"user_user\".\"user_id\")))",
+                + " = \"user_user\".\"friend_id\" where \"laravel_reserved_0\".\"id\" = \"user_user\".\"user_id\"))",
                 query.toSql());
     }
 
@@ -185,7 +185,7 @@ class BelongsToManySelfJoinTest {
         EloquentBuilder<BtmModels.User> query = users().withCount(
                 one("friends", q -> q.where(q.getModel().qualifyColumn("name"), "User 2")));
 
-        assertEquals(SELECT_USERS + "(select count(*) " + FRIENDS_0 + " and (\"laravel_reserved_0\".\"name\" = ?))"
+        assertEquals(SELECT_USERS + "(select count(*) " + FRIENDS_0 + " and \"laravel_reserved_0\".\"name\" = ?)"
                 + " as \"friends_count\"" + FROM_USERS, query.toSql());
         assertEquals(Collections.singletonList("User 2"), query.getBindings());
         List<BtmModels.User> found = query.orderBy("id").get();

@@ -73,10 +73,22 @@ public final class Access {
         private final String name;
         private volatile T value;
 
+        /**
+         * Creates an empty holder.
+         *
+         * @param name the name the holder reports in its error messages, never {@code null}
+         */
         Holder(String name) {
             this.name = name;
         }
 
+        /**
+         * Stores the value, once.
+         *
+         * @param newValue the value, never {@code null}
+         * @throws NullPointerException if {@code newValue} is {@code null}
+         * @throws IllegalStateException if a value is already stored
+         */
         synchronized void set(T newValue) {
             Objects.requireNonNull(newValue, "access");
             if (value != null) {
@@ -85,6 +97,12 @@ public final class Access {
             value = newValue;
         }
 
+        /**
+         * Returns the stored value.
+         *
+         * @return the value, never {@code null}
+         * @throws IllegalStateException if no value is stored yet
+         */
         T get() {
             T current = value;
             if (current == null) {
@@ -94,6 +112,11 @@ public final class Access {
             return current;
         }
 
+        /**
+         * Tells whether a value is stored.
+         *
+         * @return {@code true} if a value is stored
+         */
         boolean isSet() {
             return value != null;
         }

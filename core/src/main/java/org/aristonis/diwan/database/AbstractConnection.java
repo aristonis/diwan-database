@@ -8,9 +8,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import org.aristonis.diwan.database.driver.DriverException;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.RowCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
+import org.aristonis.diwan.database.query.internal.MappingCursor;
 
 /**
  * Holds the SQL methods every connection shares: argument checks, the mapping of each method to a
@@ -135,13 +138,13 @@ abstract class AbstractConnection implements Connection {
     }
 
     @Override
-    public final RowCursor cursor(String sql, Object... bindings) {
-        return timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+    public final QueryCursor<Map<String, Object>> cursor(String sql, Object... bindings) {
+        return wrap(timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
     }
 
     @Override
-    public final RowCursor cursor(String sql, List<?> bindings) {
-        return timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings));
+    public final QueryCursor<Map<String, Object>> cursor(String sql, List<?> bindings) {
+        return wrap(timedCursor(Objects.requireNonNull(sql, "sql"), Bindings.check(bindings)));
     }
 
     @Override
@@ -219,6 +222,10 @@ abstract class AbstractConnection implements Connection {
         events.executed(this, new QueryExecuted(settings.name(), kind, statement.sql(), statement.bindings(),
                 elapsedSince(start), transactionLevel()));
         return result;
+    }
+
+    private static QueryCursor<Map<String, Object>> wrap(RowCursor rows) {
+        return new MappingCursor<Map<String, Object>>(rows, Function.<Map<String, Object>>identity());
     }
 
     // The event covers opening the cursor only, not reading its rows.

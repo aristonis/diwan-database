@@ -2,7 +2,6 @@ package org.aristonis.diwan.database.eloquent.relations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
@@ -127,7 +126,7 @@ class HasManyThroughExistenceTest {
 
         String sql = query.toSql();
         assertTrue(sql.contains("exists (select * from \"users\" where \"countries\".\"id\" = \"users\".\"country_id\""
-                + " and (exists (select * from \"posts\" where \"users\".\"id\" = \"posts\".\"user_id\")))"), sql);
+                + " and exists (select * from \"posts\" where \"users\".\"id\" = \"posts\".\"user_id\"))"), sql);
         assertEquals(longs(1, 2), keys(query.get()));
     }
 
@@ -136,7 +135,7 @@ class HasManyThroughExistenceTest {
         EloquentBuilder<ThroughModels.Country> query =
                 countries().whereHas("posts", q -> q.where("title", "Post 4"));
 
-        assertEquals(COUNTRIES + "exists (select * " + POSTS_OF_COUNTRY + " and (\"title\" = ?))", query.toSql());
+        assertEquals(COUNTRIES + "exists (select * " + POSTS_OF_COUNTRY + " and \"title\" = ?)", query.toSql());
         assertEquals(Collections.singletonList("Post 4"), query.getBindings());
         assertEquals(longs(2), keys(query.get()));
     }
@@ -163,7 +162,7 @@ class HasManyThroughExistenceTest {
                 q -> q.where(q.getModel().qualifyColumn("name"), "Sam"));
 
         assertEquals(STAFF + "exists (select * " + SUBORDINATES_0
-                + " and (\"laravel_reserved_0\".\"name\" = ?))", query.toSql());
+                + " and \"laravel_reserved_0\".\"name\" = ?)", query.toSql());
         assertEquals(longs(1), keys(query.get()));
     }
 
@@ -228,16 +227,19 @@ class HasManyThroughExistenceTest {
     }
 
     @Test
-    void joinInsideConstraintIsRefused() {
-        assertThrows(IllegalStateException.class, () -> countries().whereHas("posts",
-                q -> q.join("teams", "teams.id", "=", "posts.id")));
+    void joinInsideConstraintRendersInsideTheSubquery() {
+        EloquentBuilder<ThroughModels.Country> query = countries().whereHas("posts",
+                q -> q.join("teams", "teams.id", "=", "posts.id"));
+
+        assertTrue(query.toSql().contains("inner join \"teams\" on \"teams\".\"id\" = \"posts\".\"id\""),
+                query.toSql());
     }
 
     @Test
-    void limitInsideConstraintIsDropped() {
+    void limitInsideConstraintRendersInsideTheSubquery() {
         EloquentBuilder<ThroughModels.Country> query = countries().whereHas("posts", q -> q.limit(1));
 
-        assertFalse(query.toSql().contains("limit"), query.toSql());
+        assertTrue(query.toSql().contains("limit 1)"), query.toSql());
         assertEquals(Arrays.asList(1L, 2L), keys(query.get()));
     }
 }

@@ -15,7 +15,6 @@ import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
-import org.aristonis.diwan.database.values.Money;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
@@ -467,8 +466,6 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                 return "varchar " + enumCheck(column.name(), column.allowed());
             case RAW:
                 return column.rawDefinition().orElseThrow(IllegalStateException::new);
-            case MONEY:
-                return column.total() == 0 ? "integer" : "text";
             case INSTANT:
                 return "integer";
             default:
@@ -507,7 +504,6 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         } else if (column.storedAs().isPresent()) {
             sql.append(" as (").append(column.storedAs().get()).append(") stored");
         }
-        appendMoneyCheck(sql, column);
         if (column.type() == ColumnType.INSTANT) {
             // A bound Instant would otherwise land as text, which sorts after every number.
             String c = wrap(column.name());
@@ -515,42 +511,6 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         }
         appendChecks(sql, column);
         return sql.toString();
-    }
-
-    // SQLite has no exact decimal, so a decimal money column is text in one spelling per number;
-    // the check keeps hand-written rows to it too, so text equality is value equality.
-    private void appendMoneyCheck(StringBuilder sql, ColumnDefinition column) {
-        if (column.type() != ColumnType.MONEY) {
-            return;
-        }
-        String c = wrap(column.name());
-        if (column.total() == 0) {
-            if (column.isUnsigned()) {
-                sql.append(" check (").append(c).append(" >= 0)");
-            }
-            return;
-        }
-        int scale = column.places();
-        int integerDigits = column.total() - scale;
-        String digits = c + " not glob '*[^0-9.-]*'";
-        String sign = column.isUnsigned() ? c + " not glob '*-*'"
-                : "instr(substr(" + c + ", 2), '-') = 0 and " + c + " <> '-' || " + literal(Money.toText(
-                        java.math.BigDecimal.ZERO, scale));
-        String integerPart = scale == 0 ? c : "substr(" + c + ", 1, instr(" + c + ", '.') - 1)";
-        String unsignedInteger = "ltrim(" + integerPart + ", '-')";
-        // A check passes on NULL only when it evaluates to NULL, so a nullable column says so first.
-        sql.append(" check (").append(c).append(" is null or (typeof(").append(c).append(") = 'text' and ").append(digits).append(" and ")
-                .append(sign).append(" and length(").append(unsignedInteger).append(") between 1 and ")
-                .append(integerDigits).append(" and (").append(unsignedInteger).append(" = '0' or ")
-                .append(unsignedInteger).append(" not glob '0*')");
-        if (scale == 0) {
-            sql.append(" and instr(").append(c).append(", '.') = 0");
-        } else {
-            sql.append(" and length(").append(c).append(") - length(replace(").append(c)
-                    .append(", '.', '')) = 1 and length(").append(c).append(") - instr(").append(c)
-                    .append(", '.') = ").append(scale);
-        }
-        sql.append("))");
     }
 
     private static void appendChecks(StringBuilder sql, ColumnDefinition column) {

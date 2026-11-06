@@ -25,8 +25,9 @@ import org.aristonis.diwan.database.query.Expression;
  * {@code exists()} and {@code pluck} keep them.
  *
  * <p>Names are checked at the call: an unknown relation or a dotted path throws before any
- * subselect of that call is added. A constraint runs once, at the call, on the relation's query;
- * it may add where, limit, offset and groupBy clauses only.
+ * subselect of that call is added. A constraint runs once, at the call, on the aggregate subquery
+ * with the rules of {@code whereHas}: joins are allowed, its wheres are grouped, and its columns,
+ * orders, limit and offset are cleared; a groupBy, having, distinct or union is refused.
  *
  * @param <T> the model class
  */
@@ -75,8 +76,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
+     * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
     public final EloquentBuilder<T> withCount(Map<String, Consumer<EloquentBuilder<?>>> relations) {
         return aggregate(WithParser.parseAggregates(relations), ANY_COLUMN, COUNT);
@@ -107,8 +107,6 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if the map, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
      */
     public final EloquentBuilder<T> withExists(Map<String, Consumer<EloquentBuilder<?>>> relations) {
         return aggregate(WithParser.parseAggregates(relations), ANY_COLUMN, EXISTS);
@@ -141,8 +139,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
+     * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
     public final EloquentBuilder<T> withMax(Map<String, Consumer<EloquentBuilder<?>>> relations, String column) {
         return many(relations, column, MAX);
@@ -187,8 +184,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
+     * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
     public final EloquentBuilder<T> withMin(Map<String, Consumer<EloquentBuilder<?>>> relations, String column) {
         return many(relations, column, MIN);
@@ -233,8 +229,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
+     * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
     public final EloquentBuilder<T> withSum(Map<String, Consumer<EloquentBuilder<?>>> relations, String column) {
         return many(relations, column, SUM);
@@ -281,8 +276,7 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      * @throws NullPointerException if an argument, a name or a constraint is {@code null}
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
+     * @throws IllegalArgumentException if a constraint adds a groupBy, having, distinct or union
      */
     public final EloquentBuilder<T> withAvg(Map<String, Consumer<EloquentBuilder<?>>> relations, String column) {
         return many(relations, column, AVG);
@@ -334,11 +328,10 @@ abstract class EloquentAggregates<T extends Model> extends EloquentMorphQueries<
      *     {@code null} for the column of one related row
      * @return this builder
      * @throws NullPointerException if the map, the column, a name or a constraint is {@code null}
-     * @throws IllegalArgumentException if {@code function} is not a supported function
+     * @throws IllegalArgumentException if {@code function} is not a supported function, or a
+     *     constraint adds a groupBy, having, distinct or union
      * @throws org.aristonis.diwan.database.eloquent.relations.RelationNotFoundException if a name is
      *     not a relation of the model or is a dotted path
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit, offset
-     *     or groupBy
      */
     public final EloquentBuilder<T> withAggregate(Map<String, Consumer<EloquentBuilder<?>>> relations,
             String column, String function) {

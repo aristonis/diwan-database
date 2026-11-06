@@ -298,7 +298,23 @@ class SQLiteQueryGrammarTest {
                 + " where \"rowid\" in (select \"users\".\"rowid\" from \"users\" inner join \"posts\" on"
                 + " \"users\".\"id\" = \"posts\".\"user_id\" and \"posts\".\"v\" = ? where \"users\".\"id\" > ?)", sql);
         assertEquals(List.of("x", 1, 2, 3),
-                query.getGrammar().prepareBindingsForUpdate(query.getRawBindings(), values));
+                query.getGrammar().prepareBindingsForUpdate(query, values));
+    }
+
+    @Test
+    void updateWithAJoinOrderAndLimitGoesThroughRowidAndBindsInMarkOrder() {
+        Builder query = db.table("users")
+                .join("posts", j -> j.on("users.id", "=", "posts.user_id").where("posts.v", 2))
+                .where("users.id", ">", 3)
+                .orderBy("users.id")
+                .limit(2);
+        Map<String, Object> values = row("name", "x");
+
+        assertEquals("update \"users\" set \"name\" = ? where \"rowid\" in (select \"users\".\"rowid\" from \"users\""
+                + " inner join \"posts\" on \"users\".\"id\" = \"posts\".\"user_id\" and \"posts\".\"v\" = ?"
+                + " where \"users\".\"id\" > ? order by \"users\".\"id\" asc limit 2)",
+                query.getGrammar().compileUpdate(query, values));
+        assertEquals(List.of("x", 2, 3), query.getGrammar().prepareBindingsForUpdate(query, values));
     }
 
     @Test

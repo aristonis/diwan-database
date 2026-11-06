@@ -60,7 +60,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   exactly an integer refused with `IllegalArgumentException`.
 - Query builder chunking, streaming and pagination: `chunk`, `each`, `chunkMap`, `chunkById`,
   `chunkByIdDesc`, `eachById`, `lazy`, `lazyById`, `lazyByIdDesc`; `cursor()` returning a
-  `RowCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`
+  `QueryCursor` that streams on SQLite, PostgreSQL and Android and must be closed; `paginate`
   (`LengthAwarePage`), `simplePaginate` (`SimplePage`), `cursorPaginate` (`CursorPage` with a
   `Cursor` token) and `getCountForPagination`. Chunking runs on copies, so the builder is
   unchanged. `DriverSession.cursor`, `Connection.cursor` and
@@ -81,18 +81,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   limit, reads, aggregates, insert, `insertGetId`, update, increment, delete and truncate;
   `toSql`, `getBindings` and `toRawSql`. Grammars and processors ship in the database modules:
   `SQLiteQuery.of` (also for Android) and `PostgresQuery.of`. Instants are stored as
-  `Blueprint.instant` stores them; money is bound explicitly.
+  `Blueprint.instant` stores them.
 - `ForeignKeyViolationException`, and the failure kinds `FOREIGN_KEY_VIOLATION`, `CANCELLED` and
   `CONNECTION_LOST`, and `COMMIT_OUTCOME_UNKNOWN` for a connection lost during a commit, which may or
   may not have landed; a lock that is not available (PostgreSQL 55P03) counts as a concurrency
   failure and is retried.
-- Package `values` with `Money`, `MoneyAmount` (reads a money column the same way on SQLite and
-  PostgreSQL) and `Instants`; `Blueprint.instant` stores moments as whole microseconds on SQLite,
+- Package `values` with `Instants`; `Blueprint.instant` stores moments as whole microseconds on SQLite,
   checked to be integers, and `timestamptz` on PostgreSQL. `Instants.now()` is truncated to
   microseconds.
-
-- Money: `Blueprint.money(column, scale)` for whole minor units, `asDecimal(precision)` for an exact
-  decimal (PostgreSQL `numeric`, checked text on SQLite), and the `Money` converters.
 
 - Android module `diwan-database-android`: `AndroidSqliteDriver` over Android's `SQLiteDatabase`
   for Android 9 and later, with transactions, savepoints and the JDBC driver's failure kinds.
@@ -198,10 +194,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `withCount`, `withExists`, `withSum`, `withAvg`, `withMin` and `withMax` closures now follow the rules of `whereHas`: joins are allowed, columns, orders, limit and offset are cleared, and `groupBy`, `having`, `distinct` and unions throw `IllegalArgumentException` instead of `IllegalStateException`.
+- `Builder.cursor()` and `Connection.cursor(...)` return the public `QueryCursor<Map<String, Object>>`
+  instead of the driver type `RowCursor`, and `EloquentBuilder.cursor()` returns `QueryCursor<T>`.
+  A `QueryCursor` is `Iterable` and `AutoCloseable`: `iterator()` works once (a second call throws
+  `IllegalStateException`), `stream()` is lazy and closing the stream closes the cursor, and
+  `map(fn)` gives a cursor of the mapped type that shares the close. A stream releases its
+  connection only when it is closed, so use it in try-with-resources. `RowCursor` stays the driver
+  SPI type.
 - SQLite: dates are stored as `yyyy-MM-dd HH:mm:ss` (a fraction only when there is one) by both
   the JDBC and Android drivers; `Instant` and `OffsetDateTime` as UTC with `+00:00`. Text written by
   earlier builds (`2026-01-02T03:04`, local offsets) does not sort or compare with the new text.
   Years outside 0000 to 9999 are refused on SQLite.
+- `has` and `whereHas`: the wheres a closure adds are wrapped in brackets only when they contain an
+  `or` (same meaning as before). The exists form drops orders from the subquery; the count form
+  replaces the selected columns with `count(*)` and refuses `distinct` and unions.
 
 ### Fixed
 
@@ -210,15 +217,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   query fails on SQLite and PostgreSQL.
 - PostgreSQL identifier limits are counted in UTF-8 bytes; catalog reads work in a mixed-case
   current schema; an empty comment removes a column comment.
-- SQLite: `unprepared` runs every statement of a script, on JDBC and Android; renaming a decimal
-  money column on SQLite before 3.25 no longer fails on its own check.
+- SQLite: `unprepared` runs every statement of a script, on JDBC and Android; renaming a column
+  on SQLite before 3.25 no longer fails on its own check.
 - PostgreSQL statements that cannot run in a transaction name `withinTransaction()` in the error.
 - The PostgreSQL migration lock times its wait with a monotonic clock.
 
 - Dates read through `java.time` by column type: dates before 1582, times in a daylight-saving gap
   and `timestamptz` offsets read back unchanged; PostgreSQL `infinity` reads as `MAX` / `MIN`.
 - SQLite: `BigDecimal` is bound in plain form, never `1E+3`. A `decimal()` column still has numeric
-  affinity, which turns the text into a floating-point number; use `money(...)` for exact amounts.
+  affinity, which turns the text into a floating-point number; use an integer column of minor
+  units for exact amounts.
 - PostgreSQL: text binds into `uuid`, `jsonb` and `inet`, nulls into any column; `json` and `inet`
   read back as text.
 - NaN and infinite numbers are refused before any SQL.
@@ -226,3 +234,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - SQLite: the foreign key check after a table rebuild used the table-valued
   `pragma_foreign_key_check(?)`, which SQLite before 3.26 (Android 9) rejects; it now uses the
   pragma statement.
+
+### Removed
+
+- `ModelCursor`, replaced by `QueryCursor<T>` (see Changed).
+- `QueryGrammar.prepareBindingsForUpdate` and `prepareBindingsForDelete` overloads that took only a
+  binding map.
+- Money support, removed before v0.1 because Diwan is a database library and ships no money type:
+  `Blueprint.money(column, scale)`, `ColumnDefinition.asDecimal(int)`, `ColumnType.MONEY`, and the
+  `Money` and `MoneyAmount` classes of the `values` package. Use `decimal()` as in Laravel, or an
+  integer column of minor units. A SQLite file created by a pre-release build with a decimal money
+  column keeps its generated check as an ordinary user check.

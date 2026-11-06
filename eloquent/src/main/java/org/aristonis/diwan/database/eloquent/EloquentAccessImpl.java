@@ -138,11 +138,6 @@ final class EloquentAccessImpl implements EloquentAccess {
     }
 
     @Override
-    public void constraintGroup(EloquentBuilder<?> builder, Consumer<EloquentBuilder<?>> group) {
-        Objects.requireNonNull(builder, "builder").constraintGroup(Objects.requireNonNull(group, "group"));
-    }
-
-    @Override
     public <M extends Model> M newRegistered(Class<M> type, Model connectionOf) {
         ModelQuery<?> entry = ModelQuery.registeredOrLoad(Objects.requireNonNull(type, "type"));
         Model model = entry.newModel();

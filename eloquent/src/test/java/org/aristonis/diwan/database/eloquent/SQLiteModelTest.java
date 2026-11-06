@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.jdbc.JdbcConnectionProvider;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.sqlite.SQLiteSchema;
@@ -321,14 +322,20 @@ class SQLiteModelTest {
             lazy.add(account.getKey());
         }
         List<Object> streamed = new ArrayList<>();
-        try (ModelCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
+        try (QueryCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
             for (Account account : cursor) {
                 assertTrue(account.exists());
                 streamed.add(account.getKey());
             }
         }
 
+        List<Object> viaStream;
+        try (java.util.stream.Stream<Account> stream = accounts.query().orderBy("id").cursor().stream()) {
+            viaStream = stream.map(Account::getKey).collect(java.util.stream.Collectors.toList());
+        }
+
         assertEquals(23, chunked.size());
+        assertEquals(chunked, viaStream);
         assertEquals(chunked, byId);
         assertEquals(chunked, lazy);
         assertEquals(chunked, streamed);

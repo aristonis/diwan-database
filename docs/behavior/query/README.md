@@ -45,8 +45,7 @@ List<Object> names = query.table("customers")
 | See the SQL | `toSql`, `getBindings`, `toRawSql` |
 | Copy | `clone`, `newQuery` |
 
-Money is written explicitly (`Money.toMinor(amount, 2)` or `Money.toText(amount, scale)`) and read
-with `MoneyAmount.read`. An `Instant` is stored as `Blueprint.instant` stores it on each database.
+An `Instant` is stored as `Blueprint.instant` stores it on each database.
 
 ## Limits
 
@@ -66,6 +65,10 @@ with `MoneyAmount.read`. An `Instant` is stored as `Blueprint.instant` stores it
   connection for good; nothing closes it for you. A few of them can use up the pool, and on
   PostgreSQL each one also leaves the server session idle in a transaction, which blocks vacuum.
   Always use try-with-resources.
+- `cursor()` returns a `QueryCursor`: `iterator()` and `stream()` share one single use, and a
+  second call throws `IllegalStateException`. A `stream()` releases the connection only when the
+  stream is closed, so a bare `cursor().stream().forEach(...)` that stops early leaks the session;
+  put the stream in try-with-resources.
 - On Android the cursor reads through a window that is refilled by running the query again, so
   rows changed during the loop can be skipped or repeated. Use `lazyById` or `chunkById` for a
   large or changing table.

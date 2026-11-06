@@ -7,11 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Collections;
 import java.util.List;
 import org.aristonis.diwan.database.eloquent.CursorModelPage;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.eloquent.SimpleModelPage;
 import org.aristonis.diwan.database.eloquent.relations.ThroughModels.Country;
 import org.aristonis.diwan.database.eloquent.relations.ThroughModels.Post;
@@ -89,7 +90,7 @@ class ThroughIterationTest {
         List<Object> lazy = idsOf(posts.lazy());
         List<Object> lazyById = idsOf(posts.lazyById(2));
         List<Object> cursor;
-        try (ModelCursor<Post> rows = posts.cursor()) {
+        try (QueryCursor<Post> rows = posts.cursor()) {
             cursor = idsOf(rows);
         }
 
@@ -103,13 +104,13 @@ class ThroughIterationTest {
 
     @Test
     void cursorClosesOnEarlyExit() {
-        ModelCursor<Post> cursor = postsOf(1).cursor();
-
-        try (ModelCursor<Post> rows = cursor) {
-            assertEquals(1, rows.iterator().next().getAttribute("id"));
+        Iterator<Post> iterator;
+        try (QueryCursor<Post> rows = postsOf(1).cursor()) {
+            iterator = rows.iterator();
+            assertEquals(1, iterator.next().getAttribute("id"));
         }
 
-        assertTrue(cursor.isClosed());
+        assertFalse(iterator.hasNext());
     }
 
     @Test

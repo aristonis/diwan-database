@@ -10,7 +10,6 @@ import org.aristonis.diwan.database.eloquent.CursorModelPage;
 import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
 import org.aristonis.diwan.database.eloquent.ModelNotFoundException;
 import org.aristonis.diwan.database.eloquent.ModelPage;
 import org.aristonis.diwan.database.eloquent.MultipleRecordsFoundException;
@@ -18,6 +17,7 @@ import org.aristonis.diwan.database.eloquent.SimpleModelPage;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.Cursor;
 import org.aristonis.diwan.database.query.Order;
+import org.aristonis.diwan.database.query.QueryCursor;
 
 /**
  * The read methods of a through relation: finders, iterators and pages. Each method runs the
@@ -320,12 +320,13 @@ abstract class ThroughReads<R extends Model, S extends ThroughReads<R, S>> exten
 
     /**
      * Opens one cursor over the related models, as {@link EloquentBuilder#cursor()} does. Close the
-     * cursor, best with try-with-resources.
+     * cursor, best with try-with-resources. The cursor holds its session while open, so use
+     * {@link EloquentBuilder#lazy(int)} for a slow loop or one that writes.
      *
      * @return the open cursor, never {@code null}
      * @throws IllegalStateException if eager loads are set on the relation
      */
-    public final ModelCursor<R> cursor() {
+    public final QueryCursor<R> cursor() {
         return prepared(PivotReads.Select.APPEND).cursor();
     }
 

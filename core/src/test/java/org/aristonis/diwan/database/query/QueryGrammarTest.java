@@ -218,9 +218,9 @@ class QueryGrammarTest {
     void updateBindingsPutValuesBeforeWheresAndSkipRawValues() {
         Builder query = db().table("t").selectRaw("?", List.of("s")).where("id", 1);
 
-        assertEquals(List.of(2, 1), grammar.prepareBindingsForUpdate(query.getRawBindings(),
+        assertEquals(List.of(2, 1), grammar.prepareBindingsForUpdate(query,
                 row("a", 2, "b", Expression.raw("b + 1"))));
-        assertEquals(List.of(1), grammar.prepareBindingsForDelete(query.getRawBindings()));
+        assertEquals(List.of(1), grammar.prepareBindingsForDelete(query));
     }
 
     @Test

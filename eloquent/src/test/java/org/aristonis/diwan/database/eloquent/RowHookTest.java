@@ -12,6 +12,7 @@ import org.aristonis.diwan.database.eloquent.TestModels.User;
 import org.aristonis.diwan.database.eloquent.internal.Access;
 import org.aristonis.diwan.database.eloquent.relations.HasMany;
 import org.aristonis.diwan.database.eloquent.relations.RelationMap;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.Test;
 
 class RowHookTest {
@@ -151,7 +152,7 @@ class RowHookTest {
         List<User> called = new ArrayList<>();
         fake.returns(ALL_USERS, row("id", 1L, "name", "Ann"), row("id", 2L, "name", "Bob"));
 
-        try (ModelCursor<User> cursor = recordingQuery(called).cursor()) {
+        try (QueryCursor<User> cursor = recordingQuery(called).cursor()) {
             int seen = 0;
             for (User user : cursor) {
                 seen++;

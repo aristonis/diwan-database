@@ -10,10 +10,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.RowCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.CursorPage;
 import org.aristonis.diwan.database.query.LengthAwarePage;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -63,11 +65,12 @@ public class AndroidCursorTest {
 
     @Test
     public void cursorReadsAllRowsInOrderWithColumnsInSelectOrder() {
-        try (RowCursor rows = db.cursor("select name, id from items order by id")) {
-            Map<String, Object> first = rows.next();
+        try (QueryCursor<Map<String, Object>> rows = db.cursor("select name, id from items order by id")) {
+            Iterator<Map<String, Object>> it = rows.iterator();
+            Map<String, Object> first = it.next();
             assertEquals(List.of("name", "id"), new ArrayList<>(first.keySet()));
             assertThrows(UnsupportedOperationException.class, () -> first.put("x", 1));
-            List<Object> rest = names(rows);
+            List<Object> rest = names(() -> it);
             assertEquals("n1", first.get("name"));
             assertEquals(List.of("n2", "n3", "n4", "n5"), rest);
         }
@@ -75,33 +78,31 @@ public class AndroidCursorTest {
 
     @Test
     public void cursorStaysOpenAfterTheFirstRowWithoutATransaction() {
-        try (RowCursor rows = db.cursor("select * from items order by id")) {
-            rows.next();
+        try (QueryCursor<Map<String, Object>> rows = db.cursor("select * from items order by id")) {
+            rows.iterator().next();
 
-            assertFalse(rows.isClosed());
             assertFalse(database.inTransaction());
         }
     }
 
     @Test
     public void cursorClosesOnExhaustionAndOnEarlyClose() {
-        RowCursor full = db.cursor("select * from items");
-        names(full);
-        assertTrue(full.isClosed());
+        Iterator<Map<String, Object>> full = db.cursor("select * from items").iterator();
+        names(() -> full);
         assertFalse(full.hasNext());
 
-        RowCursor early = db.cursor("select * from items");
-        early.next();
+        QueryCursor<Map<String, Object>> early = db.cursor("select * from items");
+        Iterator<Map<String, Object>> earlyRows = early.iterator();
+        earlyRows.next();
         early.close();
         early.close();
-        assertTrue(early.isClosed());
-        assertFalse(early.hasNext());
-        assertThrows(IllegalStateException.class, early::next);
+        assertFalse(earlyRows.hasNext());
+        assertThrows(NoSuchElementException.class, earlyRows::next);
     }
 
     @Test
     public void writesMadeWhileTheCursorIsOpenPersistAfterClose() {
-        try (RowCursor rows = db.cursor("select id, qty from items order by id")) {
+        try (QueryCursor<Map<String, Object>> rows = db.cursor("select id, qty from items order by id")) {
             for (Map<String, Object> row : rows) {
                 db.affectingStatement("update items set qty = ? where id = ?",
                         ((Number) row.get("qty")).longValue() + BUMP, row.get("id"));
@@ -117,7 +118,7 @@ public class AndroidCursorTest {
         db.transaction(tx -> {
             tx.insert("insert into items (name, qty) values (?, ?)", "uncommitted", 99);
             List<Object> seen;
-            try (RowCursor rows = tx.cursor("select name from items order by id")) {
+            try (QueryCursor<Map<String, Object>> rows = tx.cursor("select name from items order by id")) {
                 seen = names(rows);
             }
             assertTrue(seen.contains("uncommitted"));
@@ -145,8 +146,9 @@ public class AndroidCursorTest {
 
     @Test
     public void cursorRefusesUseFromAnotherThread() throws InterruptedException {
-        try (RowCursor rows = db.cursor("select * from items")) {
-            assertTrue(onAnotherThread(rows::next) instanceof IllegalStateException);
+        try (QueryCursor<Map<String, Object>> rows = db.cursor("select * from items")) {
+            Iterator<Map<String, Object>> it = rows.iterator();
+            assertTrue(onAnotherThread(it::next) instanceof IllegalStateException);
         }
     }
 
@@ -167,9 +169,10 @@ public class AndroidCursorTest {
 
     @Test
     public void cursorIteratesOnlyOnceAndRefusesRemove() {
-        try (RowCursor rows = db.cursor("select * from items")) {
+        try (QueryCursor<Map<String, Object>> rows = db.cursor("select * from items")) {
             Iterator<Map<String, Object>> it = rows.iterator();
             assertThrows(IllegalStateException.class, rows::iterator);
+            assertThrows(IllegalStateException.class, rows::stream);
             assertThrows(UnsupportedOperationException.class, it::remove);
         }
     }
@@ -177,8 +180,8 @@ public class AndroidCursorTest {
     @Test
     public void manyEarlyClosedCursorsLeakNothing() {
         for (int i = 0; i < LEAK_RUNS; i++) {
-            try (RowCursor rows = db.cursor("select * from items order by id")) {
-                rows.next();
+            try (QueryCursor<Map<String, Object>> rows = db.cursor("select * from items order by id")) {
+                rows.iterator().next();
             }
         }
 
@@ -189,7 +192,7 @@ public class AndroidCursorTest {
 
     @Test
     public void builderCursorChunkAndLazyWork() {
-        try (RowCursor rows = query.table("items").orderBy("id").cursor()) {
+        try (QueryCursor<Map<String, Object>> rows = query.table("items").orderBy("id").cursor()) {
             assertEquals(List.of("n1", "n2", "n3", "n4", "n5"), names(rows));
         }
         List<Integer> sizes = new ArrayList<>();

@@ -16,3 +16,18 @@ dependencies {
 tasks.javadoc {
     exclude("**/internal/**")
 }
+
+// Javadoc never reads the internal bridges, so doclint at compile time is their only docs check.
+tasks.named<JavaCompile>("compileJava") {
+    options.compilerArgs.addAll(
+        listOf(
+            "-Xdoclint:all/package",
+            "-Xdoclint/package:org.aristonis.diwan.database.eloquent.internal.*",
+        ),
+    )
+}
+
+// ClassValue is missing below Android API 34; ClassCache reaches it only after probing for it at runtime.
+animalsniffer {
+    ignore = listOf("java.lang.ClassValue")
+}

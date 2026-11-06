@@ -10,7 +10,7 @@ Laravel's query builder collects clauses in PHP arrays and asks the connection's
 Diwan Database ships one module per database and already passes the schema grammar in instead of
 finding it ([ADR 0008](0008-schema-grammar-per-database-module.md)), so the core `Connection`
 cannot offer `table()` on its own. PHP arrays, closures with a variable argument count and string
-dispatch have no direct Java form. Moments and money also need a storage rule, and SQLite before
+dispatch have no direct Java form. Moments also need a storage rule, and SQLite before
 3.35 (shipped with many Android versions) has no `returning` clause.
 
 ## Decision
@@ -39,8 +39,8 @@ dispatch have no direct Java form. Moments and money also need a storage rule, a
    microseconds since the epoch on SQLite, unchanged on PostgreSQL, matching how
    `Blueprint.instant` stores them. It applies at execution and in `toRawSql`. Money is not
    converted: the builder does not know whether a column holds minor units, checked text or a
-   decimal, so a `MoneyAmount` is refused and the caller binds `toMinor()`, `toText()` or
-   `amount()`.
+   decimal. Diwan ships no money type; store money in a `decimal` column or an integer column of
+   minor units.
 7. `insertGetId` asks the processor. PostgreSQL and SQLite 3.35 and later use
    `insert ... returning`. Older SQLite runs the insert and `select last_insert_rowid()` inside one
    transaction, so both use the same session; versions are compared as numbers. That path returns
@@ -64,7 +64,7 @@ dispatch have no direct Java form. Moments and money also need a storage rule, a
 | PostgreSQL `truncate` never cascades | No global flag; cascading must be explicit |
 | `whereInstantBetween` added; date wheres are for text date columns only | SQLite date functions misread epoch microseconds |
 | Stricter values: a single value must be a scalar, between needs exactly two, rows with different keys and empty updates are refused, increments must be finite numbers | Errors before SQL instead of wrong SQL |
-| Money is never converted by the builder | Storage shape is per column |
+| Money is not converted by the builder; Diwan ships no money type | Storage shape is per column |
 | No dynamic wheres, macros, `dump` or `dd` | PHP-only mechanisms |
 
 ## Consequences
@@ -79,8 +79,6 @@ dispatch have no direct Java form. Moments and money also need a storage rule, a
 
 - `connection.table()` through a grammar registry: needs classpath scanning or a global registry,
   which ADR 0008 rejects for Android and code shrinking.
-- Converting money by column metadata: the builder has no schema; guessing would round or
-  mis-store.
 - Running `last_insert_rowid()` on a pooled connection without a transaction: the second call may
   land on another session and return another row's id.
 - Echoing the caller's operator text after an allowlist check: two spellings of one operator in

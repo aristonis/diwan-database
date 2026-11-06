@@ -8,13 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastColumns;
 import org.aristonis.diwan.database.eloquent.casts.CastComparator;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.internal.ClassCache;
 
 /**
  * The cast layer of {@link Model}: applies the casts from {@link #casts()} when attributes are
@@ -37,8 +37,9 @@ import org.aristonis.diwan.database.eloquent.casts.InvalidCastException;
  */
 abstract class ModelCasts extends ModelAttributes {
 
-    private static final ConcurrentMap<Class<?>, Map<String, Cast<?>>> RESOLVED =
-            new ConcurrentHashMap<>();
+    /** One slot per class, filled on first use; a racing second resolve is dropped. */
+    private static final ClassCache<AtomicReference<Map<String, Cast<?>>>> RESOLVED =
+            ClassCache.of(type -> new AtomicReference<>());
 
     private static final String ALL_CASTS = "*";
 
@@ -404,13 +405,13 @@ abstract class ModelCasts extends ModelAttributes {
     }
 
     private Map<String, Cast<?>> resolvedCasts() {
-        Map<String, Cast<?>> cached = RESOLVED.get(getClass());
+        AtomicReference<Map<String, Cast<?>>> slot = RESOLVED.get(getClass());
+        Map<String, Cast<?>> cached = slot.get();
         if (cached != null) {
             return cached;
         }
         Map<String, Cast<?>> resolved = resolve();
-        Map<String, Cast<?>> raced = RESOLVED.putIfAbsent(getClass(), resolved);
-        return raced == null ? resolved : raced;
+        return slot.compareAndSet(null, resolved) ? resolved : slot.get();
     }
 
     private Map<String, Cast<?>> resolve() {

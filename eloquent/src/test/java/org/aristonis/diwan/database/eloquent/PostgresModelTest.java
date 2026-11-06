@@ -15,6 +15,7 @@ import java.util.List;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.pgsql.PostgresQuery;
 import org.aristonis.diwan.database.pgsql.PostgresSchema;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -198,7 +199,7 @@ class PostgresModelTest {
         List<Object> chunked = new ArrayList<>();
         accounts.query().chunk(5, chunk -> chunked.addAll(chunk.modelKeys()));
         List<Object> streamed = new ArrayList<>();
-        try (ModelCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
+        try (QueryCursor<Account> cursor = accounts.query().orderBy("id").cursor()) {
             for (Account account : cursor) {
                 streamed.add(account.getKey());
             }

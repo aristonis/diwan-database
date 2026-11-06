@@ -71,7 +71,12 @@ class SubqueryWriteTest {
 
     @Test
     void updateBindingsGoValuesThenJoinThenWhereThenTheRest() {
-        QueryGrammar grammar = new TestQueries.TestGrammar("");
+        QueryGrammar grammar = new QueryGrammar("") {
+            @Override
+            protected boolean writesFullSelect(Builder query) {
+                return true;
+            }
+        };
         Builder query = TestQueries.db().table("t")
                 .join("j", j -> j.on("t.id", "=", "j.id").where("j.x", 3))
                 .where("w", 4).orderByRaw("o(?)", Collections.singletonList(5)).selectRaw("s(?)", Collections.singletonList(0));
@@ -79,9 +84,9 @@ class SubqueryWriteTest {
         values.put("a", 1);
         values.put("b", TestQueries.db().table("u").selectRaw("max(v)").where("k", 2));
         values.put("c", Expression.raw("c + 1"));
-        List<Object> bindings = grammar.prepareBindingsForUpdate(query.getRawBindings(), values);
+        List<Object> bindings = grammar.prepareBindingsForUpdate(query, values);
         assertEquals(Arrays.asList(1, 2, 3, 4, 5), bindings);
-        assertEquals(Arrays.asList(3, 4, 5), grammar.prepareBindingsForDelete(query.getRawBindings()));
+        assertEquals(Arrays.asList(3, 4, 5), grammar.prepareBindingsForDelete(query));
     }
 
     @Test

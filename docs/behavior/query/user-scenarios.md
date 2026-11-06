@@ -27,7 +27,7 @@
 | E12 | Emptying a table | Rows gone; the next id starts again from 1 | `SQLiteQueryIntegrationTest#truncateEmptiesTheTableAndResetsIds`, `PostgresQueryIntegrationTest#truncateRestartsTheIdentity` |
 | E13 | `toRawSql` with a value holding a quote or a question mark | Quote doubled; question marks inside text left alone | `QueryGrammarTest#rawSqlLeavesQuestionMarksInsideStringLiteralsAlone` |
 | E14 | A raw expression used as a value | Written into the SQL as given, never bound | `BuilderStateTest#rawValuesAreNeverBound` |
-| E15 | A money amount or an `Instant` written and read back | Same value on every database, no rounding, no time-zone drift | `SQLiteQueryIntegrationTest#moneyAndInstantsRoundTrip`, `PostgresQueryIntegrationTest#moneyAndInstantsRoundTrip`, `AndroidQueryTest#moneyAndInstantRoundTrip` |
+| E15 | An `Instant` written and read back | Same value on every database, no rounding, no time-zone drift | `SQLiteQueryIntegrationTest#instantsRoundTrip`, `PostgresQueryIntegrationTest#decimalAndInstantsRoundTrip`, `AndroidQueryTest#instantRoundTrip` |
 | E16 | A date where on an instant column | Not supported (SQLite reads microseconds as days); use `whereInstantBetween` | `SQLiteQueryIntegrationTest#whereInstantBetweenIncludesTheStartAndExcludesTheEnd` |
 | E17 | A copy of a query is changed | The original is unchanged | `BuilderStateTest#cloneSharesNoMutableStateWithTheOriginal`, `SQLiteQueryIntegrationTest#aCloneIsIndependent` |
 | E18 | A sort direction other than `asc` or `desc` | Refused | `BuilderStateTest#invalidSortDirectionIsRejected` |

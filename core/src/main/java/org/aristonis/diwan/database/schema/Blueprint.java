@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.aristonis.diwan.database.values.Instants;
-import org.aristonis.diwan.database.values.Money;
 
 /**
  * Describes the columns and commands for one table, inside a {@link Schema} callback.
@@ -47,7 +46,6 @@ public final class Blueprint {
     // Holds a requested index name until the blueprint is checked; never reaches a grammar.
     private static final String REQUESTED = "requestedName";
 
-    private static final int MAX_MONEY_SCALE = 18;
     private final String table;
     private final String prefix;
     private final boolean isCreating;
@@ -196,28 +194,6 @@ public final class Blueprint {
             throw new IllegalArgumentException("Decimal needs total >= 1 and 0 <= places <= total");
         }
         return add(new ColumnDefinition(column, ColumnType.DECIMAL, 0, total, places));
-    }
-
-    /**
-     * Adds a money column holding whole minor units: at scale 2, {@code 10.10} is stored as
-     * {@code 1010}.
-     *
-     * <p>Minor units are exact and sum and sort in SQL on every database. Call
-     * {@link ColumnDefinition#asDecimal(int)} to store an exact decimal instead. Convert values
-     * with {@link Money}; the currency, when there is more than one, belongs in its own column.
-     *
-     * @param column the column name, never {@code null}
-     * @param scale the number of decimal places of the minor unit, 0 to 18 (2 for cents)
-     * @return the column definition, never {@code null}
-     * @throws NullPointerException if {@code column} is {@code null}
-     * @throws IllegalArgumentException if the name is invalid or the scale is out of range
-     * @throws IllegalStateException if the blueprint can no longer be changed
-     */
-    public ColumnDefinition money(String column, int scale) {
-        if (scale < 0 || scale > MAX_MONEY_SCALE) {
-            throw new IllegalArgumentException("A money scale must be 0 to " + MAX_MONEY_SCALE);
-        }
-        return add(new ColumnDefinition(column, ColumnType.MONEY, 0, 0, scale));
     }
 
     /**

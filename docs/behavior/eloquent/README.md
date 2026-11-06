@@ -126,6 +126,14 @@ A relation is read once and kept on the model. `with`, `load` and `loadMissing` 
 Eager loading drops null keys and splits long key lists so no statement passes the database's
 limits. `has` and
 `whereHas` compile to `exists` subqueries; a relation to the same table gets an alias per level.
+
+The closure of `has`, `whereHas`, `whereRelation` and their `or` and `doesntHave` forms runs on the
+existence subquery itself, as in Laravel. It may add `join`, `orderBy`, `limit`, `offset`,
+`groupBy` and `having`, and they render inside the `exists`. The `where` clauses it adds form one
+group only when they hold an `or`, so an `orWhere` cannot widen the relation's own match. With a
+count (`whereHas("posts", q -> ..., ">", 2)`) the subquery is `select count(*)`: orders, limit and
+offset are dropped there, and `groupBy` or `having` throw `IllegalArgumentException` naming the
+relation.
 `toMap()` writes loaded relations after the attributes under snake-case keys and stops on cycles.
 
 ## Many-to-many
@@ -243,8 +251,10 @@ public HasMany<Comment> comments() { return hasMany(Comment.class).chaperone("po
 Each aggregate is a subselect in the main query, named `<relation>_<function>_<column>` in snake
 case unless the relation is written `posts as name`. The function is `count`, `max`, `min`, `sum`,
 `avg` or `exists`; `exists` reads as a boolean, the others as the driver returns them. A constraint
-closure may add `where`, `limit`, `offset` and `groupBy`; `select` and `orderBy` in it are
-ignored and other clauses throw. `load*` selects only the key and the aggregates, chunks the keys
+closure follows the rules of `whereHas`: it may add joins, its `where` clauses form one group, and
+its `select`, `orderBy`, `limit` and `offset` are cleared (`withExists` keeps the `limit` and
+`offset`). `groupBy`, `having`, `distinct` and unions throw `IllegalArgumentException` naming the
+relation. `load*` selects only the key and the aggregates, chunks the keys
 like eager loading, leaves the models clean and skips a model whose row is gone.
 
 A model listed in `touches()` updates each owner's `updated_at` after a save that changed
@@ -273,9 +283,15 @@ foreign key, the parent class name, `owner`, then `parent` for a self relation.
   clean after a read.
 - `casts()` and `accessors()` are read once per class; they must not depend on instance state.
 - Irregular plurals outside the short built-in list get a wrong table guess; override `table()`.
+- In a `has` or `whereHas` closure on a self relation (a table that relates to itself) a `join`
+  must refer to the related table by its `laravel_reserved_N` alias, as in Laravel.
+- A count comparison in `has` or `whereHas`, and every value aggregate (`withCount`, `withSum`,
+  `withAvg`, `withMin`, `withMax`), refuses `groupBy`, `having`, `distinct` and unions in the closure
+  with `IllegalArgumentException`; Laravel writes them into the subquery, which then returns many
+  rows or counts something else.
 - UUID version 7 and ULID keys made in the same millisecond are not ordered among themselves.
-- A `ModelCursor` that is neither exhausted nor closed keeps its connection. Use
-  try-with-resources.
+- A `QueryCursor` from `cursor()` that is neither exhausted nor closed keeps its connection, and
+  so does its `stream()` until the stream is closed. Use try-with-resources.
 - `cursor()` refuses eager loads; use `lazy()`, which loads them per page.
 - A related model's class must have run its static initialiser, so touch each model's `query`
   entry at startup. A class literal such as `Post.class` does not run it.

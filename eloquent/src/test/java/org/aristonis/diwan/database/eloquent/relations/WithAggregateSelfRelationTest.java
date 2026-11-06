@@ -156,7 +156,7 @@ class WithAggregateSelfRelationTest {
             EloquentBuilder<Category> counted = query.withCount(
                     one("children", q -> q.where(q.getModel().qualifyColumn("name"), "x")));
 
-            assertEquals(SELECT + "(select count(*) " + CHILDREN_0 + " and (\"laravel_reserved_0\".\"name\" = ?))"
+            assertEquals(SELECT + "(select count(*) " + CHILDREN_0 + " and \"laravel_reserved_0\".\"name\" = ?)"
                     + " as \"children_count\"" + FROM, counted.toSql());
             assertEquals(Collections.singletonList("x"), counted.getBindings());
         }

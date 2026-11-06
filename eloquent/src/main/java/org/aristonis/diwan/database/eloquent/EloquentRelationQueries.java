@@ -1,6 +1,5 @@
 package org.aristonis.diwan.database.eloquent;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -415,7 +414,7 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code group} is {@code null}
      */
     public final EloquentBuilder<T> whereGroup(Consumer<? super EloquentBuilder<T>> group) {
-        return group(group, false, false);
+        return group(group, false);
     }
 
     /**
@@ -427,30 +426,16 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
      * @throws NullPointerException if {@code group} is {@code null}
      */
     public final EloquentBuilder<T> orWhereGroup(Consumer<? super EloquentBuilder<T>> group) {
-        return group(group, true, false);
+        return group(group, true);
     }
 
-    /**
-     * Adds a group like {@link EloquentBuilder#whereGroup(Consumer)}, but merges the scope removals made inside it
-     * into this builder, so a relation constraint can lift a scope of the related model.
-     *
-     * @param group builds the clauses of the group, never {@code null}
-     * @return this builder
-     * @throws NullPointerException if {@code group} is {@code null}
-     */
-    final EloquentBuilder<T> constraintGroup(Consumer<? super EloquentBuilder<T>> group) {
-        return group(group, false, true);
-    }
-
-    private EloquentBuilder<T> group(Consumer<? super EloquentBuilder<T>> group, boolean isOr, boolean isMerging) {
+    private EloquentBuilder<T> group(Consumer<? super EloquentBuilder<T>> group, boolean isOr) {
         Objects.requireNonNull(group, "group");
         AliasCounter shared = aliases();
-        List<EloquentBuilder<T>> inners = new ArrayList<>(1);
         Consumer<Builder> fill = nested -> {
             EloquentBuilder<T> inner = new EloquentBuilder<>(source, model, nested);
             inner.useAliases(shared);
             group.accept(inner);
-            inners.add(inner);
         };
         query(base -> {
             if (isOr) {
@@ -459,11 +444,6 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
                 base.where(fill);
             }
         });
-        if (isMerging) {
-            for (EloquentBuilder<T> inner : inners) {
-                mergeRemovedFrom(inner);
-            }
-        }
         return self();
     }
 

@@ -32,8 +32,8 @@ build plugin.
 5. Layers. `Model` stacks configuration, attributes, guards and persistence in package-private
    base classes. `ModelQuery<T>` is the entry, `EloquentBuilder<T>` wraps the query `Builder` and
    turns rows into models, `ModelCollection<T>` is a read-only list with key helpers, and
-   `ModelPage`, `SimpleModelPage`, `CursorModelPage` and `ModelCursor` wrap the query pages and
-   cursor.
+   `ModelPage`, `SimpleModelPage` and `CursorModelPage` wrap the query pages; the model cursor is
+   the query package's `QueryCursor<T>`.
 6. Forwarders. `EloquentBuilder` forwards the common `where`, order, limit, paging and select
    methods by name. Everything else is reached through `query(Consumer<Builder>)` or `toBase()`. A
    test lists every public clause of `Builder` and fails when one is neither forwarded nor named
@@ -82,7 +82,47 @@ build plugin.
 - SQL is the query builder's SQL for the same calls; models add no dialect code.
 - Models are not thread-safe. Share the `ModelQuery`, not model instances.
 - Without casts, a `Boolean` set on a column SQLite stores as `1` stays dirty.
-- A `ModelCursor` left open keeps its connection, as a `RowCursor` does.
+- A `QueryCursor` left open keeps its connection, and so does a `stream()` that is not closed.
+
+## Why Model is not generic
+
+A generic `Model<T extends Model<T>>` would let the fluent setters return the subclass, so
+`user.setConnection("archive").setClock(clock)` would produce a `User`. The price is higher than
+the gain:
+
+- Every user class writes `extends Model<User>`.
+- A shared base class has to carry the parameter too: `AppModel<T extends AppModel<T>>`.
+- A model that extends another model gets setters typed to the parent. `Admin extends User` returns
+  `User` from `setConnection` unless `User` is generic too, and making `User` generic stops it from
+  being used on its own.
+- A mixed list needs `Model<?>`, which reads poorly and checks no more.
+- Java cannot check that `T` is the class itself. `class Post extends Model<User>` compiles, and
+  using a setter's result as the declared type throws `ClassCastException` at runtime.
+
+The current design already returns the subclass where callers need it. Finders and queries return
+`T` through `ModelQuery<T>`, so `User.query.find(1)` is a `User` with no cast. Only the fluent
+instance methods (`setConnection`, `setClock`, `refresh` and `updateTimestamps`) return `Model`.
+
+A model that needs the narrower type can override one of them covariantly:
+
+```java
+@Override
+public User setConnection(String name) {
+    return (User) super.setConnection(name);
+}
+```
+
+This escape stays open. A model can add the override today, and Diwan can narrow a return type
+later without breaking callers that compile against the wider one. Adding a type parameter later
+cannot be done without breaking every model, so not adding one now keeps the future open.
+
+| Library | Fluent setters return | Notes |
+|---|---|---|
+| Diwan | `Model` | Finders return `T` through `ModelQuery<T>`. Models may override setters covariantly. |
+| Generic `Model<T extends Model<T>>` | `T` | Every class writes `extends Model<Self>`, and a wrong `Self` compiles. |
+| Laravel | `static` | Resolved at runtime; PHP has no type parameters. |
+| JavaLite | `<T extends Model> T` | Unchecked: a wrong type fails at runtime. |
+| Ebean | `void` | Setters cannot chain. |
 
 ## Alternatives rejected
 

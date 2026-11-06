@@ -210,7 +210,23 @@ class PostgresQueryGrammarTest {
                 .where("users.id", 3);
 
         assertEquals(List.of(1, 2, 3),
-                db().grammar().prepareBindingsForUpdate(query.getRawBindings(), row("name", 1)));
+                db().grammar().prepareBindingsForUpdate(query, row("name", 1)));
+    }
+
+    @Test
+    void updateWithAJoinOrderAndLimitGoesThroughCtidAndBindsInMarkOrder() {
+        Builder query = db().table("users")
+                .join("orders", j -> j.on("users.id", "=", "orders.user_id").where("orders.paid", 2))
+                .where("users.id", ">", 3)
+                .orderBy("users.id")
+                .limit(2);
+        Map<String, Object> values = row("name", "x");
+
+        assertEquals("update \"users\" set \"name\" = ? where \"ctid\" in (select \"users\".\"ctid\""
+                + " from \"users\" inner join \"orders\" on \"users\".\"id\" = \"orders\".\"user_id\""
+                + " and \"orders\".\"paid\" = ? where \"users\".\"id\" > ?"
+                + " order by \"users\".\"id\" asc limit 2)", db().grammar().compileUpdate(query, values));
+        assertEquals(List.of("x", 2, 3), db().grammar().prepareBindingsForUpdate(query, values));
     }
 
     @Test

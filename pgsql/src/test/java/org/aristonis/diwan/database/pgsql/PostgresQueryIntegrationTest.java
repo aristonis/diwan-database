@@ -12,7 +12,6 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.values.Instants;
-import org.aristonis.diwan.database.values.MoneyAmount;
 import org.junit.jupiter.api.Test;
 
 class PostgresQueryIntegrationTest {
@@ -101,26 +100,21 @@ class PostgresQueryIntegrationTest {
     }
 
     @Test
-    void moneyAndInstantsRoundTrip() {
+    void decimalAndInstantsRoundTrip() {
         Connection connection = PostgresServer.newDatabase();
         PostgresSchema.of(connection).create("lines", t -> {
             t.id();
-            t.money("cents", 2);
-            t.money("exact", 2).asDecimal(12);
-            t.string("text");
+            t.decimal("exact", 12, 2);
             t.instant("at");
         });
         QueryFactory db = PostgresQuery.of(connection);
-        MoneyAmount price = MoneyAmount.of(new BigDecimal("10.1"), 2);
+        BigDecimal price = new BigDecimal("10.10");
         Instant at = Instant.parse("2026-06-01T10:00:00.123456Z");
 
-        db.table("lines").insert(Map.of("cents", price.toMinor(), "exact", price.amount(), "text", price.toText(),
-                "at", at));
+        db.table("lines").insert(Map.of("exact", price, "at", at));
 
         Map<String, Object> row = db.table("lines").first().orElseThrow();
-        assertEquals(price, MoneyAmount.read(row.get("cents"), 2));
-        assertEquals(price, MoneyAmount.read(row.get("exact"), 2));
-        assertEquals(price, MoneyAmount.read(row.get("text"), 2));
+        assertEquals(0, price.compareTo((BigDecimal) row.get("exact")));
         assertEquals(at, Instants.read(row.get("at")));
         assertEquals(1L, db.table("lines").whereInstantBetween("at", at, at.plusMillis(1)).count());
         assertEquals(0L, db.table("lines").whereInstantBetween("at", at.plusMillis(1), at.plusSeconds(1)).count());

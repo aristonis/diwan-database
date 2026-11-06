@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import org.aristonis.diwan.database.Connection;
-import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
  * The chunking layer of {@link Builder}: reading a large result in pages ({@code chunk},
@@ -394,8 +393,13 @@ abstract class ChunkQueries extends WriteQueries {
      * after the last row. Unlike the page methods it needs no order. The rows are not passed through
      * the {@link Processor}.
      *
+     * <p>The cursor holds its session until it is closed, so a long loop over it leaves a PostgreSQL
+     * connection idle in transaction. Writing through the same database inside the loop needs a
+     * second connection, and a pool of one deadlocks. Use {@link #lazy(int)} for a slow loop or one
+     * that writes.
+     *
      * <pre>{@code
-     * try (RowCursor rows = db.table("orders").orderBy("id").cursor()) {
+     * try (QueryCursor<Map<String, Object>> rows = db.table("orders").orderBy("id").cursor()) {
      *     for (Map<String, Object> row : rows) {
      *         export(row);
      *     }
@@ -407,7 +411,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
      * @throws org.aristonis.diwan.database.QueryException if the database refuses the query
      */
-    public final RowCursor cursor() {
+    public final QueryCursor<Map<String, Object>> cursor() {
         return connection.cursor(toSql(), grammar.prepareBindings(getBindings()));
     }
 

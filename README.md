@@ -176,25 +176,10 @@ statement as given; build it from constants, never from user input.
 Changing an auto-increment column is not supported. On SQLite, rename or drop a column that another
 table references in a separate `Schema.table` call from a `change()`.
 
-### Money
+### Decimals and moments
 
-Store money as whole minor units, exact on every database and summed in SQL:
-
-```java
-table.money("amount", 2);                       // 10.10 is stored as 1010
-long cents = Money.toMinor(new BigDecimal("10.10"), 2);
-```
-
-Or as an exact decimal, `numeric` on PostgreSQL and checked fixed-scale text on SQLite:
-
-```java
-table.money("debit", 6).asDecimal(20).unsigned();
-String text = Money.toText(new BigDecimal("1000"), 6);   // "1000.000000"
-```
-
-Nothing rounds: a value with more decimal places than the scale is refused. Keep the currency in its
-own column. `MoneyAmount.read(row.get("amount"), 2)` reads either kind of column, on either
-database, as the same amount.
+Diwan ships no money type. Use `table.decimal("amount", 12, 2)` as in Laravel, or an integer column
+of minor units.
 
 For moments, `table.instant("created_at")` stores whole microseconds on SQLite and `timestamptz` on
 PostgreSQL; convert with `Instants.toMicros` and `Instants.read`.
@@ -231,8 +216,7 @@ query.table("users").where("id", id).delete();
 ```
 
 Every value is bound as a parameter; `raw` and the `*Raw` methods write trusted SQL as given. An
-`Instant` is stored as `Blueprint.instant` stores it; bind money explicitly with `Money.toMinor` or
-`Money.toText` and read it with `MoneyAmount.read`. Date wheres (`whereDate` and friends) are for
+`Instant` is stored as `Blueprint.instant` stores it. Date wheres (`whereDate` and friends) are for
 text date columns; use `whereInstantBetween` on instant columns. A builder is not thread-safe;
 `clone()` gives an independent copy. Differences from Laravel are listed in
 [ADR 0013](docs/adr/0013-query-grammar.md).
@@ -287,11 +271,17 @@ for (Map<String, Object> row : query.table("orders").orderBy("id").lazy(1000)) {
     export(row);
 }
 
-// Streams rows; close it, best with try-with-resources.
-try (RowCursor rows = query.table("orders").orderBy("id").cursor()) {
+// Streams rows; close it, best with try-with-resources. The cursor iterates once.
+try (QueryCursor<Map<String, Object>> rows = query.table("orders").orderBy("id").cursor()) {
     for (Map<String, Object> row : rows) {
         export(row);
     }
+}
+
+// The same rows as a lazy Stream. Closing the stream closes the cursor, so keep it in
+// try-with-resources: a bare stream().forEach(...) that stops early holds the connection.
+try (Stream<Map<String, Object>> rows = query.table("orders").orderBy("id").cursor().stream()) {
+    rows.limit(10).forEach(row -> export(row));
 }
 
 LengthAwarePage page = query.table("orders").orderBy("id").paginate(20, 3);
@@ -389,7 +379,7 @@ ModelPage<User> page = users.query().orderBy("name").paginate(20, 2);
 page.items();   // ModelCollection<User>
 page.total();
 
-try (ModelCursor<User> cursor = users.query().orderBy("id").cursor()) {
+try (QueryCursor<User> cursor = users.query().orderBy("id").cursor()) {
     for (User u : cursor) {
         // ...
     }

@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Post;
 import org.aristonis.diwan.database.eloquent.ScopeFixtures.Statement;
 import org.junit.jupiter.api.AfterEach;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -112,7 +113,7 @@ class ScopedTerminalsTest {
         table.put("lazy", new Entry(2, q -> drain(q.lazy(2))));
         table.put("lazyById", new Entry(2, q -> drain(q.lazyById(2))));
         table.put("cursor", new Entry(1, q -> {
-            try (ModelCursor<Post> cursor = q.cursor()) {
+            try (QueryCursor<Post> cursor = q.cursor()) {
                 drain(cursor);
             }
         }));

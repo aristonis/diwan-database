@@ -76,21 +76,6 @@ abstract class EloquentScopes<T extends Model> extends EloquentWheres<T> {
     }
 
     /**
-     * Applies the removals made on a group's inner builder to this builder.
-     *
-     * @param inner the inner builder of a where group, never {@code null}
-     */
-    final void mergeRemovedFrom(EloquentScopes<?> inner) {
-        if (inner.removedAll) {
-            withoutGlobalScopes();
-            return;
-        }
-        for (String name : inner.removed) {
-            withoutGlobalScope(name);
-        }
-    }
-
-    /**
      * Refuses an operation that needs a soft-deleting model.
      *
      * @param operation the operation, for the message

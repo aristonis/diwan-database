@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.driver;
 
 import java.util.Iterator;
 import java.util.Map;
+import org.aristonis.diwan.database.Internal;
 
 /**
  * Streams the rows of one read, one row at a time, while the statement stays open.
@@ -29,7 +30,9 @@ import java.util.Map;
  *     {@link #close()} must be idempotent and must release the statement even when an earlier step
  *     of closing failed. A failure while reading must be reported as a {@link DriverException}; the
  *     caller then closes the cursor.
+ * @apiNote Internal: driver SPI for dialect modules.
  */
+@Internal
 public interface RowCursor extends Iterator<Map<String, Object>>, Iterable<Map<String, Object>>, AutoCloseable {
 
     /**

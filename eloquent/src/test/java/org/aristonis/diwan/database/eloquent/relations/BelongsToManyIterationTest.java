@@ -13,7 +13,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import org.aristonis.diwan.database.eloquent.ModelCollection;
-import org.aristonis.diwan.database.eloquent.ModelCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -168,7 +168,7 @@ class BelongsToManyIterationTest {
 
     @Test
     void cursor() {
-        ModelCursor<BtmModels.Role> cursor = user(1).roles().cursor();
+        QueryCursor<BtmModels.Role> cursor = user(1).roles().cursor();
         try {
             assertEquals(new HashSet<>(Arrays.asList(1, 2)), new HashSet<>(readAll(cursor)));
         } finally {
@@ -210,7 +210,7 @@ class BelongsToManyIterationTest {
         assertTrue(roles.chunk(1, page -> visited.addAll(page.modelKeys())));
         assertTrue(roles.each(role -> collect(role, visited)));
         assertTrue(readAll(roles.lazy()).isEmpty());
-        ModelCursor<BtmModels.Role> cursor = roles.cursor();
+        QueryCursor<BtmModels.Role> cursor = roles.cursor();
         try {
             assertTrue(readAll(cursor).isEmpty());
         } finally {

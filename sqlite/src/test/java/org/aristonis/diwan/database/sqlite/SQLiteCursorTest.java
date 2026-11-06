@@ -17,8 +17,8 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.driver.RowCursor;
 import org.aristonis.diwan.database.jdbc.JdbcConnectionProvider;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,8 +97,8 @@ class SQLiteCursorTest {
 
     @Test
     void streamsWithTheStatementStillOpenAfterTheFirstRow() throws SQLException {
-        try (RowCursor cursor = db.table("items").orderBy("id").cursor()) {
-            Map<String, Object> first = cursor.next();
+        try (QueryCursor<Map<String, Object>> cursor = db.table("items").orderBy("id").cursor()) {
+            Map<String, Object> first = cursor.iterator().next();
 
             assertEquals("item1", first.get("name"));
             assertFalse(statements.get(statements.size() - 1).isClosed());
@@ -107,10 +107,81 @@ class SQLiteCursorTest {
     }
 
     @Test
+    void streamReadsEveryRowAndClosingItReleasesTheSession() throws SQLException {
+        List<Object> names;
+        try (java.util.stream.Stream<Map<String, Object>> stream = db.table("items").orderBy("id").cursor().stream()) {
+            names = stream.limit(2).map(row -> row.get("name")).collect(java.util.stream.Collectors.toList());
+            assertFalse(statements.get(statements.size() - 1).isClosed());
+        }
+
+        assertEquals(List.of("item1", "item2"), names);
+        assertTrue(statements.get(statements.size() - 1).isClosed());
+        assertEquals(1, pool.availablePermits());
+    }
+
+    @Test
+    void mappedCursorSharesTheCloseAndRefusesASecondRead() {
+        QueryCursor<Map<String, Object>> cursor = db.table("items").orderBy("id").cursor();
+        QueryCursor<Object> names = cursor.map(row -> row.get("name"));
+
+        assertEquals("item1", names.iterator().next());
+        assertThrows(IllegalStateException.class, cursor::iterator);
+        names.close();
+        cursor.close();
+
+        assertEquals(1, pool.availablePermits());
+    }
+
+    @Test
+    void aMapperThatThrowsMidStreamReturnsTheSession() {
+        QueryCursor<Object> cursor = db.table("items").orderBy("id").cursor().map(row -> {
+            if ("item3".equals(row.get("name"))) {
+                throw new IllegalStateException("cannot map");
+            }
+            return row.get("name");
+        });
+        java.util.Iterator<Object> iterator = cursor.iterator();
+        iterator.next();
+        iterator.next();
+
+        assertThrows(IllegalStateException.class, iterator::next);
+
+        assertTrue(cursor.isClosed());
+        assertEquals(1, pool.availablePermits());
+    }
+
+    @Test
+    void aMappedStreamLimitedInTryWithResourcesReturnsTheSession() {
+        QueryCursor<Object> names = db.table("items").orderBy("id").cursor().map(row -> row.get("name"));
+        List<Object> seen;
+        try (java.util.stream.Stream<Object> stream = names.stream()) {
+            seen = stream.limit(3).collect(java.util.stream.Collectors.toList());
+        }
+
+        assertEquals(List.of("item1", "item2", "item3"), seen);
+        assertTrue(names.isClosed());
+        assertEquals(1, pool.availablePermits());
+    }
+
+    @Test
+    void iteratingAfterClosingAViewFindsNothing() {
+        QueryCursor<Map<String, Object>> cursor = db.table("items").orderBy("id").cursor();
+        QueryCursor<Object> names = cursor.map(row -> row.get("name"));
+        java.util.Iterator<Object> iterator = names.iterator();
+        iterator.next();
+
+        names.close();
+
+        assertFalse(iterator.hasNext());
+        assertTrue(cursor.isClosed());
+        assertEquals(1, pool.availablePermits());
+    }
+
+    @Test
     void fiftyCursorsOnAPoolOfOneLeakNothing() {
         for (int run = 0; run < 50; run++) {
-            try (RowCursor cursor = db.table("items").orderBy("id").cursor()) {
-                cursor.next();
+            try (QueryCursor<Map<String, Object>> cursor = db.table("items").orderBy("id").cursor()) {
+                cursor.iterator().next();
             }
             int count = 0;
             for (Map<String, Object> ignored : db.table("items").cursor()) {
@@ -126,7 +197,7 @@ class SQLiteCursorTest {
         connection.transaction(tx -> {
             tx.insert("insert into items (name) values (?)", "inside");
             int count = 0;
-            try (RowCursor cursor = tx.cursor("select * from items")) {
+            try (QueryCursor<Map<String, Object>> cursor = tx.cursor("select * from items")) {
                 for (Map<String, Object> ignored : cursor) {
                     count++;
                 }

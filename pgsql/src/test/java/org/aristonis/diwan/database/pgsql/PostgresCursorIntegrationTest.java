@@ -11,16 +11,17 @@ import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.QueryException;
-import org.aristonis.diwan.database.driver.RowCursor;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.CursorPage;
 import org.aristonis.diwan.database.query.LengthAwarePage;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.query.SimplePage;
 import org.junit.jupiter.api.Test;
@@ -98,10 +99,11 @@ class PostgresCursorIntegrationTest {
         Fixture f = fixture();
 
         Object pid = assertTimeoutPreemptively(QUICK, () -> {
-            try (RowCursor cursor = f.db().cursor(SERIES)) {
-                Map<String, Object> first = cursor.next();
+            try (QueryCursor<Map<String, Object>> cursor = f.db().cursor(SERIES)) {
+                Iterator<Map<String, Object>> rows = cursor.iterator();
+                Map<String, Object> first = rows.next();
                 assertEquals(1, ((Number) first.get("g")).intValue());
-                assertEquals(2, ((Number) cursor.next().get("g")).intValue());
+                assertEquals(2, ((Number) rows.next().get("g")).intValue());
                 // A buffered read would have finished its statement; a streaming portal stays open.
                 assertEquals("idle in transaction", state(f.watcher(), first.get("pid")));
                 return first.get("pid");
@@ -119,8 +121,8 @@ class PostgresCursorIntegrationTest {
 
         f.db().session(c -> {
             Object pid;
-            try (RowCursor cursor = c.cursor(SERIES)) {
-                pid = cursor.next().get("pid");
+            try (QueryCursor<Map<String, Object>> cursor = c.cursor(SERIES)) {
+                pid = cursor.iterator().next().get("pid");
                 assertEquals("idle in transaction", state(f.watcher(), pid));
             }
             assertEquals("idle", state(f.watcher(), pid));
@@ -137,13 +139,16 @@ class PostgresCursorIntegrationTest {
         f.db().session(c -> {
             int rows = 0;
             Object pid = null;
-            RowCursor cursor = c.cursor("select pg_backend_pid() as pid, g from generate_series(1, 1200) g");
-            for (Map<String, Object> row : cursor) {
+            QueryCursor<Map<String, Object>> cursor =
+                    c.cursor("select pg_backend_pid() as pid, g from generate_series(1, 1200) g");
+            Iterator<Map<String, Object>> iterator = cursor.iterator();
+            while (iterator.hasNext()) {
+                Map<String, Object> row = iterator.next();
                 pid = row.get("pid");
                 rows++;
             }
             assertEquals(1200, rows);
-            assertFalse(cursor.hasNext());
+            assertFalse(iterator.hasNext());
             assertEquals("idle", state(f.watcher(), pid));
             c.insert("insert into notes (body) values (?)", "after exhaustion");
             assertEquals(1L, notes(f.watcher()));
@@ -159,8 +164,8 @@ class PostgresCursorIntegrationTest {
 
         assertThrows(IllegalStateException.class, () -> f.db().transaction(c -> {
             c.insert("insert into notes (body) values (?)", "rolled back");
-            try (RowCursor cursor = c.cursor("select count(*) as n from notes")) {
-                assertEquals(1L, ((Number) cursor.next().get("n")).longValue());
+            try (QueryCursor<Map<String, Object>> cursor = c.cursor("select count(*) as n from notes")) {
+                assertEquals(1L, ((Number) cursor.iterator().next().get("n")).longValue());
             }
             assertEquals(0L, notes(f.watcher()));
             throw new IllegalStateException("roll back");
@@ -175,8 +180,8 @@ class PostgresCursorIntegrationTest {
         Fixture f = fixture();
 
         f.db().transaction(c -> {
-            try (RowCursor cursor = c.cursor(SERIES)) {
-                cursor.next();
+            try (QueryCursor<Map<String, Object>> cursor = c.cursor(SERIES)) {
+                cursor.iterator().next();
                 IllegalStateException error = assertThrows(IllegalStateException.class,
                         () -> c.select("select 1"));
                 assertEquals("A cursor is open on this connection; close it first", error.getMessage());
@@ -194,10 +199,12 @@ class PostgresCursorIntegrationTest {
         Fixture f = fixture();
 
         f.db().session(c -> {
-            RowCursor cursor = c.cursor("select 1 / (g - 150000) as v from generate_series(1, 200000) g");
+            QueryCursor<Map<String, Object>> cursor =
+                    c.cursor("select 1 / (g - 150000) as v from generate_series(1, 200000) g");
+            Iterator<Map<String, Object>> rows = cursor.iterator();
             assertThrows(QueryException.class, () -> {
-                while (cursor.hasNext()) {
-                    cursor.next();
+                while (rows.hasNext()) {
+                    rows.next();
                 }
             });
             cursor.close();
@@ -215,8 +222,8 @@ class PostgresCursorIntegrationTest {
         for (int run = 0; run < 50; run++) {
             switch (run % 3) {
                 case 0 -> {
-                    try (RowCursor cursor = f.db().cursor(SERIES)) {
-                        cursor.next();
+                    try (QueryCursor<Map<String, Object>> cursor = f.db().cursor(SERIES)) {
+                        cursor.iterator().next();
                     }
                 }
                 case 1 -> {
@@ -227,8 +234,9 @@ class PostgresCursorIntegrationTest {
                     assertEquals(600, rows);
                 }
                 default -> assertThrows(QueryException.class, () -> {
-                    try (RowCursor cursor = f.db().cursor("select 1 / (g - 900) as v from generate_series(1, 1000) g")) {
-                        cursor.forEachRemaining(row -> { });
+                    try (QueryCursor<Map<String, Object>> cursor =
+                            f.db().cursor("select 1 / (g - 900) as v from generate_series(1, 1000) g")) {
+                        cursor.forEach(row -> { });
                     }
                 });
             }
@@ -282,14 +290,19 @@ class PostgresCursorIntegrationTest {
             return true;
         });
         ordered(db).lazy(2).forEach(row -> lazy.add(row.get("name")));
-        try (RowCursor cursor = ordered(db).cursor()) {
-            cursor.forEachRemaining(row -> streamed.add(row.get("name")));
+        try (QueryCursor<Map<String, Object>> cursor = ordered(db).cursor()) {
+            cursor.forEach(row -> streamed.add(row.get("name")));
+        }
+        List<Object> viaStream;
+        try (java.util.stream.Stream<Map<String, Object>> stream = ordered(db).cursor().stream()) {
+            viaStream = stream.map(row -> row.get("name")).collect(java.util.stream.Collectors.toList());
         }
 
         assertEquals(List.of(3, 3, 1), sizes);
         assertEquals(ORDERED, chunked);
         assertEquals(ORDERED, lazy);
         assertEquals(ORDERED, streamed);
+        assertEquals(ORDERED, viaStream);
     }
 
     @Test

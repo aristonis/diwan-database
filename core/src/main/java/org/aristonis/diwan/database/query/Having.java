@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.query;
 
 import java.util.List;
+import org.aristonis.diwan.database.Internal;
 
 /**
  * One condition of a having clause, as the {@link Builder} records it and a {@link QueryGrammar}
@@ -8,7 +9,10 @@ import java.util.List;
  *
  * <p>Conjunctions, values and the choice of final classes over records follow the same rules as
  * {@link Where}.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public interface Having {
 
     /**
@@ -20,7 +24,10 @@ public interface Having {
 
     /**
      * A column compared with a value.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Basic implements Having {
         private final String conjunction;
         private final String column;
@@ -82,7 +89,10 @@ public interface Having {
 
     /**
      * Trusted SQL written as given.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Raw implements Having {
         private final String conjunction;
         private final String sql;
@@ -120,7 +130,10 @@ public interface Having {
 
     /**
      * A column that is null.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Null implements Having {
         private final String conjunction;
         private final String column;
@@ -158,7 +171,10 @@ public interface Having {
 
     /**
      * A column that is not null.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class NotNull implements Having {
         private final String conjunction;
         private final String column;
@@ -196,7 +212,10 @@ public interface Having {
 
     /**
      * A column between two values.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Between implements Having {
         private final String conjunction;
         private final String column;
@@ -258,7 +277,10 @@ public interface Having {
 
     /**
      * A group of having conditions in parentheses.
+     *
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     final class Nested implements Having {
         private final String conjunction;
         private final Builder query;

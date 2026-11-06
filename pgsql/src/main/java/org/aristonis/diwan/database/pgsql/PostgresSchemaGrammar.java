@@ -501,8 +501,6 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 return column.rawDefinition().orElseThrow(IllegalStateException::new);
             case INSTANT:
                 return "timestamp(6) with time zone";
-            case MONEY:
-                return column.total() == 0 ? "bigint" : "numeric(" + column.total() + ", " + column.places() + ")";
             default:
                 return super.type(column);
         }
@@ -535,9 +533,6 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
             if (column.isAutoIncrement() && !hasPrimaryCommand(blueprint)) {
                 sql.append(" primary key");
             }
-        }
-        if (column.type() == ColumnType.MONEY && column.isUnsigned()) {
-            sql.append(" check (").append(wrap(column.name())).append(" >= 0)");
         }
         for (String check : column.checks()) {
             sql.append(" check (").append(check).append(')');

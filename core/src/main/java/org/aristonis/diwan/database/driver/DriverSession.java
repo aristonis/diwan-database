@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.driver;
 
 import java.util.List;
 import java.util.Map;
+import org.aristonis.diwan.database.Internal;
 
 /**
  * Runs statements and transaction commands on one physical connection.
@@ -25,7 +26,9 @@ import java.util.Map;
  *     the values contract and be fully converted before the statement call returns. After any failed
  *     statement the session must stay usable, subject to the database's own rules (PostgreSQL, for
  *     example, aborts the surrounding transaction).
+ * @apiNote Internal: driver SPI for dialect modules.
  */
+@Internal
 public interface DriverSession extends AutoCloseable {
 
     /**

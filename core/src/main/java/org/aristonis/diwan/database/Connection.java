@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.aristonis.diwan.database.driver.DriverInfo;
-import org.aristonis.diwan.database.driver.RowCursor;
+import org.aristonis.diwan.database.query.QueryCursor;
 
 /**
  * Sends SQL to one database and manages transactions on it.
@@ -295,7 +295,7 @@ public interface Connection {
     boolean unprepared(String sql);
 
     /**
-     * Runs a read and streams its rows through a cursor, one row at a time.
+     * Runs a read and streams its rows through a {@link QueryCursor}, one row at a time.
      *
      * <p>The cursor must be closed, best with try-with-resources; it also closes itself when its
      * last row is read. On the root connection it holds a session of its own until then, so a cursor
@@ -306,6 +306,11 @@ public interface Connection {
      *
      * <p>Rows are unmodifiable, with columns in select order. A failure while reading closes the
      * cursor and is thrown as a {@link QueryException}. The cursor belongs to the calling thread.
+     *
+     * <p>The cursor holds its session until it is closed, so a long loop over it leaves a PostgreSQL
+     * connection idle in transaction. Writing through the same database inside the loop needs a
+     * second connection, and a pool of one deadlocks. For a slow loop or one that writes, read in
+     * pages instead, as {@code lazy()} on the query builder does.
      *
      * @implSpec The default throws {@link UnsupportedOperationException}; every connection of this
      *     library overrides it.
@@ -320,12 +325,12 @@ public interface Connection {
      * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
      * @throws QueryException if the database refuses the read or no session can be opened
      */
-    default RowCursor cursor(String sql, Object... bindings) {
+    default QueryCursor<Map<String, Object>> cursor(String sql, Object... bindings) {
         throw new UnsupportedOperationException("cursor");
     }
 
     /**
-     * Runs a read and streams its rows through a cursor, one row at a time.
+     * Runs a read and streams its rows through a {@link QueryCursor}, one row at a time.
      *
      * <p>The cursor must be closed, best with try-with-resources; it also closes itself when its
      * last row is read. On the root connection it holds a session of its own until then, so a cursor
@@ -336,6 +341,11 @@ public interface Connection {
      *
      * <p>Rows are unmodifiable, with columns in select order. A failure while reading closes the
      * cursor and is thrown as a {@link QueryException}. The cursor belongs to the calling thread.
+     *
+     * <p>The cursor holds its session until it is closed, so a long loop over it leaves a PostgreSQL
+     * connection idle in transaction. Writing through the same database inside the loop needs a
+     * second connection, and a pool of one deadlocks. For a slow loop or one that writes, read in
+     * pages instead, as {@code lazy()} on the query builder does.
      *
      * @implSpec The default throws {@link UnsupportedOperationException}; every connection of this
      *     library overrides it.
@@ -351,7 +361,7 @@ public interface Connection {
      * @throws UnsupportedOperationException in pretend mode, or if the driver cannot stream
      * @throws QueryException if the database refuses the read or no session can be opened
      */
-    default RowCursor cursor(String sql, List<?> bindings) {
+    default QueryCursor<Map<String, Object>> cursor(String sql, List<?> bindings) {
         throw new UnsupportedOperationException("cursor");
     }
 

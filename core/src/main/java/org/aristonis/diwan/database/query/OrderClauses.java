@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Internal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -266,6 +267,34 @@ abstract class OrderClauses extends SelectClauses {
         } else if (value >= 0) {
             this.unionLimit = value;
         }
+        return self();
+    }
+
+    /**
+     * Removes the limit and the offset, including those of a union.
+     *
+     * @return this builder
+     * @apiNote Internal: used by the eloquent module; may change without notice.
+     */
+    @Internal
+    public final Builder clearLimitAndOffset() {
+        limit = null;
+        offset = null;
+        unionLimit = null;
+        unionOffset = null;
+        return self();
+    }
+
+    /**
+     * Removes the selected columns and the bindings of the select clause.
+     *
+     * @return this builder
+     * @apiNote Internal: used by the eloquent module; may change without notice.
+     */
+    @Internal
+    public final Builder clearColumns() {
+        columns.clear();
+        bindings.get(BindingType.SELECT).clear();
         return self();
     }
 

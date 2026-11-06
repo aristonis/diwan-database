@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
-
+import org.aristonis.diwan.database.Internal;
 
 /**
  * The state layer of {@link Builder}: fields, bindings, getters, copying and compiling to SQL.
@@ -220,7 +220,9 @@ abstract class BuilderState {
      *
      * @return the columns, each a {@code String} or {@link Expression}, unmodifiable, never
      *     {@code null}; empty when none were selected, which compiles to {@code *}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Object> getColumns() {
         return Collections.unmodifiableList(new ArrayList<>(columns));
     }
@@ -229,7 +231,9 @@ abstract class BuilderState {
      * Returns whether the query returns only distinct rows.
      *
      * @return {@code true} if {@link Builder#distinct()} was called
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final boolean isDistinct() {
         return distinct;
     }
@@ -249,7 +253,9 @@ abstract class BuilderState {
      * {@link Builder#fromRaw}.
      *
      * @return the SQL written after {@code from}, empty when the query reads a table or nothing
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final Optional<Expression> getFromExpression() {
         return Optional.ofNullable(fromExpression);
     }
@@ -281,7 +287,9 @@ abstract class BuilderState {
      *
      * @return copies of the joins in the order added, unmodifiable, never {@code null}; changing a
      *     copy never changes this builder
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<JoinClause> getJoins() {
         List<JoinClause> copies = new ArrayList<>(joins.size());
         for (JoinClause join : joins) {
@@ -294,7 +302,9 @@ abstract class BuilderState {
      * Returns the where conditions.
      *
      * @return the conditions in the order added, unmodifiable, never {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Where> getWheres() {
         return Collections.unmodifiableList(new ArrayList<>(wheres));
     }
@@ -304,7 +314,9 @@ abstract class BuilderState {
      *
      * @return the entries, each a {@code String} or {@link Expression}, unmodifiable, never
      *     {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Object> getGroups() {
         return Collections.unmodifiableList(new ArrayList<>(groups));
     }
@@ -313,7 +325,9 @@ abstract class BuilderState {
      * Returns the having conditions.
      *
      * @return the conditions in the order added, unmodifiable, never {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Having> getHavings() {
         return Collections.unmodifiableList(new ArrayList<>(havings));
     }
@@ -322,7 +336,9 @@ abstract class BuilderState {
      * Returns the orders.
      *
      * @return the orders in the order added, unmodifiable, never {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Order> getOrders() {
         return Collections.unmodifiableList(new ArrayList<>(orders));
     }
@@ -331,7 +347,9 @@ abstract class BuilderState {
      * Returns the row limit.
      *
      * @return the limit, empty if none
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final OptionalInt getLimit() {
         return limit == null ? OptionalInt.empty() : OptionalInt.of(limit);
     }
@@ -340,7 +358,9 @@ abstract class BuilderState {
      * Returns the number of rows skipped.
      *
      * @return the offset, empty if none
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final OptionalInt getOffset() {
         return offset == null ? OptionalInt.empty() : OptionalInt.of(offset);
     }
@@ -349,7 +369,9 @@ abstract class BuilderState {
      * Returns the aggregate the query computes instead of its columns.
      *
      * @return the aggregate, empty for a plain select
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final Optional<Aggregate> getAggregate() {
         return Optional.ofNullable(aggregate);
     }
@@ -358,7 +380,9 @@ abstract class BuilderState {
      * Returns the queries joined by {@code union} or {@code union all}.
      *
      * @return the unions in the order added, unmodifiable, never {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Union> getUnions() {
         return Collections.unmodifiableList(new ArrayList<>(unions));
     }
@@ -367,7 +391,9 @@ abstract class BuilderState {
      * Returns the orders that apply to the whole union: those added after the first union.
      *
      * @return the orders in the order added, unmodifiable, never {@code null}
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final List<Order> getUnionOrders() {
         return Collections.unmodifiableList(new ArrayList<>(unionOrders));
     }
@@ -376,7 +402,9 @@ abstract class BuilderState {
      * Returns the row limit of the whole union: one set after the first union.
      *
      * @return the limit, empty if none
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final OptionalInt getUnionLimit() {
         return unionLimit == null ? OptionalInt.empty() : OptionalInt.of(unionLimit);
     }
@@ -385,7 +413,9 @@ abstract class BuilderState {
      * Returns the number of rows the whole union skips: an offset set after the first union.
      *
      * @return the offset, empty if none
+     * @apiNote Internal: read by dialect grammars; may change without notice.
      */
+    @Internal
     public final OptionalInt getUnionOffset() {
         return unionOffset == null ? OptionalInt.empty() : OptionalInt.of(unionOffset);
     }

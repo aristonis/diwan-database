@@ -2,7 +2,6 @@ package org.aristonis.diwan.database.eloquent.relations;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
@@ -141,7 +140,7 @@ class BelongsToManyExistenceTest {
     void whereHasClosure() {
         EloquentBuilder<BtmModels.User> query = users().whereHas("roles", q -> q.where("name", "admin"));
 
-        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and (\"name\" = ?))", query.toSql());
+        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and \"name\" = ?)", query.toSql());
         assertEquals(Collections.singletonList("admin"), query.getBindings());
         assertEquals(Arrays.asList(1, 2), query.get().modelKeys());
     }
@@ -151,7 +150,7 @@ class BelongsToManyExistenceTest {
         EloquentBuilder<BtmModels.User> query = users().whereHas("roles",
                 q -> q.where("role_user.status", "active"));
 
-        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and (\"role_user\".\"status\" = ?))",
+        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and \"role_user\".\"status\" = ?)",
                 query.toSql());
         assertEquals(Arrays.asList(1, 2), query.get().modelKeys());
     }
@@ -162,8 +161,8 @@ class BelongsToManyExistenceTest {
                 .whereRelation("roles", "role_user.status", "active")
                 .orWhereRelation("roles", "role_user.status", "pending");
 
-        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and (\"role_user\".\"status\" = ?))"
-                + " or exists (select * " + ROLES_OF_USER + " and (\"role_user\".\"status\" = ?))", query.toSql());
+        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and \"role_user\".\"status\" = ?)"
+                + " or exists (select * " + ROLES_OF_USER + " and \"role_user\".\"status\" = ?)", query.toSql());
         assertEquals(Arrays.asList("active", "pending"), query.getBindings());
         assertEquals(Arrays.asList(1, 2), query.get().modelKeys());
     }
@@ -173,9 +172,9 @@ class BelongsToManyExistenceTest {
         assertEquals(USERS + "\"id\" = ? or " + EXISTS_ROLES, users().where("id", 3).orHas("roles").toSql());
         assertEquals(USERS + "\"id\" = ? or " + NOT_EXISTS_ROLES,
                 users().where("id", 3).orDoesntHave("roles").toSql());
-        assertEquals(USERS + "\"id\" = ? or exists (select * " + ROLES_OF_USER + " and (\"name\" = ?))",
+        assertEquals(USERS + "\"id\" = ? or exists (select * " + ROLES_OF_USER + " and \"name\" = ?)",
                 users().where("id", 3).orWhereHas("roles", q -> q.where("name", "admin")).toSql());
-        assertEquals(USERS + "\"id\" = ? or not exists (select * " + ROLES_OF_USER + " and (\"name\" = ?))",
+        assertEquals(USERS + "\"id\" = ? or not exists (select * " + ROLES_OF_USER + " and \"name\" = ?)",
                 users().where("id", 3).orWhereDoesntHave("roles", q -> q.where("name", "admin")).toSql());
     }
 
@@ -183,7 +182,7 @@ class BelongsToManyExistenceTest {
     void nestedPath() {
         EloquentBuilder<BtmModels.User> query = users().has("roles.permissions");
 
-        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and (" + PERMISSIONS_OF_ROLE + "))",
+        assertEquals(USERS + "exists (select * " + ROLES_OF_USER + " and " + PERMISSIONS_OF_ROLE + ")",
                 query.toSql());
         assertEquals(Arrays.asList(1, 2), query.get().modelKeys());
     }
@@ -192,7 +191,7 @@ class BelongsToManyExistenceTest {
     void nestedPathDoesntHaveNegatesOnlyTheHead() {
         EloquentBuilder<BtmModels.User> query = users().doesntHave("roles.permissions");
 
-        assertEquals(USERS + "not exists (select * " + ROLES_OF_USER + " and (" + PERMISSIONS_OF_ROLE + "))",
+        assertEquals(USERS + "not exists (select * " + ROLES_OF_USER + " and " + PERMISSIONS_OF_ROLE + ")",
                 query.toSql());
         assertEquals(Arrays.asList(3, 4), query.get().modelKeys());
     }
@@ -230,9 +229,12 @@ class BelongsToManyExistenceTest {
     }
 
     @Test
-    void closureJoinRefused() {
-        assertThrows(IllegalStateException.class, () -> users().whereHas("roles",
-                q -> q.join("permission_role", "roles.id", "=", "permission_role.role_id")));
+    void closureJoinRendersInsideTheSubquery() {
+        String sql = users().whereHas("roles",
+                q -> q.join("permission_role", "roles.id", "=", "permission_role.role_id")).toSql();
+
+        assertTrue(sql.contains("inner join \"permission_role\" on \"roles\".\"id\" = \"permission_role\".\"role_id\""),
+                sql);
     }
 
     @Test

@@ -23,6 +23,14 @@ class ModelCastsTest {
         }
     }
 
+    /** A flag stored as text, so a boolean written to it compares against the PHP-style text. */
+    static final class Flagged extends Model {
+        @Override
+        protected Map<String, Cast<?>> casts() {
+            return Map.of("flag", Casts.string());
+        }
+    }
+
     /** A counter whose votes read as text, so a cast-aware increment would differ from a raw one. */
     static final class Counter extends Model {
         static final ModelQuery<Counter> QUERY = ModelQuery.of(Counter.class, Counter::new);
@@ -74,6 +82,17 @@ class ModelCastsTest {
         assertFalse(order.isDirty("total"));
         order.setAttribute("total", "12.51");
         assertTrue(order.isDirty("total"));
+    }
+
+    @Test
+    void stringCastTrueOverStoredOneIsClean() {
+        Flagged flagged = new Flagged();
+        flagged.setRawAttributes(row("flag", "1"), true);
+
+        flagged.setAttribute("flag", Boolean.TRUE);
+
+        assertFalse(flagged.isDirty("flag"));
+        assertEquals("1", flagged.getAttribute("flag"));
     }
 
     @Test

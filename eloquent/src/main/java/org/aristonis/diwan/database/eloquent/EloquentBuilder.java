@@ -18,6 +18,7 @@ import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.Cursor;
 import org.aristonis.diwan.database.query.CursorPage;
 import org.aristonis.diwan.database.query.LengthAwarePage;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.aristonis.diwan.database.query.SimplePage;
 
 /**
@@ -71,14 +72,16 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
     }
 
     private T hydrateOne(Map<String, ?> row) {
+        return hydrateOne(row, castsToMerge(), rowHook());
+    }
+
+    private T hydrateOne(Map<String, ?> row, Map<String, Cast<?>> casts, Consumer<? super T> hook) {
         T loaded = source.newModel();
         // Before hydrateFrom, so retrieved() already reads through the casts (Laravel newFromBuilder).
-        Map<String, Cast<?>> casts = castsToMerge();
         if (!casts.isEmpty()) {
             loaded.mergeResolvedCasts(casts);
         }
         loaded.hydrateFrom(new LinkedHashMap<String, Object>(row));
-        Consumer<? super T> hook = rowHook();
         if (hook != null) {
             hook.accept(loaded);
         }
@@ -499,19 +502,30 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
     }
 
     /**
-     * Streams the models through one open cursor; close it, best with try-with-resources.
+     * Streams the models through one open {@link QueryCursor}; close it, best with try-with-resources.
+     * {@code stream()} on it releases the connection only when the stream is closed.
      *
      * <p>Eager loads are refused: loading them per row would run one query per model, and Laravel
      * ignores them here. {@link #lazy(int)} reads in pages and eager loads each page.
      *
+     * <p>The casts and the row hook are read once, when the cursor opens; a change to this builder
+     * afterwards does not reach rows already streaming.
+     *
+     * <p>The cursor holds its session until it is closed, so a long loop over it leaves a PostgreSQL
+     * connection idle in transaction. Writing through the same database inside the loop needs a
+     * second connection, and a pool of one deadlocks. Use {@link #lazy(int)} for a slow loop or one
+     * that writes.
+     *
      * @return the open cursor, never {@code null}
      * @throws IllegalStateException if eager loads are set
      */
-    public ModelCursor<T> cursor() {
+    public QueryCursor<T> cursor() {
         if (hasEagerLoads()) {
             throw new IllegalStateException("Eager loading is not supported with cursor(); use lazy()");
         }
-        return new ModelCursor<>(scoped().cursor(), this::hydrateOne);
+        Map<String, Cast<?>> casts = castsToMerge();
+        Consumer<? super T> hook = rowHook();
+        return scoped().cursor().map(row -> hydrateOne(row, casts, hook));
     }
 
     // ---- pages ----

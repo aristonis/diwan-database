@@ -160,7 +160,7 @@ class BelongsToManyAggregateTest {
         EloquentBuilder<BtmModels.User> query = users().withCount(
                 one("roles", q -> q.where("role_user.status", "active"))).orderBy("id");
 
-        assertEquals(SELECT_USERS + "(select count(*) " + ROLE_JOIN + " and (\"role_user\".\"status\" = ?))"
+        assertEquals(SELECT_USERS + "(select count(*) " + ROLE_JOIN + " and \"role_user\".\"status\" = ?)"
                 + " as \"roles_count\"" + FROM_USERS + " order by \"id\" asc", query.toSql());
         assertEquals(Collections.singletonList("active"), query.getBindings());
         assertEquals(1L, number(query.get().get(0), "roles_count"));
@@ -206,21 +206,20 @@ class BelongsToManyAggregateTest {
     }
 
     @Test
-    void closureJoinRefused() {
-        EloquentBuilder<BtmModels.User> query = users();
+    void closureJoinAllowed() {
+        EloquentBuilder<BtmModels.User> query = users().withCount(
+                one("roles", q -> q.join("permission_role", "roles.id", "=", "permission_role.role_id")));
 
-        assertThrows(IllegalStateException.class, () -> query.withCount(
-                one("roles", q -> q.join("permission_role", "roles.id", "=", "permission_role.role_id"))));
-        assertEquals(PLAIN_USERS, query.toSql());
+        assertTrue(query.toSql().contains("inner join \"permission_role\" on"), query.toSql());
     }
 
     @Test
-    void closureCarryOver() {
+    void closureClearsColumnsOrdersAndLimit() {
         EloquentBuilder<BtmModels.User> query = users().withCount(
                 one("roles", q -> q.limit(1).select("name").orderBy("name")));
 
         String sql = query.toSql();
-        assertTrue(sql.contains(ROLE_JOIN + " limit 1) as \"roles_count\""), sql);
+        assertTrue(sql.contains(ROLE_JOIN + ") as \"roles_count\""), sql);
         assertFalse(sql.contains("order by"), sql);
         assertFalse(sql.contains("\"name\""), sql);
         assertEquals(2L, number(query.get().get(0), "roles_count"));

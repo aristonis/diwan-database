@@ -134,18 +134,4 @@ class SQLiteRebuildDetailsTest {
         assertEquals("app_users", s.foreignKeys("posts").get(0).foreignTable());
         assertThrows(QueryException.class, () -> prefixed.insert("insert into app_posts (user_id) values (9)"));
     }
-
-    @Test
-    void aMoneyColumnCanBeRenamedOnOldSqlite() {
-        schema.create("ledger", t -> {
-            t.id();
-            t.money("debit", 2).asDecimal(12);
-        });
-        db.insert("insert into ledger (debit) values ('10.50')");
-
-        old.table("ledger", t -> t.renameColumn("debit", "amount"));
-
-        assertEquals("10.50", db.scalar("select amount from ledger").get());
-        assertThrows(QueryException.class, () -> db.insert("insert into ledger (amount) values ('1e3')"));
-    }
 }

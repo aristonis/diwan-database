@@ -1,10 +1,14 @@
 package org.aristonis.diwan.database.query;
 
 import java.util.List;
+import org.aristonis.diwan.database.Internal;
 
 /**
  * A row of columns compared with a row of values: {@code ("a", "b") < (?, ?)}.
+ *
+ * @apiNote Internal: read by dialect grammars; may change without notice.
  */
+@Internal
 public final class WhereRowValues implements Where {
     private final String conjunction;
     private final List<String> columns;

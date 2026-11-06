@@ -75,7 +75,8 @@ final class RecordingConnection {
             case "select":
                 return rows.getOrDefault(sql, List.of());
             case "cursor":
-                return new ListCursor(rows.getOrDefault(sql, List.of()));
+                return new org.aristonis.diwan.database.query.internal.MappingCursor<Map<String, Object>>(
+                        new ListCursor(rows.getOrDefault(sql, List.of())), java.util.function.Function.identity());
             case "insert":
             case "statement":
                 return true;

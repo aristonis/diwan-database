@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,8 +20,6 @@ import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
 import org.aristonis.diwan.database.values.Instants;
-import org.aristonis.diwan.database.values.Money;
-import org.aristonis.diwan.database.values.MoneyAmount;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,7 +48,7 @@ class SQLiteQueryIntegrationTest {
         });
         schema.create("lines", t -> {
             t.id();
-            t.money("cents", 2);
+            t.integer("cents");
             t.instant("at");
         });
         schema.create("tokens", t -> {
@@ -220,14 +217,12 @@ class SQLiteQueryIntegrationTest {
     }
 
     @Test
-    void moneyAndInstantsRoundTrip() {
+    void instantsRoundTrip() {
         Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
-        BigDecimal amount = new BigDecimal("12.34");
 
-        db.table("lines").insert(row("cents", Money.toMinor(amount, 2), "at", at));
+        db.table("lines").insert(row("cents", 1234, "at", at));
         Map<String, Object> stored = db.table("lines").first().orElseThrow();
 
-        assertEquals(MoneyAmount.of(amount, 2), MoneyAmount.read(stored.get("cents"), 2));
         assertEquals(at, Instants.read(stored.get("at")));
         assertEquals(Instants.toMicros(at), stored.get("at"));
     }

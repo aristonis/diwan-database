@@ -15,7 +15,6 @@ import org.aristonis.diwan.database.eloquent.EloquentBuilder;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.internal.Access;
-import org.aristonis.diwan.database.query.BindingType;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.Expression;
 
@@ -26,9 +25,11 @@ import org.aristonis.diwan.database.query.Expression;
  * <p>Each subselect is the relation's existence query ({@code whereColumn} on the keys, a
  * {@code laravel_reserved_N} alias for a self relation from the outer builder's counter), with
  * the aggregate expression as its only column. The column is qualified after the alias is taken,
- * so the expression and the {@code from} clause always name the same alias. A constraint runs in
- * a where group; its limit, offset and groupBy are carried to the subselect, any other clause kind
- * is refused. {@code exists} is written as {@code exists(...) as alias} and cast to boolean
+ * so the expression and the {@code from} clause always name the same alias. A constraint runs on the
+ * subselect itself, as for {@code whereHas}: it may add joins, and its wheres are wrapped in one
+ * where group. The columns, orders, limit and offset are then cleared, and a groupBy, having,
+ * {@code distinct} or union is refused; {@code exists} drops only the orders and keeps the limit
+ * and offset. {@code exists} is written as {@code exists(...) as alias} and cast to boolean
  * through the builder's cast overlay; every other value keeps the driver's type.
  *
  * <p>Every name, the function and every constraint are checked and built before the outer
@@ -48,9 +49,6 @@ final class RelationAggregates {
     private static final int ALIAS_SEGMENTS = 3;
     private static final int FUNCTION_SHOWN = 80;
     private static final String UCWORDS_DELIMITERS = " \t\r\n\f\u000B";
-
-    /** The binding buckets whose presence on a constraint group means a refused clause kind. */
-    private static final Map<BindingType, String> REFUSED_BINDINGS = refusedBindings();
 
     private RelationAggregates() {
     }
@@ -83,12 +81,11 @@ final class RelationAggregates {
      *     exists, or {@code null} for one related row's column
      * @throws NullPointerException if {@code outer}, {@code relations} or {@code column} is
      *     {@code null}
-     * @throws IllegalArgumentException if the function is not one of the six, or the column is
-     *     neither a {@code String} nor an {@link Expression}
+     * @throws IllegalArgumentException if the function is not one of the six, the column is
+     *     neither a {@code String} nor an {@link Expression}, or a constraint adds a groupBy, having,
+     *     {@code distinct} or union to a subselect other than {@code exists}
      * @throws RelationNotFoundException if a name is unknown, is a dot path, or has a malformed
      *     {@code as} alias
-     * @throws IllegalStateException if a constraint uses a clause other than where, limit,
-     *     offset and groupBy
      */
     static void add(EloquentBuilder<?> outer, Map<String, Consumer<EloquentBuilder<?>>> relations, Object column,
             String function) {
@@ -214,14 +211,13 @@ final class RelationAggregates {
             String columnText, Map<String, Object> existsCasts) {
         EloquentBuilder<?> sub = entry.relation.existenceQuery(outer, Access.eloquent().aliases(outer));
         Access.eloquent().shareAliases(outer, sub);
+        if (entry.constraint != null) {
+            ExistenceConstraint.run(sub, entry.constraint);
+        }
+        entry.relation.completeExistence(sub);
+        prepare(sub, entry.name, fn);
         String expression = expression(sub, column, fn);
         sub.query(base -> base.select(Expression.raw(expression)));
-        constrain(sub, entry, outer.getModel());
-        entry.relation.completeExistence(sub);
-        sub.query(Builder::reorder);
-        if (fn == null) {
-            sub.query(base -> base.limit(1));
-        }
         String alias = entry.alias != null ? entry.alias : snakeAlias(entry.name, fn, columnText);
         Builder built = sub.toBase();
         if (EXISTS.equals(fn)) {
@@ -231,6 +227,21 @@ final class RelationAggregates {
             return base -> base.selectRaw(sql, bindings);
         }
         return base -> base.selectSub(built, alias);
+    }
+
+    // A value aggregate is one row, so it is prepared like a count existence query. An exists
+    // aggregate renders EXISTS, so, as for whereHas, only its orders are dropped and its limit and
+    // offset stay. One related row's column takes limit 1 in place of the constraint's limit.
+    private static void prepare(EloquentBuilder<?> sub, String relation, String fn) {
+        if (EXISTS.equals(fn)) {
+            sub.query(Builder::clearColumns);
+            sub.query(Builder::reorder);
+            return;
+        }
+        ExistenceConstraint.prepareValue(sub, relation, "aggregate");
+        if (fn == null) {
+            sub.query(base -> base.limit(1));
+        }
     }
 
     // Laravel qualifies a bare column with the self alias by peeking the counter; here the
@@ -247,91 +258,6 @@ final class RelationAggregates {
             return value;
         }
         return fn + "(" + value + ")";
-    }
-
-    // The constraint group only merges wheres and scope removals back from its nested builder, so the clauses an
-    // aggregate constraint may also set are copied here, and any other kind is refused.
-    private static void constrain(EloquentBuilder<?> sub, Entry entry, Model model) {
-        if (entry.constraint == null) {
-            return;
-        }
-        Builder[] group = new Builder[1];
-        Access.eloquent().constraintGroup(sub, q -> {
-            entry.constraint.accept(q);
-            group[0] = q.toBase();
-        });
-        Builder from = group[0];
-        if (from == null) {
-            return;
-        }
-        String refused = refusedKind(from, sub.toBase());
-        if (refused != null) {
-            throw new IllegalStateException("The aggregate constraint of relation [" + entry.name + "] on model ["
-                    + model.getClass().getName() + "] uses [" + refused
-                    + "]; aggregate constraints support where, limit, offset and groupBy");
-        }
-        sub.query(to -> carryOver(from, to));
-    }
-
-    private static String refusedKind(Builder from, Builder to) {
-        if (from.isDistinct()) {
-            return "distinct";
-        }
-        if (!from.getJoins().isEmpty()) {
-            return "join";
-        }
-        if (!from.getHavings().isEmpty()) {
-            return "having";
-        }
-        if (!from.getUnions().isEmpty() || !from.getUnionOrders().isEmpty() || from.getUnionLimit().isPresent()
-                || from.getUnionOffset().isPresent()) {
-            return "union";
-        }
-        if (from.getAggregate().isPresent()) {
-            return "aggregate";
-        }
-        if (from.getFromExpression().isPresent() || !Objects.equals(from.getFrom(), to.getFrom())) {
-            return "from";
-        }
-        for (Object group : from.getGroups()) {
-            if (!(group instanceof String) && !(group instanceof Expression)) {
-                return "groupBy";
-            }
-        }
-        Map<BindingType, List<Object>> bindings = from.getRawBindings();
-        for (Map.Entry<BindingType, String> bucket : REFUSED_BINDINGS.entrySet()) {
-            List<Object> values = bindings.get(bucket.getKey());
-            if (values != null && !values.isEmpty()) {
-                return bucket.getValue();
-            }
-        }
-        return null;
-    }
-
-    private static void carryOver(Builder from, Builder to) {
-        from.getLimit().ifPresent(to::limit);
-        from.getOffset().ifPresent(to::offset);
-        for (Object group : from.getGroups()) {
-            if (group instanceof Expression) {
-                to.groupByRaw(((Expression) group).sql());
-            } else {
-                to.groupBy((String) group);
-            }
-        }
-        List<Object> groupBindings = from.getRawBindings().get(BindingType.GROUP_BY);
-        if (groupBindings != null && !groupBindings.isEmpty()) {
-            to.addBindings(groupBindings, BindingType.GROUP_BY);
-        }
-    }
-
-    private static Map<BindingType, String> refusedBindings() {
-        Map<BindingType, String> refused = new LinkedHashMap<>();
-        refused.put(BindingType.FROM, "from");
-        refused.put(BindingType.JOIN, "join");
-        refused.put(BindingType.HAVING, "having");
-        refused.put(BindingType.UNION, "union");
-        refused.put(BindingType.UNION_ORDER, "union");
-        return Collections.unmodifiableMap(refused);
     }
 
     /**

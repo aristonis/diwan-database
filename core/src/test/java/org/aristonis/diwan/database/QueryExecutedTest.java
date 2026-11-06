@@ -14,7 +14,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import org.aristonis.diwan.database.driver.RowCursor;
+import java.util.Map;
+import org.aristonis.diwan.database.query.QueryCursor;
 import org.junit.jupiter.api.Test;
 
 /** What a successful statement reports to a listener, and what the event does with its data. */
@@ -106,7 +107,7 @@ class QueryExecutedTest {
 
     @Test
     void reportsACursorOnceItIsOpened() {
-        try (RowCursor cursor = connection().cursor("select * from t where a = ?", 7)) {
+        try (QueryCursor<Map<String, Object>> cursor = connection().cursor("select * from t where a = ?", 7)) {
             assertNotNull(cursor);
             assertEquals(1, listener.executed().size());
         }

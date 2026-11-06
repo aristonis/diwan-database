@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.driver;
 
+import org.aristonis.diwan.database.Internal;
+
 /**
  * Opens sessions on one database for Diwan Database.
  *
@@ -9,7 +11,9 @@ package org.aristonis.diwan.database.driver;
  *
  * @implSpec Implementations must be safe to call from several threads at once; each call to
  *     {@link #open()} returns a new session that is used by one thread at a time.
+ * @apiNote Internal: driver SPI for dialect modules.
  */
+@Internal
 public interface Driver {
 
     /**
