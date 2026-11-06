@@ -103,6 +103,9 @@ db.transaction(c -> {
 
 ## Limits
 
+- In the generated Javadoc, `Builder` methods declared in its package-private layers show their
+  links as plain text; javadoc only links a member to its declaring class. The methods are public
+  and callable; the guides on the docs site describe them.
 - A right join needs SQLite 3.39 or later. Older SQLite, including Android 9 to 13, reports its
   own error as a `QueryException`.
 - `upsert` needs SQLite 3.24 or later, which is Android API 30 and up. Older SQLite, as on

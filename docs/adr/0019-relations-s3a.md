@@ -4,6 +4,8 @@
 
 Accepted
 
+Superseded in part: attach, detach and sync arrived later (ADR 0020).
+
 ## Context
 
 On top of the relations in [ADR 0017](0017-relations.md) and [ADR 0018](0018-relations-s2.md),

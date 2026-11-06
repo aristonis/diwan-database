@@ -221,9 +221,28 @@ Index the joining table on a unique (`user_id`, `role_id`) and on `role_id`. Eac
 `user_id`, which the leading column of the unique index serves. Without that index each outer row
 scans the joining table.
 
-`attach`, `detach` and `sync` are not in this read side. A joining row without a primary key
-refuses `update`, `delete`, `increment`, `decrement`, `refresh` and `fresh` with
-`IllegalStateException` before any statement runs.
+`attach`, `detach` and `sync` write the joining rows; see [pivot writes](#pivot-writes). A joining
+row without a primary key refuses `update`, `delete`, `increment`, `decrement`, `refresh` and
+`fresh` with `IllegalStateException` before any statement runs.
+
+### Pivot writes
+
+`BelongsToMany` writes the joining table directly: `attach`, `detach`, `updateExistingPivot`,
+`sync`, `syncWithoutDetaching`, `syncWithPivotValues` and `toggle`. Each takes one `Object` for the
+ids: a scalar, a model, a collection or array of either, or a map from id to the joining attributes
+for that id. Each write has an overload with a `touch` flag. `sync` and `toggle` return a
+`SyncResult` with the attached, detached and updated keys.
+
+```java
+user.roles().attach(5, Map.of("status", "active"));
+SyncResult result = user.roles().sync(List.of(1, 2, 3));   // detaches the rest
+user.roles().detach(2);
+```
+
+The recorded pivot clauses apply to `detach` and `updateExistingPivot` inside one group, followed
+by the parent key, so an `or` among them cannot reach another parent's rows. A call never binds more
+than 900 values in one statement, and a write that needs several statements runs them in one
+transaction, so the call applies in full or not at all. See [ADR 0020](../../adr/0020-relations-s3b.md).
 
 ## Aggregates, touches, push and chaperone
 
@@ -347,8 +366,8 @@ SQLite 3.24 or later (Android API 30+). See the
 - `cursorPaginate` refuses an order on a joining-table column. Order by its `pivot_` alias.
 - `chaperone()` does nothing unless `using` came first.
 - A related column whose name starts with `pivot_` moves into the joining row.
-- A joining row without a primary key refuses writes. `attach`, `detach` and `sync` are not here
-  yet.
+- A joining row without a primary key refuses writes through its model. `attach`, `detach` and
+  `sync` do not need a key; see [pivot writes](#pivot-writes).
 - On Android, pass the table, the pivot keys and the chaperone names: R8 renames the classes that
   the defaults come from.
 
