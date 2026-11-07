@@ -187,4 +187,18 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
         super.comment(text);
         return this;
     }
+
+    /** {@inheritDoc} */
+    @Override
+    public ForeignIdColumnDefinition collation(String name) {
+        super.collation(name);
+        return this;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ForeignIdColumnDefinition collation(Collation collation) {
+        super.collation(collation);
+        return this;
+    }
 }

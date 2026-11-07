@@ -15,6 +15,7 @@ import java.util.Set;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.schema.Blueprint;
+import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.grammar.Command;
@@ -481,9 +482,9 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      * {@inheritDoc}
      *
      * @return the auto-increment key, {@code not null} unless nullable (on a generated column only
-     *     after {@code nullable(false)}), the default and the generated expression, in Laravel's
-     *     order, then each check; a raw column gets only its checks, since its SQL says the rest;
-     *     collation is not supported yet
+     *     after {@code nullable(false)}), the default, the single-quoted collation and the
+     *     generated expression, in Laravel's order, then each check; a raw column gets only its
+     *     checks, since its SQL says the rest
      */
     @Override
     protected String modifiers(Blueprint blueprint, ColumnDefinition column) {
@@ -503,6 +504,9 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         } else if (column.type() == ColumnType.YEAR && column.usesCurrent()) {
             sql.append(" default ").append(CURRENT_YEAR);
         }
+        // A collation name holds no quote, so the single-quoted form cannot be ended early.
+        column.collation().ifPresent(collation -> sql.append(" collate '").append(collationName(collation))
+                .append('\''));
         if (column.virtualAs().isPresent()) {
             sql.append(" as (").append(column.virtualAs().get()).append(')');
         } else if (column.storedAs().isPresent()) {
@@ -515,6 +519,16 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         }
         appendChecks(sql, column);
         return sql.toString();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code BINARY} for {@link Collation#BINARY}; a named collation as given
+     */
+    @Override
+    protected String collationName(Collation collation) {
+        return collation.equals(Collation.BINARY) ? "BINARY" : super.collationName(collation);
     }
 
     private static void appendChecks(StringBuilder sql, ColumnDefinition column) {

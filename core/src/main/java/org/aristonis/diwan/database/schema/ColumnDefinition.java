@@ -46,6 +46,7 @@ public class ColumnDefinition {
     private boolean isPrimary;
     private boolean isUnsigned;
     private String comment;
+    private Collation collation;
     private final List<String> checks = new ArrayList<>();
     private String virtualAs;
     private String storedAs;
@@ -381,6 +382,37 @@ public class ColumnDefinition {
     }
 
     /**
+     * Sets the column's collation by its database name, such as {@code NOCASE} on SQLite.
+     *
+     * @param name the collation name, never {@code null}
+     * @return this definition
+     * @throws NullPointerException if {@code name} is {@code null}
+     * @throws IllegalArgumentException if the name is empty, or has a quote or control character
+     * @throws IllegalStateException if the column is a raw column, or the definition is frozen
+     */
+    public ColumnDefinition collation(String name) {
+        return collation(Collation.of(name));
+    }
+
+    /**
+     * Sets the column's collation, named or portable.
+     *
+     * @param collation the collation, never {@code null}
+     * @return this definition
+     * @throws NullPointerException if {@code collation} is {@code null}
+     * @throws IllegalStateException if the column is a raw column, whose SQL is given whole, or
+     *     the definition is frozen
+     */
+    public ColumnDefinition collation(Collation collation) {
+        ensureOpen();
+        if (type == ColumnType.RAW) {
+            throw new IllegalStateException("a raw column cannot take a collation: put it in the raw SQL");
+        }
+        this.collation = Objects.requireNonNull(collation, "collation");
+        return this;
+    }
+
+    /**
      * Makes the column count up by itself on insert, and its table's primary key.
      *
      * @return this definition
@@ -493,6 +525,15 @@ public class ColumnDefinition {
      */
     public Optional<String> comment() {
         return Optional.ofNullable(comment);
+    }
+
+    /**
+     * Returns the collation.
+     *
+     * @return the collation, or empty
+     */
+    public Optional<Collation> collation() {
+        return Optional.ofNullable(collation);
     }
 
     /**

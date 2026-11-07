@@ -78,6 +78,7 @@ final class SQLiteTableState {
     private static final class Definition {
         final Map<String, List<String>> enums = new HashMap<>();
         final Map<String, List<String>> clauses = new HashMap<>();
+        final Map<String, String> collations = new HashMap<>();
         final Map<String, Boolean> generated = new HashMap<>();
         final List<TableCheck> checks = new ArrayList<>();
     }
@@ -133,6 +134,11 @@ final class SQLiteTableState {
                 column.extras = extras.toString();
                 column.expressions = clauses;
             }
+            String collate = definition.collations.get(key);
+            if (collate != null) {
+                // Not an expression: a collation names no column, so a rename never has to search it.
+                column.extras += " " + collate;
+            }
             column.isGenerated = column.isGenerated || Boolean.TRUE.equals(definition.generated.get(key));
         }
         state.checks.addAll(definition.checks);
@@ -166,7 +172,7 @@ final class SQLiteTableState {
 
     // Reads the table's own SQL, outside string literals. An enum check that belongs to its column and
     // reads back exactly as it would be written is kept as the enum's values; other checks and
-    // generated clauses are kept as text; a collation is refused.
+    // generated clauses are kept as text; a column's own collation is kept, one in a table constraint is refused.
     private static Definition readDefinition(String table, String sql, List<SQLiteSqlTokens.Token> tokens,
             SQLiteSchemaGrammar grammar) {
         List<List<SQLiteSqlTokens.Token>> parts = SQLiteSqlTokens.parts(tokens);
@@ -179,10 +185,10 @@ final class SQLiteTableState {
         }
         Definition definition = new Definition();
         for (List<SQLiteSqlTokens.Token> part : parts) {
-            if (SQLiteSqlTokens.hasWord(part, "collate")) {
-                throw cannotCarry(table, "a COLLATE clause");
-            }
             if (SQLiteSqlTokens.isTableConstraint(part)) {
+                if (SQLiteSqlTokens.hasWord(part, "collate")) {
+                    throw cannotCarry(table, "a COLLATE clause");
+                }
                 readTableCheck(sql, part, definition);
             } else {
                 readColumnClauses(sql, part, grammar, definition);
@@ -230,6 +236,12 @@ final class SQLiteTableState {
                 continue;
             }
             if (depth != 0) {
+                continue;
+            }
+            if (token.isWord("collate") && i + 1 < part.size() && !part.get(i + 1).isPunct('(')
+                    && !part.get(i + 1).isPunct(')')) {
+                definition.collations.put(key, sql.substring(token.start, part.get(i + 1).end));
+                i++;
                 continue;
             }
             int start = i;

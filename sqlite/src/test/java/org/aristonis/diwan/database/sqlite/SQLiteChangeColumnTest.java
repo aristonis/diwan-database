@@ -229,7 +229,7 @@ class SQLiteChangeColumnTest {
 
     @Test
     void aTableTheRebuildCannotCarryStaysRefused() {
-        db.statement("create table notes (id integer primary key, body text collate nocase)");
+        db.statement("create table notes (id integer primary key, body text, unique (body collate nocase))");
 
         assertThrows(UnsupportedOperationException.class,
                 () -> schema.table("notes", table -> table.text("body").nullable().change()));
