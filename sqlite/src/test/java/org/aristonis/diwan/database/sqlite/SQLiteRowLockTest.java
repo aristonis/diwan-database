@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.sqlite;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
@@ -15,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.sqlite.SQLiteDataSource;
 
-/** Row locks on SQLite, which has none: the plain ones are ignored, the PostgreSQL-only ones refused. */
+/** Row locks on SQLite, which has none: the strengths write nothing, the waits that change rows are refused. */
 class SQLiteRowLockTest {
 
     @TempDir
@@ -52,10 +53,18 @@ class SQLiteRowLockTest {
     }
 
     @Test
-    void whatOnlyPostgresqlHasIsRefused() {
+    void keyLevelStrengthsWriteNothing() {
         for (LockStrength strength : List.of(LockStrength.NO_KEY_UPDATE, LockStrength.KEY_SHARE)) {
-            assertThrows(UnsupportedOperationException.class, () -> db.table("items").lock(strength).get());
+            List<Map<String, Object>> rows = db.connection().transaction(tx -> SQLiteQuery.of(tx).table("items")
+                    .lock(strength).get());
+
+            assertEquals(2, rows.size());
+            assertFalse(db.table("items").lock(strength).toSql().toLowerCase().contains("for"));
         }
+    }
+
+    @Test
+    void lockWaitsAreStillRefused() {
         for (LockWait wait : List.of(LockWait.NOWAIT, LockWait.SKIP_LOCKED)) {
             assertThrows(UnsupportedOperationException.class,
                     () -> db.table("items").lock(LockStrength.UPDATE, wait).get());
