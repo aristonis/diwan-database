@@ -113,6 +113,24 @@ public interface RelationAccess {
     void whereMorphedTo(EloquentBuilder<?> outer, String relation, Object target, boolean not, boolean or);
 
     /**
+     * Adds a condition that the builder's models belong to the given owners through a belongs-to
+     * relation: the relation's foreign key in the owners' keys.
+     *
+     * @param builder the builder the condition is added to, never {@code null}
+     * @param related the owner models, never {@code null} or empty, all instances of the relation's
+     *     related class, each with a non-null owner key
+     * @param relation the belongs-to relation name, or {@code null} for the camel-cased simple
+     *     class name of the first owner
+     * @param or {@code true} to join the condition with {@code or}
+     * @throws NullPointerException if {@code builder} or {@code related} is {@code null}
+     * @throws IllegalArgumentException if the list is empty, an owner is of another class or has no
+     *     owner key value
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
+     *     is unknown or is not a belongs-to relation
+     */
+    void whereBelongsTo(EloquentBuilder<?> builder, List<? extends Model> related, String relation, boolean or);
+
+    /**
      * Wraps per-class eager options, and an optional plain constraint, into the constraint stored
      * under a morph-to relation's name in the eager-load map.
      *
