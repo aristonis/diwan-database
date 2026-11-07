@@ -28,6 +28,16 @@ class ModelQueryResultsTest {
         }
     }
 
+    /** An account row seen through a global scope that hides accounts without votes. */
+    static final class VotedAccount extends Model {
+        static final ModelQuery<VotedAccount> QUERY = ModelQuery.of(VotedAccount.class, VotedAccount::new);
+
+        @Override
+        protected String table() {
+            return "accounts";
+        }
+    }
+
     /** An account whose key is read as text. */
     static final class TextKeyAccount extends Model {
         static final ModelQuery<TextKeyAccount> QUERY = ModelQuery.of(TextKeyAccount.class, TextKeyAccount::new);
@@ -118,6 +128,22 @@ class ModelQueryResultsTest {
         List<Object> names = accounts.where("votes", ">", 1).orderBy("id").pluck("name");
 
         assertEquals(Arrays.<Object>asList("user2", "user3"), names);
+    }
+
+    @Test
+    void pluckWithAKeyReturnsAMap() {
+        seedVotes(0, 2, 3);
+        VotedAccount.QUERY.addGlobalScope("voted", base -> base.where("votes", ">", 0));
+        database.connection.events().enableQueryLog();
+        database.connection.events().flushQueryLog();
+
+        Map<Object, Object> byEmail = VotedAccount.QUERY.on(database.db).query().orderBy("id")
+                .pluck("name", "email");
+
+        assertEquals(2, byEmail.size());
+        assertEquals("user2", byEmail.get("u2@x"));
+        assertEquals("user3", byEmail.get("u3@x"));
+        assertEquals(1, database.connection.events().getQueryLog().size());
     }
 
     @Test
