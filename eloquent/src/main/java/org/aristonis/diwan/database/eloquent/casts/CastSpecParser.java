@@ -140,6 +140,8 @@ final class CastSpecParser {
                 return new MomentCast(false);
             case "timestamp":
                 return new MomentCast(true);
+            case "instant":
+                return new MomentCast();
             case "json":
             case "array":
                 return new JsonCasts(type, false);

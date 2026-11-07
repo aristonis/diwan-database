@@ -22,8 +22,9 @@ import org.aristonis.diwan.database.eloquent.TimestampFormat;
  * <p>Reads as an {@link Instant}, or as a {@code Long} of epoch seconds for {@code timestamp}. A
  * stored {@code Long} or {@code Integer} is microseconds. Writes go through
  * {@link Model#fromDateTime(Instant)}, so the attribute always holds the storage form; the
- * format {@code F} only shapes serialized output. Compares by {@link Instant}. Immutable and
- * safe to share across threads.
+ * format {@code F} only shapes serialized output. The {@code instant} mode skips that step and
+ * keeps the {@link Instant} itself, truncated to microseconds, whatever the model's format.
+ * Compares by {@link Instant}. Immutable and safe to share across threads.
  */
 final class MomentCast implements Cast<Object>, CastComparator, CastSerializer<Object> {
 
@@ -33,6 +34,7 @@ final class MomentCast implements Cast<Object>, CastComparator, CastSerializer<O
 
     private final String name;
     private final boolean isTimestamp;
+    private final boolean isInstant;
     private final DateTimeFormatter format;
 
     /**
@@ -43,6 +45,15 @@ final class MomentCast implements Cast<Object>, CastComparator, CastSerializer<O
     MomentCast(boolean isTimestamp) {
         this.name = isTimestamp ? "timestamp" : "datetime";
         this.isTimestamp = isTimestamp;
+        this.isInstant = false;
+        this.format = null;
+    }
+
+    /** Creates the {@code instant} cast, which stores the {@link Instant} itself. */
+    MomentCast() {
+        this.name = "instant";
+        this.isTimestamp = false;
+        this.isInstant = true;
         this.format = null;
     }
 
@@ -57,6 +68,7 @@ final class MomentCast implements Cast<Object>, CastComparator, CastSerializer<O
         Objects.requireNonNull(pattern, "pattern");
         this.name = "datetime:" + pattern;
         this.isTimestamp = false;
+        this.isInstant = false;
         this.format = DateTimeFormatter.ofPattern(pattern, Locale.ROOT).withZone(ZoneOffset.UTC);
     }
 
@@ -73,12 +85,12 @@ final class MomentCast implements Cast<Object>, CastComparator, CastSerializer<O
     @Override
     public Object set(Model model, String key, Object value, Map<String, Object> attributes) {
         Instant moment = readInput(model, key, value);
-        if (model.getTimestampFormat() == TimestampFormat.INSTANT) {
+        if (isInstant || model.getTimestampFormat() == TimestampFormat.INSTANT) {
             // Instant storage holds whole microseconds only; finer digits would never compare equal
             // to what the database returns.
             moment = moment.truncatedTo(ChronoUnit.MICROS);
         }
-        return model.fromDateTime(moment);
+        return isInstant ? moment : model.fromDateTime(moment);
     }
 
     @Override

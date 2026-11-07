@@ -57,6 +57,7 @@ class PostgresCastsTest {
             casts.put("ratio", Casts.floating());
             casts.put("doc", Casts.json());
             casts.put("docb", Casts.json());
+            casts.put("instant_at", Casts.instant());
             return casts;
         }
     }
@@ -69,7 +70,8 @@ class PostgresCastsTest {
         connection = PostgresServer.newDatabase();
         db = PostgresQuery.of(connection);
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
-                + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb)");
+                + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
+                + "instant_at timestamptz(6))");
     }
 
     private void insertSample() {
@@ -166,5 +168,15 @@ class PostgresCastsTest {
         assertEquals(Instant.parse("2026-11-02T10:15:30Z"), found.getAttribute("seen_at"));
         assertEquals(LocalDate.of(2026, 11, 2), found.getAttribute("day"));
         assertEquals(Map.of("k", "v"), found.getAttribute("docb"));
+    }
+
+    @Test
+    void instantCastStoresTimestamptz() {
+        Instant moment = Instant.parse("2026-11-02T10:15:30.123456Z");
+
+        Probe created = Probe.QUERY.on(db).create(row("instant_at", moment));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals(moment, found.getAttribute("instant_at"));
     }
 }
