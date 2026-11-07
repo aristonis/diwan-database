@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.exception.ForeignKeyViolationException;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.DatabaseManager;
@@ -247,6 +248,56 @@ class SQLiteConnectorTest {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> SQLiteConnector.jdbcUrl(config));
 
         assertTrue(e.getMessage().contains("foreign_keys"), e.getMessage());
+    }
+
+    @Test
+    void noTransactionModeByDefault() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?foreign_keys=true", SQLiteConnector.jdbcUrl(config));
+    }
+
+    @Test
+    void transactionModeIsAppendedInUpperCase() {
+        ConnectionConfig file = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db")
+                .option("transaction_mode", "immediate").build();
+        ConnectionConfig memory = ConnectionConfig.builder("mem").driver("sqlite").database(":memory:")
+                .option("transaction_mode", "Exclusive").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?foreign_keys=true&transaction_mode=IMMEDIATE",
+                SQLiteConnector.jdbcUrl(file));
+        assertEquals("jdbc:sqlite::memory:?foreign_keys=true&transaction_mode=EXCLUSIVE",
+                SQLiteConnector.jdbcUrl(memory));
+    }
+
+    @Test
+    void urlTransactionModeWins() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite")
+                .url("jdbc:sqlite:/tmp/z.db?TRANSACTION_MODE=deferred").option("transaction_mode", "immediate").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?TRANSACTION_MODE=deferred&foreign_keys=true",
+                SQLiteConnector.jdbcUrl(config));
+    }
+
+    @Test
+    void badTransactionModeIsRefused() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("x.db")
+                .option("transaction_mode", "eager").build();
+
+        DatabaseConfigException e = assertThrows(DatabaseConfigException.class, () -> SQLiteConnector.jdbcUrl(config));
+
+        assertTrue(e.getMessage().contains("main") && e.getMessage().contains("transaction_mode"), e.getMessage());
+    }
+
+    @Test
+    void busyTimeoutAppendedWhenSet() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db")
+                .option("busy_timeout", "250").build();
+        ConnectionConfig own = ConnectionConfig.builder("main").driver("sqlite")
+                .url("jdbc:sqlite:/tmp/z.db?busy_timeout=9").option("busy_timeout", "250").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?foreign_keys=true&busy_timeout=250", SQLiteConnector.jdbcUrl(config));
+        assertEquals("jdbc:sqlite:/tmp/z.db?busy_timeout=9&foreign_keys=true", SQLiteConnector.jdbcUrl(own));
     }
 
     @Test

@@ -21,12 +21,14 @@ import org.aristonis.diwan.database.driver.DriverSession;
 public final class AndroidSqliteDriver implements Driver {
 
     private final SQLiteOpenHelper helper;
+    private final boolean isNonExclusive;
     private SQLiteDatabase database;
     private volatile DriverInfo info;
 
-    private AndroidSqliteDriver(SQLiteDatabase database, SQLiteOpenHelper helper) {
+    private AndroidSqliteDriver(SQLiteDatabase database, SQLiteOpenHelper helper, boolean isNonExclusive) {
         this.database = database;
         this.helper = helper;
+        this.isNonExclusive = isNonExclusive;
     }
 
     /**
@@ -37,7 +39,7 @@ public final class AndroidSqliteDriver implements Driver {
      * @throws NullPointerException if {@code database} is {@code null}
      */
     public static AndroidSqliteDriver of(SQLiteDatabase database) {
-        return new AndroidSqliteDriver(Objects.requireNonNull(database, "database"), null);
+        return new AndroidSqliteDriver(Objects.requireNonNull(database, "database"), null, false);
     }
 
     /**
@@ -51,7 +53,12 @@ public final class AndroidSqliteDriver implements Driver {
      * @throws NullPointerException if {@code helper} is {@code null}
      */
     public static AndroidSqliteDriver of(SQLiteOpenHelper helper) {
-        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"));
+        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), false);
+    }
+
+    // Used by the connector: sessions begin with beginTransactionNonExclusive() when the flag is set.
+    static AndroidSqliteDriver of(SQLiteOpenHelper helper, boolean isNonExclusive) {
+        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), isNonExclusive);
     }
 
     private synchronized SQLiteDatabase database() {
@@ -69,7 +76,7 @@ public final class AndroidSqliteDriver implements Driver {
      */
     @Override
     public DriverSession open() {
-        return new AndroidSqliteSession(database());
+        return new AndroidSqliteSession(database(), isNonExclusive);
     }
 
     /**

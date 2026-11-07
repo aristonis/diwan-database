@@ -32,6 +32,7 @@ import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.RowCursor;
@@ -320,9 +321,24 @@ final class JdbcSession implements DriverSession {
         ensureOpen();
         ensureOwnTransaction();
         try {
-            connection.commit();
-            endTransaction();
-            resumeAutoCommit();
+            if (DatabaseFamily.of(productName) == DatabaseFamily.SQLITE && isAutoCommitSuspended) {
+                // sqlite-jdbc commit() runs "commit" and then begins again with the configured mode, so
+                // a commit that landed could report busy. Switching auto-commit on is a commit too, and
+                // runs only "commit".
+                try {
+                    connection.setAutoCommit(true);
+                } catch (SQLException e) {
+                    DriverException commitFailure = commitFailure(failure(e));
+                    restoreTransactionState(commitFailure);
+                    throw commitFailure;
+                }
+                isAutoCommitSuspended = false;
+                endTransaction();
+            } else {
+                connection.commit();
+                endTransaction();
+                resumeAutoCommit();
+            }
         } catch (SQLException e) {
             throw commitFailure(failure(e));
         }
@@ -333,6 +349,8 @@ final class JdbcSession implements DriverSession {
         ensureOpen();
         ensureOwnTransaction();
         try {
+            // On SQLite the driver begins again after a rollback, so this can wait for another writer;
+            // nothing is applied twice.
             connection.rollback();
             endTransaction();
             resumeAutoCommit();
@@ -640,13 +658,36 @@ final class JdbcSession implements DriverSession {
     }
 
     // A commit that lost its connection may have landed; the kind says so, apart from a plain loss.
-    private static DriverException commitFailure(DriverException failure) {
+    /**
+     * Puts the driver back into manual-commit mode after a failed switch to auto-commit.
+     *
+     * <p>sqlite-jdbc flips its auto-commit flag before it runs COMMIT. When that COMMIT fails, SQLite keeps
+     * the transaction open but the driver reports auto-commit, and a rollback would then be refused. Setting
+     * the flag back to false either fails harmlessly, because SQLite still holds the transaction and the
+     * flag is already false, or, if SQLite ended the transaction, opens an empty one. Either way the
+     * session stays in a transaction and the caller's rollback works.
+     *
+     * @param commitFailure the commit failure that receives any restore failure as suppressed
+     */
+    private void restoreTransactionState(DriverException commitFailure) {
+        try {
+            connection.setAutoCommit(false);
+        } catch (SQLException restore) {
+            commitFailure.addSuppressed(restore);
+        }
+    }
+
+    private DriverException commitFailure(DriverException failure) {
         if (!failure.kinds().contains(DriverFailureKind.CONNECTION_LOST)) {
             return failure;
         }
         Set<DriverFailureKind> kinds = EnumSet.copyOf(failure.kinds());
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
-        return new DriverException(failure.getMessage(), failure.sqlState().orElse(null), failure.vendorCode(),
+        String codeName = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
+                ? DriverFailureMessages.sqliteCodeName(failure.vendorCode()).orElse(null) : null;
+        String message = DriverFailureMessages.message(kinds, failure.sqlState().orElse(null),
+                failure.vendorCode(), codeName);
+        return new DriverException(message, failure.sqlState().orElse(null), failure.vendorCode(),
                 failure.databaseMessage().orElse(null), failure.getCause(), kinds);
     }
 

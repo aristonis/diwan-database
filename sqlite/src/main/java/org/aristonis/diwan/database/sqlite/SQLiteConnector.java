@@ -34,8 +34,18 @@ import org.aristonis.diwan.database.schema.Schema;
  * of the same thread holds it, such as a seeder that queries inside its own transaction, must use
  * the transaction's connection.
  *
+ * <p>The {@code transaction_mode} option, {@code deferred}, {@code immediate} or {@code exclusive} in
+ * any case, sets how a transaction begins and is passed to the driver as {@code transaction_mode=<UPPER>}
+ * unless the URL already names it; unset leaves the driver's default, deferred. A deferred transaction
+ * that reads and then writes can fail with a busy error when another writer got in between; immediate
+ * takes the write lock at the start and makes writers queue. The {@code busy_timeout} option, when set,
+ * is also passed to every URL the connector builds, file or in-memory, as {@code busy_timeout=<milliseconds>}
+ * unless the URL names it, so a writer waits that long for the lock; unset leaves the driver's own wait.
+ *
  * <p>When the application supplies a {@link DataSource}, it is used as is: no URL is built, no
- * option is applied and no connection is held back.
+ * option, including {@code transaction_mode} and {@code busy_timeout}, is applied and no connection is held back.
+ * A connection it hands out in manual-commit mode still commits through the driver's {@code commit()}, which
+ * begins a new transaction in immediate mode.
  *
  * <p>Instances are safe to share across threads and across connection names.
  */
@@ -49,6 +59,7 @@ public final class SQLiteConnector implements Connector {
     private static final String MEMORY = ":memory:";
     private static final String FOREIGN_KEYS = "foreign_keys";
     private static final String BUSY_TIMEOUT = "busy_timeout";
+    private static final String TRANSACTION_MODE = "transaction_mode";
     private static final long DEFAULT_BUSY_TIMEOUT_MILLIS = 30_000L;
 
     // The single-connection sources are looked up by the identity of the connection they serve.
@@ -69,8 +80,9 @@ public final class SQLiteConnector implements Connector {
     /**
      * {@inheritDoc}
      *
-     * @throws DatabaseConfigException if neither {@code url} nor {@code database} is set, or if
-     *     {@code foreign_keys} is not a boolean
+     * @throws DatabaseConfigException if neither {@code url} nor {@code database} is set, if
+     *     {@code foreign_keys} is not a boolean, if {@code transaction_mode} is not deferred, immediate
+     *     or exclusive, or if {@code busy_timeout} is not a number of milliseconds, zero or more
      * @throws IllegalStateException if the in-memory database cannot be opened
      */
     @Override
@@ -116,7 +128,7 @@ public final class SQLiteConnector implements Connector {
     static String jdbcUrl(ConnectionConfig config) {
         String url = config.url().orElse(null);
         if (url != null) {
-            return withForeignKeys(url, config);
+            return withOptions(url, config);
         }
         String database = config.database().orElse("");
         if (database.trim().isEmpty()) {
@@ -124,7 +136,38 @@ public final class SQLiteConnector implements Connector {
                     "Connection [" + config.name() + "] needs a database path or :memory: (key database)",
                     config.name(), "database");
         }
-        return withForeignKeys(URL_PREFIX + database.trim(), config);
+        return withOptions(URL_PREFIX + database.trim(), config);
+    }
+
+    private static String withOptions(String url, ConnectionConfig config) {
+        return withBusyTimeout(withTransactionMode(withForeignKeys(url, config), config), config);
+    }
+
+    private static String withTransactionMode(String url, ConnectionConfig config) {
+        String raw = config.options().get(TRANSACTION_MODE);
+        if (raw == null) {
+            return url;
+        }
+        String mode = raw.trim().toUpperCase(Locale.ROOT);
+        if (!mode.equals("DEFERRED") && !mode.equals("IMMEDIATE") && !mode.equals("EXCLUSIVE")) {
+            throw new DatabaseConfigException("Connection [" + config.name() + "] option " + TRANSACTION_MODE
+                    + " must be deferred, immediate or exclusive, got [" + raw + "]", config.name(), TRANSACTION_MODE);
+        }
+        return appendOption(url, TRANSACTION_MODE, mode);
+    }
+
+    private static String withBusyTimeout(String url, ConnectionConfig config) {
+        if (config.options().get(BUSY_TIMEOUT) == null) {
+            return url;
+        }
+        return appendOption(url, BUSY_TIMEOUT, Long.toString(busyTimeoutMillis(config)));
+    }
+
+    private static String appendOption(String url, String name, String value) {
+        if (url.toLowerCase(Locale.ROOT).contains(name + "=")) {
+            return url;
+        }
+        return url + (url.indexOf('?') >= 0 ? "&" : "?") + name + "=" + value;
     }
 
     private static String withForeignKeys(String url, ConnectionConfig config) {
