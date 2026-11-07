@@ -62,7 +62,7 @@ class ScopedTerminalsTest {
             "make", "create", "forceCreate",
             "createOrFirst", "createOrRestore",
             // Writes that skip scopes, as in Laravel, where global scopes never apply to inserts.
-            "insertOrIgnore", "upsert"));
+            "insertOrIgnore", "upsert", "fillAndInsert", "fillAndInsertOrIgnore", "fillAndInsertGetId"));
 
     private static final Set<String> INSPECTION = new HashSet<>(Arrays.asList("toBase", "toSql", "getBindings"));
 

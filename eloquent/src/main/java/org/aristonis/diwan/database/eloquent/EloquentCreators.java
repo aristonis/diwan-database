@@ -535,6 +535,97 @@ abstract class EloquentCreators<T extends Model> extends EloquentClauses<T> {
         return toBase().insertOrIgnore(withTimestamps(withUniqueIds(rows)));
     }
 
+    // ---- fill and insert ----
+
+    /**
+     * Fills a model from each row, then inserts the rows in one statement: Laravel's
+     * {@code fillAndInsert}. The fill is unguarded, so {@code fillable} is not checked: never pass
+     * request data here unchecked. Casts apply, unique ids are generated and timestamps are set,
+     * one moment for all rows, but a given {@code created_at} or {@code updated_at} is kept.
+     * {@code beforeWrite()} runs on each row's model, and no model event fires. It is one
+     * statement, so the database's binding limit applies (999 on SQLite before 3.32).
+     *
+     * @param rows the rows, never {@code null}, all with the same columns
+     * @return {@code true} when the insert ran, also for no rows, which run no query
+     * @throws NullPointerException if {@code rows} or a row is {@code null}
+     * @throws IllegalArgumentException if the filled rows are not alike
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
+     */
+    public final boolean fillAndInsert(List<? extends Map<String, ?>> rows) {
+        List<Map<String, Object>> filled = fillForInsert(rows);
+        return filled.isEmpty() || toBase().insert(filled);
+    }
+
+    /**
+     * Fills a model from each row, then inserts the rows in one statement, skipping each that
+     * would break a unique or primary key constraint: Laravel's {@code fillAndInsertOrIgnore}. The
+     * fill is unguarded, so {@code fillable} is not checked: never pass request data here
+     * unchecked. Casts apply, unique ids are generated and timestamps are set, but a given
+     * {@code created_at} or {@code updated_at} is kept. {@code beforeWrite()} runs on each row's
+     * model, and no model event fires. It is one statement, so the database's binding limit
+     * applies (999 on SQLite before 3.32).
+     *
+     * @param rows the rows, never {@code null}, all with the same columns
+     * @return the number of rows inserted, as the database reports it; 0 for no rows, which run no
+     *     query
+     * @throws NullPointerException if {@code rows} or a row is {@code null}
+     * @throws IllegalArgumentException if the filled rows are not alike
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
+     */
+    public final int fillAndInsertOrIgnore(List<? extends Map<String, ?>> rows) {
+        List<Map<String, Object>> filled = fillForInsert(rows);
+        return filled.isEmpty() ? 0 : toBase().insertOrIgnore(filled);
+    }
+
+    /**
+     * Fills a model from one row, inserts it and returns its key: Laravel's
+     * {@code fillAndInsertGetId}. A model with an incrementing key returns the key the database
+     * made; any other returns the key value in the filled row, a generated unique id included. The
+     * fill is unguarded, so {@code fillable} is not checked: never pass request data here
+     * unchecked. Casts apply, unique ids are generated and timestamps are set, but a given
+     * {@code created_at} or {@code updated_at} is kept. {@code beforeWrite()} runs on the model,
+     * and no model event fires.
+     *
+     * @param row the columns and values, never {@code null}
+     * @return the key, or {@code null} when a model without an incrementing key has none in the row
+     * @throws NullPointerException if {@code row} is {@code null}
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the insert
+     */
+    public final Object fillAndInsertGetId(Map<String, ?> row) {
+        Map<String, Object> filled = fillForInsert(Collections.singletonList(Objects.requireNonNull(row, "row")))
+                .get(0);
+        if (model.getIncrementing()) {
+            return toBase().insertGetId(filled, model.getKeyName());
+        }
+        toBase().insert(filled);
+        return filled.get(model.getKeyName());
+    }
+
+    // The storage attributes come from a model so casts apply; the model never reaches the database.
+    // The key and the timestamps are set before beforeWrite(), as Model.save does, so the hook sees them.
+    private List<Map<String, Object>> fillForInsert(List<? extends Map<String, ?>> rows) {
+        Objects.requireNonNull(rows, "rows");
+        Object moment = model.usesTimestamps() ? model.freshTimestampValue() : null;
+        List<Map<String, Object>> attributes = new ArrayList<>(rows.size());
+        for (Map<String, ?> row : rows) {
+            Objects.requireNonNull(row, "row");
+            T filled = Model.unguarded(() -> make(row));
+            if (model.getUniqueIdKind() != UniqueIdKind.NONE) {
+                filled.setUniqueIds();
+            }
+            if (model.usesTimestamps()) {
+                for (String column : new String[] {model.getCreatedAtColumn(), model.getUpdatedAtColumn()}) {
+                    if (column != null && !filled.getAttributes().containsKey(column)) {
+                        filled.setAttribute(column, moment);
+                    }
+                }
+            }
+            filled.beforeWrite();
+            attributes.add(new LinkedHashMap<>(filled.getAttributes()));
+        }
+        return attributes;
+    }
+
     // The key goes first, as in Laravel; a row that names the key keeps its value.
     private List<Map<String, Object>> withUniqueIds(List<? extends Map<String, ?>> rows) {
         List<Map<String, Object>> out = new ArrayList<>(rows.size());

@@ -357,7 +357,7 @@ public abstract class Model extends ModelSoftDeletes {
         return true;
     }
 
-    private void setUniqueIds() {
+    void setUniqueIds() {
         String key = getKeyName();
         Object value = getAttribute(key);
         // Only a missing or blank key is replaced; "0" is a key, unlike Laravel's empty() check.
