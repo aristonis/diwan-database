@@ -44,10 +44,11 @@ QueryFactory db = manager.query();
   `UnsupportedOperationException`. Use a read-then-write inside a transaction there.
   Right joins need API 34.
 - Without write-ahead logging a long transaction blocks reads from other threads.
+- `transaction_mode` on Android: unset or `exclusive` uses `beginTransaction()`, `immediate` uses `beginTransactionNonExclusive()`, and `deferred` is refused at connect time.
 - `cursor()` refills its window by re-running the query. Prefer `chunkById` or `lazyById`.
 - R8 only breaks defaults taken from class names. Override `table()` on models, name relation keys,
   and give each migration a fixed `name()`. Use `checksum()`, not bytecode, to detect an edit.
-- `decimal` reads as a double. Store money as integer minor units.
+- `decimal` reads as a double. For exact values use a scaled integer column, or text with a fixed scale.
 - Foreign keys are off on Android until you enable them.
 
 Docs: Android on https://aristonis.org/open-source/diwan-database/docs/main/home
