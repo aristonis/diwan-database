@@ -1,5 +1,7 @@
 package org.aristonis.diwan.database.schema;
 
+import java.util.Collections;
+import java.util.Objects;
 import org.aristonis.diwan.database.support.Inflector;
 
 /**
@@ -73,6 +75,21 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
     }
 
     /**
+     * Adds a named foreign key to a named column of a named table.
+     *
+     * @param table the referenced table without prefix, never {@code null}
+     * @param column the referenced column, never {@code null}
+     * @param indexName the key name, never {@code null}
+     * @return the foreign key, for its actions, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if a name is empty, has a control character, or is too long
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ForeignKeyDefinition constrained(String table, String column, String indexName) {
+        return references(column, indexName).on(table);
+    }
+
+    /**
      * Adds a foreign key from this column to a column of a table set next with
      * {@link ForeignKeyDefinition#on(String)}.
      *
@@ -84,6 +101,21 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
      */
     public ForeignKeyDefinition references(String column) {
         return blueprint.foreign(name()).references(column);
+    }
+
+    /**
+     * Adds a named foreign key from this column to a column of a table set next with
+     * {@link ForeignKeyDefinition#on(String)}.
+     *
+     * @param column the referenced column, never {@code null}
+     * @param indexName the key name, never {@code null}
+     * @return the foreign key, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if a name is empty or has a control character
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ForeignKeyDefinition references(String column, String indexName) {
+        return blueprint.foreign(Collections.singletonList(name()), Objects.requireNonNull(indexName, "indexName")).references(column);
     }
 
     /** {@inheritDoc} */
