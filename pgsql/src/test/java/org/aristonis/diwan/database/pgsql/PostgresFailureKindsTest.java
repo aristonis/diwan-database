@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.pgsql;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,5 +105,17 @@ class PostgresFailureKindsTest {
                 () -> db.select("select pg_terminate_backend(pg_backend_pid())"));
         assertTrue(driverFailure(error).kinds().contains(DriverFailureKind.CONNECTION_LOST),
                 driverFailure(error).kinds().toString());
+    }
+
+    @Test
+    void messageNamesUniqueViolation() {
+        Connection db = PostgresServer.newDatabase();
+        db.statement("create table u (id int primary key)");
+        db.insert("insert into u values (?)", 1);
+
+        QueryException error = assertThrows(QueryException.class, () -> db.insert("insert into u values (?)", 1));
+
+        assertEquals("Database failure (SQL state 23505, vendor code 0): unique violation",
+                driverFailure(error).getMessage());
     }
 }

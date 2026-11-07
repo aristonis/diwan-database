@@ -6,8 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
+import java.util.EnumSet;
 import java.util.Set;
 import org.aristonis.diwan.database.driver.DriverCapability;
+import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.junit.jupiter.api.Test;
 
@@ -127,5 +130,32 @@ class JdbcFailuresTest {
     void recognisesOracleDeadlocksAndSerializationFailures() {
         assertTrue(translate("61000", 60, "Oracle").isConcurrencyFailure());
         assertTrue(translate("72000", 8177, "Oracle").isConcurrencyFailure());
+    }
+
+    @Test
+    void busyMessageNamesTheKind() {
+        DriverException busy = translate(null, 5, "SQLite");
+
+        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY",
+                busy.getMessage());
+    }
+
+    @Test
+    void messageHoldsNoDatabaseText() {
+        SQLException locked = new SQLException("database is locked, value secret-value-42", null, 5);
+
+        DriverException failure = JdbcFailures.translate(locked, "SQLite");
+
+        assertFalse(failure.getMessage().contains("secret-value-42"));
+        assertFalse(failure.getMessage().contains("database is locked"));
+    }
+
+    @Test
+    void commitOutcomeUnknownIsInTheMessage() {
+        String message = DriverFailureMessages.message(
+                EnumSet.of(DriverFailureKind.CONNECTION_LOST, DriverFailureKind.COMMIT_OUTCOME_UNKNOWN),
+                "08006", 0, null);
+
+        assertTrue(message.contains("connection lost, commit outcome unknown"), message);
     }
 }

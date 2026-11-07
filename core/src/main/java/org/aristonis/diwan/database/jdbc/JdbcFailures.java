@@ -6,8 +6,9 @@ import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
-import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
+import org.aristonis.diwan.database.exception.DriverException;
 
 /** Translates JDBC failures into {@link DriverException}s without exposing database text. */
 final class JdbcFailures {
@@ -111,19 +112,16 @@ final class JdbcFailures {
             kinds.add(DriverFailureKind.CONNECTION_LOST);
         }
         return new DriverException(
-                message(state, vendorCode), state, vendorCode, databaseMessage, failure, kinds);
+                failureMessage(family, kinds, state, vendorCode), state, vendorCode, databaseMessage, failure, kinds);
     }
 
-    /**
-     * Builds the fixed failure message from the SQL state and vendor code.
-     *
-     * @param state the SQL state, or {@code null}
-     * @param vendorCode the vendor code
-     * @return the message, never containing database text
-     */
-    static String message(String state, int vendorCode) {
-        return "Database failure (SQL state " + (state == null ? "unknown" : state) + ", vendor code "
-                + vendorCode + ")";
+    /** Builds the fixed failure message; the SQLite result code name is added for the SQLite family only. */
+    private static String failureMessage(DatabaseFamily family, Set<DriverFailureKind> kinds, String state,
+            int vendorCode) {
+        String codeName = family == DatabaseFamily.SQLITE
+                ? DriverFailureMessages.sqliteCodeName(vendorCode).orElse(null)
+                : null;
+        return DriverFailureMessages.message(kinds, state, vendorCode, codeName);
     }
 
     private static Throwable next(Throwable t) {

@@ -224,6 +224,13 @@ SQLite code). The whole cause chain and the next-exception chain are inspected.
 A failure with a SQL state in class `08` (connection exception) is never a concurrency failure.
 The SQLite message is inspected to classify the failure but never copied into the
 `DriverException`, whose message is `Database failure (SQL state <state>, vendor code <code>)`.
+When the driver recognised a kind, the message continues with `: ` and the kinds as lower-case
+words in declaration order, such as `unique violation` or `concurrency`, joined by `, `. On SQLite,
+the result code name follows when Diwan knows it, such as `SQLITE_BUSY`; an extended code without
+its own name falls back to its primary code's name. A failure with no kind and no known name has
+the message above alone. Busy on SQLite reads
+`Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY`. The message never
+holds values, SQL or database text.
 
 Bindings: `setNull(i, Types.NULL)` for null; typed setters for `Boolean`, the integer types,
 `Float`, `Double`, `BigDecimal` and `String` (some drivers store a `Boolean` given to `setObject`

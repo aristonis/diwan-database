@@ -10,6 +10,10 @@ import java.util.Set;
 /**
  * Reports a failure raised by a driver, with the database's SQL state, vendor code and kind.
  *
+ * <p>The message names the SQL state and vendor code, then the recognised kinds and, on SQLite, the
+ * result code name, such as {@code SQLITE_BUSY}. It never holds bound values or the database's own
+ * error text.
+ *
  * <p>Instances are immutable after construction and safe to share between threads.
  *
  * @implSpec A driver must build the message from a fixed description of the failure plus the SQL
