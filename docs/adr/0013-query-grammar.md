@@ -37,10 +37,8 @@ dispatch have no direct Java form. Moments also need a storage rule, and SQLite 
    Laravel does.
 6. The grammar's `prepareBindings` converts `Instant` values on the way to the database: whole
    microseconds since the epoch on SQLite, unchanged on PostgreSQL, matching how
-   `Blueprint.instant` stores them. It applies at execution and in `toRawSql`. Money is not
-   converted: the builder does not know whether a column holds minor units, checked text or a
-   decimal. Diwan ships no money type; store money in a `decimal` column or an integer column of
-   minor units.
+   `Blueprint.instant` stores them. It applies at execution and in `toRawSql`. Decimal values
+   are not converted: the builder does not know how a column stores them.
 7. `insertGetId` asks the processor. PostgreSQL and SQLite 3.35 and later use
    `insert ... returning`. Older SQLite runs the insert and `select last_insert_rowid()` inside one
    transaction, so both use the same session; versions are compared as numbers. That path returns
@@ -64,7 +62,7 @@ dispatch have no direct Java form. Moments also need a storage rule, and SQLite 
 | PostgreSQL `truncate` never cascades | No global flag; cascading must be explicit |
 | `whereInstantBetween` added; date wheres are for text date columns only | SQLite date functions misread epoch microseconds |
 | Stricter values: a single value must be a scalar, between needs exactly two, rows with different keys and empty updates are refused, increments must be finite numbers | Errors before SQL instead of wrong SQL |
-| Money is not converted by the builder; Diwan ships no money type | Storage shape is per column |
+| Decimal values are not converted by the builder | Storage shape is per column |
 | No dynamic wheres, macros, `dump` or `dd` | PHP-only mechanisms |
 
 ## Consequences
