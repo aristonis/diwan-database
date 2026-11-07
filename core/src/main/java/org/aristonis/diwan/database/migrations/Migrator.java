@@ -388,7 +388,8 @@ public final class Migrator {
     /**
      * Rewrites the recorded checksum of every migration that ran to the one it declares now.
      *
-     * <p>Use it after an intended edit of a migration that already ran. Only migrations in the given
+     * <p>This is for recovery only: a local database that was never deployed, or a known accident.
+     * A deployed migration is changed with a new migration instead. Only migrations in the given
      * list that ran and declare a checksum are touched; a migration that declares none keeps its
      * recorded value. No migration event fires, and the call runs under the migration lock.
      *

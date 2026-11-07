@@ -132,6 +132,19 @@ class MigrationChecksumTest {
     }
 
     @Test
+    void messageAdvisesRestore() {
+        migrator(migration("a", "ta", "v1")).run();
+
+        MigrationChecksumException failure = assertThrows(MigrationChecksumException.class,
+                () -> migrator(migration("a", "ta", "v2")).run());
+
+        String message = failure.getMessage();
+        assertTrue(message.contains("Restore the migration and add a new one"), message);
+        assertTrue(message.contains("recovery only"), message);
+        assertTrue(message.endsWith("nothing was run"), message);
+    }
+
+    @Test
     void aMigrationWithoutAChecksumNeverBlocks() {
         migrator(migration("a", "ta", "v1"), migration("b", "tb", null)).run();
 

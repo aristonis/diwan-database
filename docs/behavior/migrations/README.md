@@ -32,8 +32,9 @@ and a rollback undoes the last batch.
 ## Checksums
 
 A migration can declare a checksum with `checksum()`. The default is empty, which means the
-migration is never checked. Return a version label you bump on purpose, or a hash of a canonical
-description of the change with `MigrationChecksum.of(String)`. That helper gives the SHA-256 in hex
+migration is never checked. Return a fixed constant set once for this migration, or a hash of a
+canonical description of the change with `MigrationChecksum.of(String)`. A deployed migration is
+never edited, so a schema change is always a new migration. That helper gives the SHA-256 in hex
 of the text after line endings become `\n` and accents are put in Unicode form NFC, so how the file
 was saved does not matter. The library never hashes compiled code, because that changes between
 compilers and code shrinkers.

@@ -11,8 +11,9 @@ import java.util.List;
  *
  * <p>A migration that was edited after it ran has not changed the database it already changed, so
  * the code and the schema have drifted apart. The message lists every such migration with the
- * recorded and the current checksum. To fix it, restore the old checksum value, or accept the
- * current ones with {@link Migrator#repairChecksums(List)}. Nothing ran when this is thrown.
+ * recorded and the current checksum. To fix it, restore the migration to the text that ran and add
+ * a new migration for the change; {@link Migrator#repairChecksums(List)} is for recovery only.
+ * Nothing ran when this is thrown.
  */
 public final class MigrationChecksumException extends IllegalStateException {
 
@@ -43,8 +44,8 @@ public final class MigrationChecksumException extends IllegalStateException {
                     .append(printable(mismatch.stored())).append(", current ")
                     .append(printable(mismatch.current()));
         }
-        text.append("\nRestore the old checksum value, or call repairChecksums() to accept the current ones;")
-                .append(" nothing was run");
+        text.append("\nRestore the migration and add a new one for the change;")
+                .append(" repairChecksums() is for recovery only; nothing was run");
         return text.toString();
     }
 
