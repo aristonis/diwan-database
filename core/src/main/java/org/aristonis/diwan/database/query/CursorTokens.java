@@ -10,7 +10,9 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -24,7 +26,8 @@ import java.util.regex.Pattern;
  * with the name and a string value percent-encoded so neither can carry a tab or a line break. Type
  * letters: {@code s} string, {@code i} long, {@code n} decimal, {@code d} double, {@code b} boolean,
  * {@code z} null, {@code t} instant, {@code l} local date-time, {@code o} offset date-time,
- * {@code u} UUID. No JSON library is needed, and every malformed token fails the same way.
+ * {@code u} UUID, {@code a} local date (ISO {@code yyyy-MM-dd}) and {@code c} local time (ISO
+ * {@code HH:mm[:ss[.n]]}). No JSON library is needed, and every malformed token fails the same way.
  */
 final class CursorTokens {
 
@@ -48,6 +51,13 @@ final class CursorTokens {
         }
         if (value instanceof Float) {
             return ((Float) value).doubleValue();
+        }
+        // Through the text, as the JDBC reader does: Android has no java.sql.Date.toLocalDate().
+        if (value instanceof java.sql.Date) {
+            return LocalDate.parse(value.toString());
+        }
+        if (value instanceof java.sql.Time) {
+            return LocalTime.parse(value.toString());
         }
         if (value instanceof java.sql.Timestamp) {
             return ((java.sql.Timestamp) value).toInstant();
@@ -142,6 +152,10 @@ final class CursorTokens {
                     return OffsetDateTime.parse(text);
                 case 'u':
                     return uuid(text);
+                case 'a':
+                    return LocalDate.parse(text);
+                case 'c':
+                    return LocalTime.parse(text);
                 default:
                     throw new IllegalArgumentException(INVALID + ": unknown type");
             }
@@ -224,6 +238,12 @@ final class CursorTokens {
         }
         if (value instanceof OffsetDateTime) {
             return 'o';
+        }
+        if (value instanceof LocalDate) {
+            return 'a';
+        }
+        if (value instanceof LocalTime) {
+            return 'c';
         }
         return value instanceof UUID ? 'u' : 0;
     }

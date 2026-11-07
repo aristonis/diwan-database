@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -64,6 +65,10 @@ class SQLiteCursorPaginateTest {
         schema.create("authors", t -> {
             t.id();
             t.integer("active");
+        });
+        schema.create("journal", t -> {
+            t.id();
+            t.date("day");
         });
     }
 
@@ -231,6 +236,22 @@ class SQLiteCursorPaginateTest {
 
         assertEquals(List.of("2024-01-01", "2024-01-02", "2024-01-03", "2024-01-05", "2024-01-06"), expected);
         assertEquals(expected, flatten(forward(query, 2, "created_at")));
+    }
+
+    @Test
+    void dateOrderedPagesWalk() {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            entries.add(row("day", "2024-03-0" + (i / 2 + 1)));
+        }
+        db.table("journal").insert(entries);
+        Supplier<Builder> query = () -> db.table("journal").orderBy("day", "desc").orderBy("id", "desc");
+
+        assertEquals(List.of(7L, 6L, 5L, 4L, 3L, 2L, 1L), longs(flatten(forward(query, 2, "id"))));
+
+        Cursor typed = new Cursor(Map.of("day", LocalDate.of(2024, 3, 2), "id", 4L), true);
+        CursorPage page = query.get().cursorPaginate(2, typed);
+        assertEquals(List.of(3L, 2L), longs(column(page.items(), "id")));
     }
 
     private void seedUsersWithPosts() {
