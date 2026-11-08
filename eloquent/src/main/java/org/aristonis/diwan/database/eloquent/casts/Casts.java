@@ -23,7 +23,7 @@ public final class Casts {
      * {@code string}, {@code bool}, {@code boolean}, {@code decimal:N} (N 0 to 30), {@code date},
      * {@code date:F}, {@code immutable_date[:F]}, {@code datetime}, {@code datetime:F},
      * {@code immutable_datetime[:F]}, {@code custom_datetime:F}, {@code timestamp}, {@code json},
-     * {@code array}, {@code json:unicode}. The argument is kept as written. A format {@code F} is a
+     * {@code array}, {@code json:unicode}, {@code instant}. The argument is kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
      *
@@ -137,6 +137,23 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code instant} cast, which stores an {@link java.time.Instant} whatever the
+     * model's {@link org.aristonis.diwan.database.eloquent.TimestampFormat}.
+     *
+     * <p>Reads as an {@code Instant} from any stored form. Writes truncate to microseconds and
+     * accept the same values as {@link #datetime()}. A bare number is refused. Use it for
+     * {@code Blueprint.instant} columns other than {@code created_at}, {@code updated_at} and
+     * {@code deleted_at}; those columns are also written by the framework in the model's format,
+     * so they need {@code TimestampFormat.INSTANT} on the model and a cast of this kind fails
+     * fast on a text-format model.
+     *
+     * @return a cast reading and writing {@code Instant}
+     */
+    public static Cast<Object> instant() {
+        return new MomentCast();
+    }
+
+    /**
      * Returns the {@code json} cast.
      *
      * @return a cast reading JSON values, writing non-ASCII escaped
@@ -172,8 +189,8 @@ public final class Casts {
      *
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
-     * {@code timestamp}, {@code json}, {@code enum}. Any other cast returns its class name. A cast
-     * string is parsed first.
+     * {@code timestamp}, {@code instant}, {@code json}, {@code enum}. Any other cast returns its
+     * class name. A cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -225,7 +242,8 @@ public final class Casts {
             return "date";
         }
         if (cast instanceof MomentCast) {
-            return ((MomentCast) cast).name().equals("timestamp") ? "timestamp" : "datetime";
+            String momentName = ((MomentCast) cast).name();
+            return momentName.equals("timestamp") || momentName.equals("instant") ? momentName : "datetime";
         }
         if (cast instanceof JsonCasts) {
             return "json";

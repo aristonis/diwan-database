@@ -9,6 +9,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 
 /** Turns Android's SQLite exceptions into driver failures, the way the JDBC driver does for SQLite. */
 final class AndroidSqliteFailures {
@@ -43,7 +44,8 @@ final class AndroidSqliteFailures {
                 || (code & PRIMARY_CODE_MASK) == SQLITE_BUSY || (code & PRIMARY_CODE_MASK) == SQLITE_LOCKED) {
             kinds.add(DriverFailureKind.CONCURRENCY);
         }
-        return new DriverException("Database failure (SQL state unknown, vendor code " + code + ")", null, code,
+        String codeName = DriverFailureMessages.sqliteCodeName(code).orElse(null);
+        return new DriverException(DriverFailureMessages.message(kinds, null, code, codeName), null, code,
                 failure.getMessage(), failure, kinds);
     }
 

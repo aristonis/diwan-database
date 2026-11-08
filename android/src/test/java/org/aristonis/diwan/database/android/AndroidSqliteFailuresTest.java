@@ -9,11 +9,13 @@ import android.database.sqlite.SQLiteConstraintException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabaseLockedException;
 import android.database.sqlite.SQLiteException;
+import java.util.EnumSet;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.exception.QueryException;
 import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -83,5 +85,16 @@ public class AndroidSqliteFailuresTest {
         assertEquals(0, plain.vendorCode());
         assertTrue(silent.kinds().isEmpty());
         assertFalse(unique.getMessage().contains("email"));
+    }
+
+    @Test
+    public void messageMatchesJdbc() {
+        DriverException busy = AndroidSqliteFailures.translate(
+                new SQLiteDatabaseLockedException("database is locked (code 5 SQLITE_BUSY)"));
+
+        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY",
+                busy.getMessage());
+        assertEquals(DriverFailureMessages.message(EnumSet.of(DriverFailureKind.CONCURRENCY), null, 5, "SQLITE_BUSY"),
+                busy.getMessage());
     }
 }

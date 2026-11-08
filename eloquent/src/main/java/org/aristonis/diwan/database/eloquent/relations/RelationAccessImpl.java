@@ -55,6 +55,13 @@ final class RelationAccessImpl implements RelationAccess {
     }
 
     @Override
+    public void whereBelongsTo(EloquentBuilder<?> builder, List<? extends Model> related, String relation,
+            boolean or) {
+        WhereBelongsTo.add(Objects.requireNonNull(builder, "builder"), Objects.requireNonNull(related, "related"),
+                relation, or);
+    }
+
+    @Override
     public Consumer<EloquentBuilder<?>> morphEager(Consumer<MorphEagerOptions> options,
             Consumer<EloquentBuilder<?>> plain) {
         return MorphEagerConstraint.of(Objects.requireNonNull(options, "options"), plain);

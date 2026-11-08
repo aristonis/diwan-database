@@ -308,6 +308,19 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
     }
 
     /**
+     * Returns one column of every matching row keyed by another column, in row order; when two
+     * rows share a key the later one wins. Values are raw, as for {@link #pluck(String)}: no casts
+     * apply.
+     *
+     * @param column the value column, never {@code null}
+     * @param key the key column, never {@code null}
+     * @return the values by key, never {@code null}
+     */
+    public Map<Object, Object> pluck(String column, String key) {
+        return scoped().pluck(column, key);
+    }
+
+    /**
      * Counts the matching rows.
      *
      * @return the count

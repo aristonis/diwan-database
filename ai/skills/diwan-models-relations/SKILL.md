@@ -34,6 +34,20 @@ ModelQuery<Post> posts = Post.query.on(manager.query());
 ModelCollection<Post> list = posts.with("author").get();
 ```
 
+Keep a model package-private behind a repository that returns an immutable record:
+
+```java
+final class UnitRow extends Model {
+    static final ModelQuery<UnitRow> query = ModelQuery.of(UnitRow.class, UnitRow::new);
+    // Tables is the app's own naming helper
+    @Override protected String table() { return Tables.name("units"); }
+}
+public Optional<Unit> find(long id) {
+    return UnitRow.query.on(db).find(id)
+            .map(r -> new Unit(r.getLong("id"), r.getString("name")));
+}
+```
+
 ## Pitfalls
 
 - No reflection and no annotations. Accessors, casts and relations are registered by name in
@@ -47,7 +61,9 @@ ModelCollection<Post> list = posts.with("author").get();
 - `fill` drops keys outside `fillable()`. `forceFill` and `Model.unguarded` bypass the guard, so keep
   them away from request data.
 - Date cast formats are Java patterns (`yyyy-MM-dd`), not PHP letters.
+- An `instant` column needs `Casts.instant()`. Instant `created_at`, `updated_at` or `deleted_at` need `timestampFormat()` = `TimestampFormat.INSTANT`, since the framework writes them directly.
 - `casts()` and `accessors()` are read once per class and must not use instance state.
 - Model `upsert` and `insertOrIgnore` skip events and casts. `upsert` needs SQLite 3.24.
+- `query().fillAndInsert(rows)` inserts many rows in one statement with casts and timestamps, but skips the fillable guard and events.
 
 Docs: Models and Relations on https://aristonis.org/open-source/diwan-database/docs/main/home

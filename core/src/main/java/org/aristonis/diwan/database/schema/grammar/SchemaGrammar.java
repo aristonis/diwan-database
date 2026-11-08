@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.schema.grammar;
 
 import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.Blueprint;
+import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
@@ -593,6 +594,24 @@ public abstract class SchemaGrammar {
      */
     protected String modifiers(Blueprint blueprint, ColumnDefinition column) {
         return "";
+    }
+
+    /**
+     * Returns the database's name for a collation.
+     *
+     * @implSpec The base returns the name of a named collation and refuses a portable one. A
+     *     grammar overrides it to map each portable collation it supports.
+     *
+     * @param collation the collation, never {@code null}
+     * @return the database's collation name, never {@code null}
+     * @throws UnsupportedOperationException if the grammar has no name for a portable collation
+     */
+    protected String collationName(Collation collation) {
+        if (collation.isPortable()) {
+            throw new UnsupportedOperationException(getClass().getSimpleName()
+                    + " has no name for the portable collation " + collation.name());
+        }
+        return collation.name();
     }
 
     /**

@@ -88,10 +88,12 @@ public abstract class Migration {
      * Returns a checksum that detects an edit made after the migration ran.
      *
      * <p>The migrator records it when the migration runs and compares it on later runs; a
-     * difference stops the run with a {@link MigrationChecksumException}. Return a hash of a
-     * canonical description of the change through {@link MigrationChecksum#of(String)}, or a
-     * version label you bump on purpose. The library never hashes the compiled class, because that
-     * differs between compilers and code shrinkers.
+     * difference stops the run with a {@link MigrationChecksumException}. Return a fixed constant
+     * for this migration, set once, or a hash of a canonical description of the change through
+     * {@link MigrationChecksum#of(String)}. The checksum detects an accidental edit of a migration
+     * that already ran; it is not a version, and a deployed migration is never edited, so its
+     * checksum never changes. The library never hashes the compiled class, because that differs
+     * between compilers and code shrinkers.
      *
      * @implSpec The default returns an empty optional, which means the migration is not checked.
      *     The value must be stable between runs of the same code.

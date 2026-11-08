@@ -193,8 +193,8 @@ class SQLiteChecksRebuildTest {
     }
 
     @Test
-    void aCollationIsStillRefused() {
-        db.statement("create table names (id integer primary key, name text collate nocase)");
+    void aCollationInATableConstraintIsStillRefused() {
+        db.statement("create table names (id integer primary key, name text, unique (name collate nocase))");
 
         assertThrows(UnsupportedOperationException.class,
                 () -> schema.table("names", table -> table.string("x").nullable().check("x <> ''")));

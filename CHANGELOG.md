@@ -7,6 +7,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Collation` and `ColumnDefinition.collation(...)`, on PostgreSQL and SQLite, for create, add and
+  change. `Collation.BINARY` is a portable byte order that each grammar maps to its own name, and
+  `Collation.of(name)` names a database collation.
+- `constrained(table, column, indexName)` and `references(column, indexName)` to name a foreign key.
+- `fillAndInsert`, `fillAndInsertOrIgnore` and `fillAndInsertGetId` on the model builder.
+- `whereBelongsTo` and `orWhereBelongsTo` on the model builder.
+- Keyed `pluck(column, key)` on the model builder, which returns a map.
+- `Casts.instant()`, a cast that stores an `Instant` whatever the model's timestamp format.
+- `transaction_mode` SQLite option, on JDBC and Android, choosing how a transaction begins:
+  `deferred`, `immediate` or `exclusive`.
+
+### Changed
+
+- SQLite accepts the `NO_KEY_UPDATE` and `KEY_SHARE` row locks as no-ops.
+- The SQLite table rebuild keeps a column's collation instead of refusing the table.
+- `MigrationChecksumException` advises restoring the migration and adding a new one.
+  `repairChecksums` is for recovery only.
+- Driver failure messages name the recognised kinds and the SQLite result code, such as
+  `Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY`.
+- `busy_timeout` applies to SQLite file databases when it is set.
+- A model whose instant timestamp columns carry the instant cast while it uses the TEXT timestamp
+  format fails at first use, naming the column.
+
+### Fixed
+
+- `cursorPaginate` ordered by a date or time column. A cursor can now hold `LocalDate` and
+  `LocalTime`.
+- SQLite commit no longer starts a new transaction after committing. A commit that landed could be
+  reported as busy under `immediate` mode.
+- A commit failure that may have landed says "commit outcome unknown" in its message.
+
 ## [0.1.0] - 2026-11-07
 
 The first release: a hand port of Laravel's `illuminate/database` to Java 17 and Android, with

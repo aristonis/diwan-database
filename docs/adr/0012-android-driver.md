@@ -44,5 +44,4 @@ anything the JDBC tests use.
 - `beginTransaction` is exclusive; without write-ahead logging (`enableWriteAheadLogging`) a long
   transaction blocks reads from other threads.
 - Decimals come back as SQLite stores them: a `decimal` column has numeric affinity, so `10.10`
-  reads as the double `10.1`, as with the JDBC driver. Diwan ships no money type; store money in
-  a `decimal` column or an integer column of minor units.
+  reads as the double `10.1`, as with the JDBC driver.

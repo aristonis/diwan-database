@@ -1,11 +1,13 @@
 package org.aristonis.diwan.database.android;
 
 import android.database.sqlite.SQLiteOpenHelper;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -21,6 +23,12 @@ import org.aristonis.diwan.database.schema.Schema;
  * thread. The {@code url}, {@code host} and {@code database} settings are ignored, and so is a
  * supplied {@link DataSource}; the helper decides where the database lives.
  *
+ * <p>The {@code transaction_mode} option chooses how a transaction begins. Unset or {@code exclusive}
+ * (any case) uses {@code beginTransaction()}, as before; {@code immediate} uses
+ * {@code beginTransactionNonExclusive()}, which takes the write lock at the start. {@code deferred} is
+ * refused, because Android cannot begin a deferred transaction, and so is any other value. In
+ * write-ahead-logging mode immediate and exclusive behave alike, since readers do not block the writer.
+ *
  * <p>Queries and schema use the SQLite grammars, which {@link #of(Supplier, Function, Function)}
  * takes explicitly: {@code AndroidConnector.of(() -> helper, SQLiteQuery::of, SQLiteSchema::of)}.
  *
@@ -30,6 +38,8 @@ public final class AndroidConnector implements Connector {
 
     /** The driver name this connector answers to. */
     public static final String DRIVER = "android";
+
+    private static final String TRANSACTION_MODE = "transaction_mode";
 
     private final Supplier<? extends SQLiteOpenHelper> helper;
     private final Function<Connection, QueryFactory> queryFactory;
@@ -69,12 +79,34 @@ public final class AndroidConnector implements Connector {
      * {@inheritDoc}
      *
      * @throws NullPointerException if the helper supplier returns {@code null}
+     * @throws DatabaseConfigException if {@code transaction_mode} is {@code deferred} or is not
+     *     {@code immediate} or {@code exclusive}
      */
     @Override
     public Connection connect(ConnectionConfig config, DataSource dataSource) {
+        boolean isNonExclusive = isNonExclusive(config);
         SQLiteOpenHelper opened = Objects.requireNonNull(helper.get(), "helper supplier returned null");
-        return Connection.builder().name(config.name()).driver(AndroidSqliteDriver.of(opened))
+        return Connection.builder().name(config.name()).driver(AndroidSqliteDriver.of(opened, isNonExclusive))
                 .tablePrefix(config.prefix()).strictTransactions(config.strictTransactions()).build();
+    }
+
+    private static boolean isNonExclusive(ConnectionConfig config) {
+        String raw = config.options().get(TRANSACTION_MODE);
+        if (raw == null) {
+            return false;
+        }
+        String mode = raw.trim().toLowerCase(Locale.ROOT);
+        if (mode.equals("exclusive")) {
+            return false;
+        }
+        if (mode.equals("immediate")) {
+            return true;
+        }
+        String reason = mode.equals("deferred")
+                ? "Android cannot begin a deferred transaction; use immediate or exclusive"
+                : "must be immediate or exclusive, got [" + raw + "]";
+        throw new DatabaseConfigException("Connection [" + config.name() + "] option " + TRANSACTION_MODE + ": "
+                + reason, config.name(), TRANSACTION_MODE);
     }
 
     @Override

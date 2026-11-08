@@ -11,7 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
@@ -64,9 +66,58 @@ class CursorTokensTest {
     @Test
     void anUnsupportedTypeIsRefusedWhenTheCursorIsBuilt() {
         Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put("day", LocalDate.of(2026, 1, 1));
+        parameters.put("span", Duration.ofMinutes(5));
 
         assertThrows(IllegalArgumentException.class, () -> new Cursor(parameters, true));
+    }
+
+    @Test
+    void dateAndTimeRoundTrip() {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("day", LocalDate.of(2026, 1, 2));
+        parameters.put("at", LocalTime.of(3, 4, 5, 6_000_000));
+        parameters.put("sqlDay", java.sql.Date.valueOf("2026-03-04"));
+        parameters.put("sqlAt", java.sql.Time.valueOf("23:59:58"));
+        Cursor cursor = new Cursor(parameters, true);
+
+        Cursor decoded = Cursor.decode(cursor.encode());
+
+        assertEquals(LocalDate.of(2026, 1, 2), decoded.parameter("day"));
+        assertEquals(LocalTime.of(3, 4, 5, 6_000_000), decoded.parameter("at"));
+        assertEquals(LocalDate.of(2026, 3, 4), decoded.parameter("sqlDay"));
+        assertEquals(LocalTime.of(23, 59, 58), decoded.parameter("sqlAt"));
+        assertEquals(cursor, decoded);
+        assertEquals(cursor.encode(), decoded.encode());
+    }
+
+    @Test
+    void oldTokensStillDecode() {
+        String oldToken = token("d=prev\nid\ti\t42\nname\ts\tann\nat\tt\t2026-01-02T03:04:05Z"
+                + "\nlocal\tl\t2026-01-02T03:04:05\nid2\tu\t123e4567-e89b-12d3-a456-426614174000");
+
+        Cursor decoded = Cursor.decode(oldToken);
+
+        assertTrue(decoded.pointsToPreviousItems());
+        assertEquals(42L, decoded.parameter("id"));
+        assertEquals("ann", decoded.parameter("name"));
+        assertEquals(Instant.parse("2026-01-02T03:04:05Z"), decoded.parameter("at"));
+        assertEquals(LocalDateTime.of(2026, 1, 2, 3, 4, 5), decoded.parameter("local"));
+        assertEquals(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"), decoded.parameter("id2"));
+    }
+
+    @Test
+    void badDateTextIsMalformed() {
+        String[] bad = {
+            token("d=next\nday\ta\t2026-02-30"),
+            token("d=next\nday\ta\tyesterday"),
+            token("d=next\nday\ta\t2026-01-02T03:04"),
+            token("d=next\nday\ta\t"),
+            token("d=next\nat\tc\t25:00"),
+            token("d=next\nat\tc\t03:04:05:06"),
+        };
+        for (String token : bad) {
+            assertThrows(IllegalArgumentException.class, () -> Cursor.decode(token), token);
+        }
     }
 
     @Test

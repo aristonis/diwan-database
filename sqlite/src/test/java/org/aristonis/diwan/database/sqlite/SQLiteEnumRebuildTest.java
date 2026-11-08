@@ -135,8 +135,8 @@ class SQLiteEnumRebuildTest {
     }
 
     @Test
-    void collationAndWithoutRowidAreStillRefusedWhileGeneratedColumnsAreCarried() {
-        db.statement("create table c1 (s text collate nocase)");
+    void constraintCollationAndWithoutRowidAreStillRefusedWhileGeneratedColumnsAreCarried() {
+        db.statement("create table c1 (s text, unique (s collate nocase))");
         db.statement("create table c2 (a integer, b integer as (a * 2))");
         db.statement("create table c3 (a integer primary key) without rowid");
 

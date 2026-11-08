@@ -261,4 +261,48 @@ class BlueprintKeysTest {
 
         assertThrows(IllegalArgumentException.class, () -> table.prepare(63));
     }
+
+    @Test
+    void constrainedTakesAName() {
+        Blueprint table = altering();
+        ForeignKeyDefinition key = table.foreignId("user_id").constrained("users", "id", "fk_posts_user");
+
+        table.prepare(63);
+
+        assertEquals("fk_posts_user", key.name());
+        assertEquals("users", key.referencedTable());
+        assertEquals(Arrays.asList("user_id"), key.columns());
+    }
+
+    @Test
+    void referencesTakesAName() {
+        Blueprint table = altering();
+        ForeignKeyDefinition key = table.foreignId("owner").references("uid", "fk_owner").on("owners");
+
+        table.prepare(63);
+
+        assertEquals("fk_owner", key.name());
+        assertEquals(Arrays.asList("uid"), key.referencedColumns());
+    }
+
+    @Test
+    void namedKeyCanBeDropped() {
+        Blueprint table = altering();
+        table.foreignId("user_id").constrained("users", "id", "fk_posts_user");
+        table.dropForeign("fk_posts_user");
+
+        table.prepare(63);
+
+        Command drop = table.commands().get(table.commands().size() - 1);
+        assertEquals("dropForeign", drop.name());
+        assertEquals("fk_posts_user", drop.string(Command.INDEX));
+    }
+
+    @Test
+    void overlongNameIsRefused() {
+        Blueprint table = altering();
+        table.foreignId("user_id").constrained("users", "id", "a_name_that_is_too_long");
+
+        assertThrows(IllegalArgumentException.class, () -> table.prepare(10));
+    }
 }

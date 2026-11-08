@@ -44,12 +44,18 @@ final class AndroidSqliteSession implements DriverSession {
 
     private final SQLiteDatabase database;
     private final List<String> savepoints = new ArrayList<>();
+    private final boolean isNonExclusive;
     private boolean hasBegun;
     private Thread owner;
     private boolean isClosed;
 
     AndroidSqliteSession(SQLiteDatabase database) {
+        this(database, false);
+    }
+
+    AndroidSqliteSession(SQLiteDatabase database, boolean isNonExclusive) {
         this.database = database;
+        this.isNonExclusive = isNonExclusive;
     }
 
     @Override
@@ -166,7 +172,11 @@ final class AndroidSqliteSession implements DriverSession {
             throw new IllegalStateException("The thread is already inside a transaction this session did not begin");
         }
         try {
-            database.beginTransaction();
+            if (isNonExclusive) {
+                database.beginTransactionNonExclusive();
+            } else {
+                database.beginTransaction();
+            }
         } catch (RuntimeException e) {
             throw translate(e);
         }

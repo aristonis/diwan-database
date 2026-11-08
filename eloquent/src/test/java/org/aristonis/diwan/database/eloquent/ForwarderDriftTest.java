@@ -23,7 +23,7 @@ class ForwarderDriftTest {
             "whereDoesntHave", "orWhereDoesntHave", "whereRelation", "orWhereRelation", "whereGroup", "orWhereGroup", "whereHasMorph", "orWhereHasMorph",
             "whereDoesntHaveMorph", "orWhereDoesntHaveMorph", "whereMorphRelation", "orWhereMorphRelation",
             "whereMorphDoesntHaveRelation", "orWhereMorphDoesntHaveRelation", "whereMorphedTo", "orWhereMorphedTo",
-            "whereNotMorphedTo", "orWhereNotMorphedTo"));
+            "whereNotMorphedTo", "orWhereNotMorphedTo", "whereBelongsTo", "orWhereBelongsTo"));
 
     private static final Set<String> OMITTED = new HashSet<>(Arrays.asList(OmittedForwarders.LIST));
 

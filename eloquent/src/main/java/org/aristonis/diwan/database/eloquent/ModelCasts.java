@@ -1,10 +1,12 @@
 package org.aristonis.diwan.database.eloquent;
 
 import java.time.temporal.Temporal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -212,12 +214,15 @@ abstract class ModelCasts extends ModelAttributes {
      * @param resolved resolved casts by attribute name, unmodifiable, never {@code null}
      * @return this model
      * @throws NullPointerException if {@code resolved} is {@code null}
+     * @throws IllegalStateException if a timestamp column the framework writes gets the instant cast on a
+     *     model whose timestamps are text
      */
     final Model mergeResolvedCasts(Map<String, Cast<?>> resolved) {
         Objects.requireNonNull(resolved, "resolved");
         if (resolved.isEmpty()) {
             return self();
         }
+        rejectInstantTimestamps(resolved);
         mergeObjectCasts();
         objectCache.keySet().removeAll(resolved.keySet());
         if (castOverlay == null) {
@@ -435,7 +440,39 @@ abstract class ModelCasts extends ModelAttributes {
             // A declared cast for the column wins; the class's settings must not depend on instance state.
             resolved.putIfAbsent(deletedAtColumn(), Casts.resolve(Casts.datetime()));
         }
+        rejectInstantTimestamps(resolved);
         return Collections.unmodifiableMap(resolved);
+    }
+
+    /**
+     * Fails when a timestamp column the framework writes carries the instant cast on a model
+     * whose timestamps are text, since those columns would then hold two forms. Created and
+     * updated columns count only when the model uses timestamps, and the deleted column only when it
+     * soft-deletes.
+     *
+     * @param resolved the resolved casts to check, never {@code null}
+     * @throws IllegalStateException if such a column carries the instant cast
+     */
+    private void rejectInstantTimestamps(Map<String, Cast<?>> resolved) {
+        if (getTimestampFormat() == TimestampFormat.INSTANT) {
+            return;
+        }
+        List<String> columns = new ArrayList<>();
+        if (timestamps()) {
+            columns.add(getCreatedAtColumn());
+            columns.add(getUpdatedAtColumn());
+        }
+        if (softDeletes()) {
+            columns.add(deletedAtColumn());
+        }
+        for (String column : columns) {
+            Cast<?> cast = column == null ? null : resolved.get(column);
+            if (cast != null && "instant".equals(Casts.typeName(cast))) {
+                throw new IllegalStateException("Model [" + getClass().getName() + "] column [" + column
+                        + "] carries Casts.instant() but timestampFormat() is TEXT; set timestampFormat()"
+                        + " to TimestampFormat.INSTANT");
+            }
+        }
     }
 
     private static String specOf(Cast<?> cast) {
@@ -483,6 +520,7 @@ abstract class ModelCasts extends ModelAttributes {
         map.put("custom_datetime", "datetime");
         map.put("immutable_custom_datetime", "datetime");
         map.put("timestamp", "timestamp");
+        map.put("instant", "instant");
         map.put("json", "json");
         map.put("array", "json");
         map.put("enum", "enum");

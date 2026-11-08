@@ -12,7 +12,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.query.Builder;
+import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
+import org.aristonis.diwan.database.query.RowLock;
 import org.aristonis.diwan.database.query.Where;
 import org.aristonis.diwan.database.values.Instants;
 
@@ -33,9 +35,9 @@ import org.aristonis.diwan.database.values.Instants;
  * table's {@code rowid}, so on a {@code WITHOUT ROWID} table it fails the same way, with SQLite's
  * "no such column" error; telling such a table apart would need a schema read on every call.
  *
- * <p>Laravel's {@code compileLock} returns an empty string for SQLite, and so does the base grammar
- * here for {@code lockForUpdate} and {@code sharedLock}, so nothing is overridden. A lock strength
- * or wait only PostgreSQL has is refused with {@code UnsupportedOperationException}.
+ * <p>Laravel's {@code compileLock} returns an empty string for SQLite. This grammar does the same for
+ * every lock strength with {@link LockWait#WAIT}: SQLite has no row locks, so a locked select takes
+ * no lock early. A wait that changes behaviour is refused with {@code UnsupportedOperationException}.
  *
  * <p>Instances are immutable and safe to share between threads.
  */
@@ -339,6 +341,30 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     @Override
     protected String compileDeleteWithJoins(Builder query, String table, String where) {
         return "delete from " + table + " where " + rowidIn(query);
+    }
+
+    /**
+     * Compiles a row lock as nothing. SQLite has no row locks: the select takes no lock early, and
+     * the transaction takes the database's write lock only at its first write. On the JDBC driver a
+     * transaction starts deferred, so two transactions that read and then update the same row do
+     * not queue as they would on PostgreSQL; the second writer fails with a busy error. A wait that
+     * changes which rows are read, {@link LockWait#NOWAIT} or
+     * {@link LockWait#SKIP_LOCKED}, is refused, since a caller who asked for it would get a result
+     * it did not expect.
+     *
+     * @param query the query, never {@code null}
+     * @param lock the lock, never {@code null}
+     * @return the empty string, never {@code null}
+     * @throws IllegalArgumentException if the query has unions
+     * @throws UnsupportedOperationException if the wait is not {@link LockWait#WAIT}
+     */
+    @Override
+    protected String compileLock(Builder query, RowLock lock) {
+        checkLockable(query);
+        if (lock.lockWait() != LockWait.WAIT) {
+            throw unsupported("The " + lock.lockWait() + " row lock wait");
+        }
+        return "";
     }
 
     /**

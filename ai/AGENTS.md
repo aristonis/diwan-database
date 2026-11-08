@@ -28,6 +28,11 @@ with the manager. Inside a transaction, call `db.on(tx)` so the work runs on the
 
 ## Rules
 
+Order of use: (1) models; (2) the query builder where a model cannot express the query;
+(3) `*Raw` methods only for a feature Diwan lacks, with values as bindings, and report the gap
+(see the `diwan-report-issue` skill). For the schema, use builder methods only, with the same
+fallback.
+
 Always:
 
 - Close a `QueryCursor` with try-with-resources. A `stream()` from it releases the connection only
@@ -36,8 +41,8 @@ Always:
   Identifiers are quoted, not bound.
 - Run row locks (`lockForUpdate`, `sharedLock`, `lock`) only inside a transaction, on the
   connection the callback gives you. PostgreSQL throws outside one.
-- Pass values as bindings. Use `whereRaw(sql, bindings)` and `selectRaw(sql, bindings)`.
-- Declare `checksum()` on every migration, and name each migration with a fixed string in `name()`.
+- Declare `checksum()` on every migration as a fixed constant set once (not a version), and name
+  each migration with a fixed string in `name()`.
 - Declare each model as `public static final ModelQuery<T> query = ModelQuery.of(T.class, T::new)`.
 - On Android, override `table()` on models and name relation keys explicitly, or keep model class
   names in R8.
@@ -51,8 +56,10 @@ Always:
 Never:
 
 - Build SQL by joining strings with user input, in `whereRaw`, `orderByRaw`, `fromRaw` or anywhere.
-- Edit a migration that already ran. Add a new migration. Use `repairChecksums` only on purpose,
-  after an edit you meant to make.
+- Edit a migration that has been deployed, or change its checksum. Change the schema with a new
+  migration. `repairChecksums` is for recovery only (a local database that was never deployed, or a
+  known accident).
+- Write two versions of one rule by branching on the database driver in a migration.
 - Call `upsert` on SQLite older than 3.24 (Android API 28 and 29). It throws
   `UnsupportedOperationException`.
 - Use reflection or annotations to register models, relations or migrations. Diwan scans nothing.

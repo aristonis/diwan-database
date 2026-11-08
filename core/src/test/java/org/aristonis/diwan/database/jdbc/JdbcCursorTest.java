@@ -193,7 +193,8 @@ class JdbcCursorTest {
 
             assertEquals(Arrays.asList("setAutoCommit [false]", "prepare " + ResultSet.TYPE_FORWARD_ONLY + " "
                     + ResultSet.CONCUR_READ_ONLY, "statement setFetchSize 500", "resultSet close", "statement close",
-                    "commit", "setAutoCommit [true]"), events);
+                    "setAutoCommit [true]"), events);
+            // SQLite commits by switching auto-commit on, so no separate commit call is recorded.
             session.update("insert into t (name) values ('after')", Collections.emptyList());
         } finally {
             session.close();

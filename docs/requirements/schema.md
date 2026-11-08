@@ -149,7 +149,6 @@ schema-qualified names, listings of tables and columns.
 ## Decimals and moments
 
 - A plain `decimal()` column keeps Laravel's SQLite type, `numeric`, which stores floating point.
-  Diwan ships no money type; use `decimal()` or an integer column of minor units.
 - `Instants` lives in the `values` package.
 - `instant(column)` stores a moment as whole microseconds on SQLite and `timestamptz` on PostgreSQL;
   `Instants.toMicros` and `Instants.read` convert, and `Instants.now()` gives the current moment at

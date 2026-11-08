@@ -91,9 +91,11 @@ Inside a transaction, `query.on(c)` returns the factory bound to the transaction
   The last lock set wins, and `clone` keeps it.
 - PostgreSQL writes `for update`, `for no key update`, `for share` or `for key share`, then
   `nowait` or `skip locked`, last in the select, after the offset.
-- SQLite has no row locks: `lockForUpdate`, `sharedLock` and the plain `UPDATE` and `SHARE` locks
-  write nothing. `NO_KEY_UPDATE`, `KEY_SHARE`, `NOWAIT` and `SKIP_LOCKED` are refused with
-  `UnsupportedOperationException`, so code written for PostgreSQL does not silently lose them.
+- SQLite has no row locks: every strength (`UPDATE`, `NO_KEY_UPDATE`, `SHARE`, `KEY_SHARE`)
+  writes nothing, as in Laravel. `NOWAIT` and `SKIP_LOCKED` are refused with
+  `UnsupportedOperationException`, since they change which rows a caller reads. A locked select
+  takes no lock early; on the JDBC driver a transaction starts deferred, so two read-then-update
+  transactions on one row do not queue: the second writer fails with a busy error.
 - A locked select on PostgreSQL outside a transaction throws `IllegalStateException`, because the
   lock would be released as soon as the statement ends. This does not depend on the connection's
   strict transactions flag. Run the query on the connection a `transaction(...)` callback gives.

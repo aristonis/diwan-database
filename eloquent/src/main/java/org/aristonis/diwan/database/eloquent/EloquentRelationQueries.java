@@ -1,6 +1,8 @@
 package org.aristonis.diwan.database.eloquent;
 
 import org.aristonis.diwan.database.eloquent.scope.Scope;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -445,6 +447,112 @@ abstract class EloquentRelationQueries<T extends Model> extends EloquentCreators
                 base.where(fill);
             }
         });
+        return self();
+    }
+
+    /**
+     * Adds a condition that the models belong to the given model through the belongs-to relation
+     * named after its class: {@code whereBelongsTo(user)} uses {@code user}. The default name is
+     * the camel-cased simple class name, so under R8 or other renaming pass the name with
+     * {@link EloquentBuilder#whereBelongsTo(Model, String)}.
+     *
+     * @param related the owner, never {@code null}, with a value for the relation's owner key
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if the owner is not of the relation's related class or has no
+     *     owner key value
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the model
+     *     has no such belongs-to relation
+     */
+    public final EloquentBuilder<T> whereBelongsTo(Model related) {
+        return belongsTo(Collections.singletonList(Objects.requireNonNull(related, "related")), null, false);
+    }
+
+    /**
+     * Adds a condition that the models belong to the given model through the named belongs-to
+     * relation.
+     *
+     * @param related the owner, never {@code null}, with a value for the relation's owner key
+     * @param relation the belongs-to relation name, or {@code null} for the default; see
+     *     {@link EloquentBuilder#whereBelongsTo(Model)}
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if the owner is not of the relation's related class or has no
+     *     owner key value
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
+     *     is unknown or is not a belongs-to relation
+     */
+    public final EloquentBuilder<T> whereBelongsTo(Model related, String relation) {
+        return belongsTo(Collections.singletonList(Objects.requireNonNull(related, "related")), relation, false);
+    }
+
+    /**
+     * Adds a condition that the models belong to any of the given models through the named
+     * belongs-to relation, as one {@code in} clause; a large collection is bound like
+     * {@code whereIn}, so the database's binding limit applies.
+     *
+     * @param related the owners, never {@code null} or empty, each with a value for the owner key
+     * @param relation the belongs-to relation name, or {@code null} for the default; see
+     *     {@link EloquentBuilder#whereBelongsTo(Model)}
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException if the collection is empty, an owner is not of the relation's
+     *     related class or has no owner key value
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException if the name
+     *     is unknown or is not a belongs-to relation
+     */
+    public final EloquentBuilder<T> whereBelongsTo(Collection<? extends Model> related, String relation) {
+        return belongsTo(new ArrayList<>(Objects.requireNonNull(related, "related")), relation, false);
+    }
+
+    /**
+     * Like {@link EloquentBuilder#whereBelongsTo(Model)}, joined to the earlier clauses with {@code or}.
+     *
+     * @param related the owner, never {@code null}, with a value for the relation's owner key
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException as {@link EloquentBuilder#whereBelongsTo(Model)}
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException as
+     *     {@link EloquentBuilder#whereBelongsTo(Model)}
+     */
+    public final EloquentBuilder<T> orWhereBelongsTo(Model related) {
+        return belongsTo(Collections.singletonList(Objects.requireNonNull(related, "related")), null, true);
+    }
+
+    /**
+     * Like {@link EloquentBuilder#whereBelongsTo(Model, String)}, joined to the earlier clauses with {@code or}.
+     *
+     * @param related the owner, never {@code null}, with a value for the relation's owner key
+     * @param relation the belongs-to relation name, or {@code null} for the default
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException as {@link EloquentBuilder#whereBelongsTo(Model, String)}
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException as
+     *     {@link EloquentBuilder#whereBelongsTo(Model, String)}
+     */
+    public final EloquentBuilder<T> orWhereBelongsTo(Model related, String relation) {
+        return belongsTo(Collections.singletonList(Objects.requireNonNull(related, "related")), relation, true);
+    }
+
+    /**
+     * Like {@link EloquentBuilder#whereBelongsTo(Collection, String)}, joined to the earlier clauses with
+     * {@code or}.
+     *
+     * @param related the owners, never {@code null} or empty
+     * @param relation the belongs-to relation name, or {@code null} for the default
+     * @return this builder
+     * @throws NullPointerException if {@code related} is {@code null}
+     * @throws IllegalArgumentException as {@link EloquentBuilder#whereBelongsTo(Collection, String)}
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException as
+     *     {@link EloquentBuilder#whereBelongsTo(Collection, String)}
+     */
+    public final EloquentBuilder<T> orWhereBelongsTo(Collection<? extends Model> related, String relation) {
+        return belongsTo(new ArrayList<>(Objects.requireNonNull(related, "related")), relation, true);
+    }
+
+    private EloquentBuilder<T> belongsTo(List<? extends Model> related, String relation, boolean or) {
+        Relation.ensureInitialised();
+        Access.relations().whereBelongsTo(self(), related, relation, or);
         return self();
     }
 

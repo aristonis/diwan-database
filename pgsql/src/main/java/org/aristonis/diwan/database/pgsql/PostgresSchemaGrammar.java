@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
+import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.grammar.Command;
@@ -155,8 +156,8 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return one {@code alter table} that sets the type (converting with {@code using}), the
-     *     nullability and the default; enum, raw and generated columns and checks are refused
+     * @return one {@code alter table} that sets the type (with its collation when one is set,
+     *     converting with {@code using}), the nullability and the default; enum, raw and generated columns and checks are refused
      */
     @Override
     protected List<String> compileChange(Blueprint blueprint, Command command, Connection connection) {
@@ -170,8 +171,9 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
         String type = type(column);
         String alter = "alter column " + name;
         StringBuilder sql = new StringBuilder("alter table ").append(wrapTable(blueprint.table())).append(' ')
-                .append(alter).append(" type ").append(type).append(" using ").append(name).append("::")
-                .append(type);
+                .append(alter).append(" type ").append(type);
+        column.collation().ifPresent(collation -> sql.append(" collate ").append(wrap(collationName(collation))));
+        sql.append(" using ").append(name).append("::").append(type);
         sql.append(", ").append(alter).append(column.isNullable() ? " drop not null" : " set not null");
         String defaultSql = defaultSql(column);
         sql.append(", ").append(alter).append(defaultSql == null ? " drop default" : " set default " + defaultSql);
@@ -509,7 +511,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return in Laravel's order: nullability (on a generated column only after
+     * @return in Laravel's order: the collation (not on a raw column), nullability (on a generated column only after
      *     {@code nullable(false)}), the default, the generated expression, {@code primary key} for an
      *     auto-increment column, then each check; a raw column gets only its checks
      */
@@ -517,6 +519,9 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     protected String modifiers(Blueprint blueprint, ColumnDefinition column) {
         StringBuilder sql = new StringBuilder();
         if (column.type() != ColumnType.RAW) {
+            // In PostgreSQL a collation is an identifier, so it is quoted like one.
+            column.collation().ifPresent(collation -> sql.append(" collate ")
+                    .append(wrap(collationName(collation))));
             if (column.isGenerated()) {
                 sql.append(column.isNotNullStated() ? " not null" : "");
             } else {
@@ -538,6 +543,16 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
             sql.append(" check (").append(check).append(')');
         }
         return sql.toString();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code C} for {@link Collation#BINARY}; a named collation as given
+     */
+    @Override
+    protected String collationName(Collation collation) {
+        return collation.equals(Collation.BINARY) ? "C" : super.collationName(collation);
     }
 
     /**
