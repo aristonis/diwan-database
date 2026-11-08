@@ -5,11 +5,13 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.PretendCallback;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.TransactionOptions;
 import org.aristonis.diwan.database.TransactionScope;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.RowCursor;
@@ -18,6 +20,10 @@ import org.aristonis.diwan.database.driver.RowCursor;
  * A connection held to one driver session for the life of a {@link Connection#session} callback.
  *
  * <p>The session is owned by the root connection that opened it; this class never closes it.
+ *
+ * <p>The caller keeps the session after a transaction on it ends. If the lock wait of that
+ * transaction cannot be restored, the failure is reported but the session stays open with the
+ * shorter timeout until the callback ends; a failure that leaves the callback drops the session.
  */
 final class SessionConnection extends AbstractConnection {
 
@@ -93,18 +99,16 @@ final class SessionConnection extends AbstractConnection {
 
     // Retries reuse the held session: giving it up would lose the settings the session exists for.
     @Override
-    public <T> T transaction(TransactionCallback<T> callback, int attempts) {
+    public <T> T transaction(TransactionCallback<T> callback, TransactionOptions options) {
         Objects.requireNonNull(callback, "callback");
-        if (attempts < 1) {
-            throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
-        }
+        Objects.requireNonNull(options, "options");
         ensureOpen();
         // After-rollback work of a failed attempt waits until the whole call is over, as on the root.
         List<Runnable> deferred = new ArrayList<>();
         T result = null;
         Throwable failure = null;
         try {
-            result = attempts(callback, attempts, deferred);
+            result = attempts(callback, options, deferred);
         } catch (RuntimeException | Error attemptFailure) {
             failure = attemptFailure;
         }
@@ -120,9 +124,11 @@ final class SessionConnection extends AbstractConnection {
         return result;
     }
 
-    private <T> T attempts(TransactionCallback<T> callback, int attempts, List<Runnable> deferred) {
+    private <T> T attempts(TransactionCallback<T> callback, TransactionOptions options,
+            List<Runnable> deferred) {
+        int attempts = options.attempts();
         for (int attempt = 1; ; attempt++) {
-            TransactionState state = begin();
+            TransactionState state = begin(options);
             TransactionalConnection connection = new TransactionalConnection(settings(), state);
             T result;
             try {
@@ -141,6 +147,11 @@ final class SessionConnection extends AbstractConnection {
                 continue;
             }
             deferred.add(afterEnd(connection, true, true));
+            // Committed already, so a wait that cannot be taken back is thrown, not rolled back.
+            Throwable restoreFailure = state.restoreLockWait();
+            if (restoreFailure != null) {
+                Sessions.rethrow(restoreFailure);
+            }
             return result;
         }
     }
@@ -155,20 +166,26 @@ final class SessionConnection extends AbstractConnection {
         };
     }
 
-    private TransactionState begin() {
+    private TransactionState begin(TransactionOptions options) {
         cursorGuard.check();
+        LockWaitBegin.Handle lockWait = null;
         try {
             boolean isExternal = session.inExternalTransaction();
             if (isExternal) {
                 session.savepoint(TransactionState.OUTERMOST_SAVEPOINT);
             } else {
-                session.begin();
+                // Inside an external transaction no begin runs, so there is nothing to apply a wait to.
+                lockWait = LockWaitBegin.begin(session, options, session::begin);
             }
             TransactionState state = new TransactionState(session, isExternal, canReleaseSavepoints, cursorGuard);
+            state.setLockWait(lockWait);
             try {
                 TransactionState.fire(settings(), TransactionPhase.BEGINNING, 1, isExternal);
             } catch (RuntimeException | Error listenerFailure) {
+                // The caller owns this session. A failed undo or restore is attached to the failure, and
+                // the session is dropped when that failure ends the session callback.
                 TransactionState.undoBegin(session, isExternal, listenerFailure);
+                LockWaitBegin.restoreAfterFailure(lockWait, listenerFailure);
                 throw listenerFailure;
             }
             return state;
@@ -188,6 +205,10 @@ final class SessionConnection extends AbstractConnection {
                 connection.rollbackOutermost();
             } catch (Throwable rollbackFailure) {
                 Sessions.suppress(failure, rollbackFailure);
+            }
+            Throwable restoreFailure = connection.state().restoreLockWait();
+            if (restoreFailure != null) {
+                Sessions.suppress(failure, restoreFailure);
             }
             throw failure;
         } finally {
@@ -211,6 +232,12 @@ final class SessionConnection extends AbstractConnection {
     public List<LoggedQuery> pretend(PretendCallback callback) {
         ensureOpen();
         return PretendConnection.record(settings(), callback);
+    }
+
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        ensureOpen();
+        return session.exactDecimalDigits();
     }
 
     @Override

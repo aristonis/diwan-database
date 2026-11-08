@@ -5,6 +5,76 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.0] - 2026-11-08
+
+### Added
+- `Casts.decimalText(precision, scale)` and `decimalText(precision, scale, RoundingMode)`: the strict decimal cast for a text column, without the SQLite 15-digit limit.
+
+- `Casts.decimal(precision, scale)` and `Casts.decimal(precision, scale, RoundingMode)`, with the
+  `decimal:P,S` and `decimal:P,S,MODE` cast strings. The strict decimal refuses too many integer
+  digits, and refuses extra decimals unless a rounding mode is given.
+- `whereContains`, `whereStartsWith` and `whereEndsWith` on the query builder and the model builder,
+  with `or`, `Not` and `orNot` forms and a `caseSensitive` flag. The search value is always literal.
+- `DriverException.error()`, which returns a `DiwanError` with a stable `DWN-` code, the constraint
+  or index name (`key()`) and the columns (`columns()`).
+- `TransactionOptions` with `lockWait(Duration)`, `attempts(int)` and `withLockWait` / `withAttempts`,
+  and `Connection.transaction(callback, options)`. A lock wait applies to the outermost transaction
+  only: PostgreSQL runs `SET LOCAL lock_timeout` after `BEGIN`, and SQLite and Android set
+  `busy_timeout` before `BEGIN` and restore it afterwards. A timeout is a concurrency failure, so
+  attempts retry it.
+- `lock(LockStrength, Duration)` on the query builder and the model builder, a timed row lock for
+  one statement on PostgreSQL.
+- `lock_wait` connection option (`5s`, `500ms` or milliseconds), also the `busy_timeout` alias on
+  SQLite and a `PRAGMA` on Android.
+- `sumDecimal(column, scale)` and `sumDecimal(column, scale, RoundingMode)` on the query builder and
+  the model builder.
+- Driver SPI: `DriverSession` lock-wait methods and `LockWaitGuard`, and `Driver.exactDecimalDigits()`,
+  all with defaults, so an existing driver keeps compiling.
+- `DriverFailureKind.CHECK_VIOLATION` and `NOT_NULL_VIOLATION`, with the codes `DWN-CST-0003` and
+  `DWN-CST-0004`.
+
+- Testing module `org.aristonis:diwan-database-testing`: the `RefreshDatabase` JUnit 5 extension
+  (`rollback` and `truncate` modes, migrations once per run) and `DatabaseAssertions` (`assertHas`,
+  `assertMissing`, `assertCount`, `assertEmpty`, `assertModelExists`, `assertModelMissing`,
+  `assertSoftDeleted`, `assertNotSoftDeleted`).
+- `Schema.getTables()`, `getTableListing()`, `getViews()`, `dropAllTables()` and `dropAllViews()`,
+  with the `TableInfo` and `ViewInfo` values, and `Migrator.fresh()`.
+- `QueryFactory.truncate(List)` and `truncate(List, boolean cascade)`: several tables in one call,
+  native on PostgreSQL, emulated on SQLite and Android.
+- `Connection.beginJoinedTransaction`, an `@Internal` hook the testing module uses.
+
+### Fixed
+
+- SQLite `truncate` failed when the `sqlite_sequence` table did not exist.
+
+### Changed
+
+- Driver failure messages and query exception messages end with the Diwan error code, such as
+  `[DWN-CST-0001 unique violation: users_email_unique (email)]`. The rest of each message is
+  unchanged.
+- The strict decimal cast refuses a value with more than 15 significant digits on SQLite, where a
+  decimal column is a double. The `InvalidCastException` names the column, not the value. For
+  longer exact values use a text column with `Casts.decimalText(precision, scale)`. PostgreSQL is
+  unchanged.
+- `Connection.transaction(callback, int)` is now a default method that delegates to
+  `transaction(callback, TransactionOptions.attempts(n))`.
+
+### Known limitations
+
+- On PostgreSQL the `lock_wait` option bounds every lock wait of the session, including migration
+  DDL; the migration lock itself is exempt. PgBouncer transaction pooling may reject the `options`
+  startup parameter, so use `TransactionOptions.lockWait` there.
+- A transaction opened outside Diwan gets no lock wait.
+- A timed lock on a locking cursor bounds only the opening of the cursor.
+- On SQLite `sumDecimal` is a double rounded to the scale: approximate for very large sums.
+- `RefreshDatabase` rollback mode: work on other threads, executors and `@Timeout(SEPARATE_THREAD)`
+  commits for real, and `afterCommit` callbacks never fire. Truncate mode must not run under parallel
+  JUnit and does not empty tables a test creates itself.
+- `dropAllTables` on PostgreSQL leaves types, sequences and functions. On SQLite before 3.37 the
+  table listing is built from `sqlite_master`.
+
 ## [0.2.0] - 2026-11-08
 
 ### Added
@@ -228,5 +298,6 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/aristonis/diwan-database/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aristonis/diwan-database/releases/tag/v0.1.0

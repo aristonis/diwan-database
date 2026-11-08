@@ -51,6 +51,7 @@ class PostgresCastsTest {
         protected Map<String, Cast<?>> casts() {
             Map<String, Cast<?>> casts = new LinkedHashMap<>();
             casts.put("amount", Casts.of("decimal:2"));
+            casts.put("strict", Casts.decimal(12, 2));
             casts.put("seen_at", Casts.datetime());
             casts.put("seen_tz", Casts.datetime());
             casts.put("day", Casts.date());
@@ -71,7 +72,7 @@ class PostgresCastsTest {
         db = PostgresQuery.of(connection);
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
                 + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
-                + "instant_at timestamptz(6))");
+                + "instant_at timestamptz(6), strict numeric(12,2))");
     }
 
     private void insertSample() {
@@ -178,5 +179,14 @@ class PostgresCastsTest {
         Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
 
         assertEquals(moment, found.getAttribute("instant_at"));
+    }
+
+    @Test
+    void strictDecimalRoundTrip() {
+        Probe created = Probe.QUERY.on(db).create(row("strict", new BigDecimal("12345.6")));
+
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals(new BigDecimal("12345.60"), found.getAttribute("strict"));
     }
 }

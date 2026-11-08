@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.query;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.aristonis.diwan.database.Connection;
 
@@ -82,6 +85,65 @@ public final class QueryFactory {
      */
     public Builder query() {
         return new Builder(connection, grammar, processor);
+    }
+
+    /**
+     * Empties several tables, without cascade.
+     *
+     * @param tables the table names, never {@code null}, none {@code null} or blank, optionally
+     *     {@code schema.table}; empty runs nothing
+     * @throws NullPointerException if {@code tables} is {@code null}
+     * @throws IllegalArgumentException if a name is {@code null} or blank
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
+     * @see #truncate(List, boolean)
+     */
+    public void truncate(List<String> tables) {
+        truncate(tables, false);
+    }
+
+    /**
+     * Empties several tables in one call. When the grammar needs several statements, they run in
+     * one transaction, unless the connection is already inside one.
+     *
+     * <p>PostgreSQL runs one {@code truncate} that restarts identities. SQLite defers foreign-key
+     * checks to the commit, so the order is irrelevant, but a table outside the list that still
+     * refers to an emptied one makes the commit fail and undoes everything, unless {@code cascade}
+     * is set: SQLite then empties the referring tables too, as PostgreSQL does.
+     *
+     * @param tables the table names, never {@code null}, none {@code null} or blank, optionally
+     *     {@code schema.table}; empty runs nothing
+     * @param cascade whether tables that refer to these are emptied too, where the database can
+     * @throws NullPointerException if {@code tables} is {@code null}
+     * @throws IllegalArgumentException if a name is {@code null} or blank
+     * @throws UnsupportedOperationException if {@code cascade} is {@code true} and the grammar cannot
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement;
+     *     inside the transaction, every statement is then undone
+     */
+    public void truncate(List<String> tables, boolean cascade) {
+        List<String> names = new ArrayList<>(Objects.requireNonNull(tables, "tables"));
+        for (String name : names) {
+            if (name == null || name.trim().isEmpty()) {
+                throw new IllegalArgumentException("A table name to truncate must not be null or blank");
+            }
+        }
+        if (names.isEmpty()) {
+            return;
+        }
+        Map<String, List<Object>> statements = grammar.compileTruncateMany(names, cascade, connection);
+        if (statements.size() > 1 && connection.transactionLevel() == 0) {
+            connection.transaction(tx -> {
+                runAll(tx, statements);
+                return null;
+            });
+        } else {
+            runAll(connection, statements);
+        }
+    }
+
+    private void runAll(Connection target, Map<String, List<Object>> statements) {
+        for (Map.Entry<String, List<Object>> statement : statements.entrySet()) {
+            target.statement(statement.getKey(), grammar.prepareBindings(statement.getValue()));
+        }
     }
 
     /**

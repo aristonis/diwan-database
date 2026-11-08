@@ -111,4 +111,44 @@ public final class MigrationChecksums {
             }
         }
     }
+
+    /**
+     * Rewrites the stored checksum of every ran migration whose declared checksum differs.
+     *
+     * @param repository where the checksums are kept
+     * @param migrations the migrations to repair
+     * @return how many records were rewritten
+     */
+    @Internal
+    public static int repair(MigrationRepository repository, Collection<Migration> migrations) {
+        Map<String, Optional<String>> stored = repository.checksums();
+        int changed = 0;
+        for (Migration migration : migrations) {
+            Optional<String> recorded = stored.get(migration.name());
+            Optional<String> current = declared(migration);
+            if (recorded != null && current.isPresent() && !current.equals(recorded)) {
+                repository.setChecksum(migration.name(), current);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Removes every stored checksum.
+     *
+     * @param repository where the checksums are kept
+     * @return how many records held a checksum
+     */
+    @Internal
+    public static int clear(MigrationRepository repository) {
+        int changed = 0;
+        for (Map.Entry<String, Optional<String>> entry : repository.checksums().entrySet()) {
+            if (entry.getValue().isPresent()) {
+                repository.setChecksum(entry.getKey(), Optional.<String>empty());
+                changed++;
+            }
+        }
+        return changed;
+    }
 }

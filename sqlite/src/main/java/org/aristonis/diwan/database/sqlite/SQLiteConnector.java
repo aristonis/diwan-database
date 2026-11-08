@@ -10,6 +10,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.config.LockWaitOption;
 import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
@@ -41,6 +42,8 @@ import org.aristonis.diwan.database.schema.Schema;
  * takes the write lock at the start and makes writers queue. The {@code busy_timeout} option, when set,
  * is also passed to every URL the connector builds, file or in-memory, as {@code busy_timeout=<milliseconds>}
  * unless the URL names it, so a writer waits that long for the lock; unset leaves the driver's own wait.
+ * The {@code lock_wait} option, a duration such as {@code 5s} or {@code 500ms}, is another spelling of
+ * {@code busy_timeout}; when both are set they must name the same number of milliseconds.
  *
  * <p>When the application supplies a {@link DataSource}, it is used as is: no URL is built, no
  * option, including {@code transaction_mode} and {@code busy_timeout}, is applied and no connection is held back.
@@ -82,7 +85,8 @@ public final class SQLiteConnector implements Connector {
      *
      * @throws DatabaseConfigException if neither {@code url} nor {@code database} is set, if
      *     {@code foreign_keys} is not a boolean, if {@code transaction_mode} is not deferred, immediate
-     *     or exclusive, or if {@code busy_timeout} is not a number of milliseconds, zero or more
+     *     or exclusive, if {@code busy_timeout} is not a number of milliseconds, zero or more, if {@code lock_wait}
+     *     is not a positive duration, or if both are set and differ
      * @throws IllegalStateException if the in-memory database cannot be opened
      */
     @Override
@@ -157,7 +161,7 @@ public final class SQLiteConnector implements Connector {
     }
 
     private static String withBusyTimeout(String url, ConnectionConfig config) {
-        if (config.options().get(BUSY_TIMEOUT) == null) {
+        if (config.options().get(BUSY_TIMEOUT) == null && config.options().get(LockWaitOption.KEY) == null) {
             return url;
         }
         return appendOption(url, BUSY_TIMEOUT, Long.toString(busyTimeoutMillis(config)));
@@ -219,7 +223,22 @@ public final class SQLiteConnector implements Connector {
         return new SingleConnectionDataSource(config.name(), real, timeout);
     }
 
+    // busy_timeout and lock_wait name the same wait; one of them, or both when they agree, sets it.
     private static long busyTimeoutMillis(ConnectionConfig config) {
+        String lockWait = config.options().get(LockWaitOption.KEY);
+        long fromBusy = parseBusyTimeout(config);
+        if (lockWait == null) {
+            return fromBusy;
+        }
+        long fromLockWait = LockWaitOption.parseMillis(config.name(), LockWaitOption.KEY, lockWait);
+        if (config.options().get(BUSY_TIMEOUT) != null && fromBusy != fromLockWait) {
+            throw new DatabaseConfigException("Connection [" + config.name() + "] options " + BUSY_TIMEOUT + " and "
+                    + LockWaitOption.KEY + " name the same wait and must agree", config.name(), LockWaitOption.KEY);
+        }
+        return fromLockWait;
+    }
+
+    private static long parseBusyTimeout(ConnectionConfig config) {
         String raw = config.options().get(BUSY_TIMEOUT);
         if (raw == null) {
             return DEFAULT_BUSY_TIMEOUT_MILLIS;

@@ -166,6 +166,22 @@ class SQLiteQueryGrammarTest {
     }
 
     @Test
+    void truncateManyDefersChecksDeletesEachTableThenResetsTheirSequences() {
+        Map<String, List<Object>> statements = prefixed.grammar().compileTruncateMany(List.of("users", "aux.lines"), true);
+
+        assertEquals(List.of("PRAGMA defer_foreign_keys = ON", "delete from \"app_users\"", "delete from \"aux\".\"app_lines\"",
+                "delete from sqlite_sequence where name in (?)", "delete from \"aux\".sqlite_sequence where name in (?)"),
+                new ArrayList<>(statements.keySet()));
+        assertEquals(List.of("app_users"), statements.get("delete from sqlite_sequence where name in (?)"));
+        assertEquals(List.of("app_lines"), statements.get("delete from \"aux\".sqlite_sequence where name in (?)"));
+    }
+
+    @Test
+    void truncateManyOfNoTablesCompilesNothing() {
+        assertTrue(db.grammar().compileTruncateMany(List.of(), false).isEmpty());
+    }
+
+    @Test
     void instantsAreBoundAsEpochMicroseconds() {
         Instant moment = Instant.parse("2026-11-01T10:15:30.123456Z");
 
@@ -323,5 +339,16 @@ class SQLiteQueryGrammarTest {
 
         assertEquals(900, grammar.eagerKeyChunkSize());
         assertEquals(20_000, grammar.inlineKeyChunkSize());
+    }
+
+    @Test
+    void timeoutUnsupported() {
+        Builder query = db.table("items").lock(org.aristonis.diwan.database.query.LockStrength.UPDATE,
+                java.time.Duration.ofSeconds(1));
+
+        UnsupportedOperationException error = org.junit.jupiter.api.Assertions
+                .assertThrows(UnsupportedOperationException.class, query::toSql);
+
+        assertTrue(error.getMessage().contains("timed row lock wait"));
     }
 }

@@ -7,6 +7,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.config.LockWaitOption;
 import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
@@ -28,6 +29,9 @@ import org.aristonis.diwan.database.schema.Schema;
  * {@code beginTransactionNonExclusive()}, which takes the write lock at the start. {@code deferred} is
  * refused, because Android cannot begin a deferred transaction, and so is any other value. In
  * write-ahead-logging mode immediate and exclusive behave alike, since readers do not block the writer.
+ *
+ * <p>The {@code lock_wait} option, such as {@code 5s} or {@code 500ms}, sets {@code PRAGMA busy_timeout}
+ * once the database opens, so every statement waits that long for a lock before it fails.
  *
  * <p>Queries and schema use the SQLite grammars, which {@link #of(Supplier, Function, Function)}
  * takes explicitly: {@code AndroidConnector.of(() -> helper, SQLiteQuery::of, SQLiteSchema::of)}.
@@ -80,14 +84,21 @@ public final class AndroidConnector implements Connector {
      *
      * @throws NullPointerException if the helper supplier returns {@code null}
      * @throws DatabaseConfigException if {@code transaction_mode} is {@code deferred} or is not
-     *     {@code immediate} or {@code exclusive}
+     *     {@code immediate} or {@code exclusive}, or if {@code lock_wait} is not a positive duration
      */
     @Override
     public Connection connect(ConnectionConfig config, DataSource dataSource) {
         boolean isNonExclusive = isNonExclusive(config);
+        long busyTimeout = busyTimeout(config);
         SQLiteOpenHelper opened = Objects.requireNonNull(helper.get(), "helper supplier returned null");
-        return Connection.builder().name(config.name()).driver(AndroidSqliteDriver.of(opened, isNonExclusive))
+        return Connection.builder().name(config.name()).driver(AndroidSqliteDriver.of(opened, isNonExclusive, busyTimeout))
                 .tablePrefix(config.prefix()).strictTransactions(config.strictTransactions()).build();
+    }
+
+    // Zero means the option is unset and the database keeps its own busy timeout.
+    private static long busyTimeout(ConnectionConfig config) {
+        String raw = config.options().get(LockWaitOption.KEY);
+        return raw == null ? 0L : LockWaitOption.parseMillis(config.name(), LockWaitOption.KEY, raw);
     }
 
     private static boolean isNonExclusive(ConnectionConfig config) {

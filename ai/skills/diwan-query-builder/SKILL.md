@@ -50,13 +50,23 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
   Use the listed operators.
 - An empty `whereIn` matches no row; an empty `whereNotIn` matches every row, as in Laravel. Check
   the list before a delete.
+- User text goes through `whereContains`, `whereStartsWith` or `whereEndsWith`, which escape `%`
+  and `_`. Never build a `whereLike` pattern from user input: `whereLike` takes `%` and `_` as
+  wildcards and escapes nothing.
 - Row locks need a transaction on PostgreSQL, which throws `IllegalStateException` outside one.
   SQLite has no row locks: every strength is a no-op there, and `NOWAIT` and `SKIP_LOCKED` are refused.
+- `lock(LockStrength.UPDATE, Duration.ofSeconds(2))` is a timed row lock: PostgreSQL only, inside a
+  transaction, that statement only. SQLite and Android throw `UnsupportedOperationException`.
+- For money totals use `sumDecimal(column, scale)`: exact on PostgreSQL, a rounded double on SQLite
+  (approximate for very large sums). `sum` returns a `Number`.
 - `upsert` needs a unique index on exactly the `uniqueBy` columns, and SQLite 3.24 (Android API 30).
   `updateOrInsert` reads then writes and is not atomic.
 - `chunk` pages by offset and can skip rows on a changing table. Use `chunkById`.
 - `cursorPaginate` needs an `orderBy` on columns that are never null. Cursor tokens are not signed.
 - Batched `insert`, `upsert` and `insertOrIgnore` must stay under the binding limit (999 on SQLite
   before 3.32, 32766 after, 65535 on PostgreSQL).
+- `query.truncate(List.of("a", "b"))` empties several tables in one call; `truncate(tables, true)` cascades
+  (native on PostgreSQL, emulated on SQLite: referring tables carrying the connection prefix are emptied
+  too, children first). An empty list runs nothing; a null or blank name throws.
 
 Docs: Query builder on https://aristonis.org/open-source/diwan-database/docs/main/home

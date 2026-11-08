@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.Connection;
 
 /**
@@ -139,20 +140,34 @@ abstract class ReadQueries extends SubqueryClauses {
     }
 
     /**
-     * Refuses a row lock outside a transaction on a database where the lock ends with the
-     * statement. Not tied to the connection's strict transactions flag: such a lock never holds
-     * anything.
+     * Runs a read of this query after the lock checks. Refuses a row lock outside a transaction on a
+     * database where the lock ends with the statement; not tied to the connection's strict
+     * transactions flag, because such a lock never holds anything. A lock with a timeout runs the
+     * read under that limit, which applies to that read only.
      */
-    final void checkLockTransaction() {
+    final <T> T runLocked(Supplier<T> statement) {
+        if (lock != null && lock.timeoutMillis().isPresent()) {
+            return runWithLockTimeout(lock.timeoutMillis().getAsLong(), statement);
+        }
         if (lock != null && grammar.locksNeedTransaction() && connection.transactionLevel() == 0) {
             throw new IllegalStateException(
                     "A row lock outside a transaction is released at once; run the query inside transaction(...)");
         }
+        return statement.get();
+    }
+
+    /** Limits the lock wait of the read; the grammar refuses a timed lock first if it must. */
+    private <T> T runWithLockTimeout(long millis, Supplier<T> statement) {
+        toSql();
+        if (connection.transactionLevel() == 0) {
+            throw new IllegalStateException(
+                    "A lock wait timeout on a statement needs an open transaction");
+        }
+        return connection.withStatementLockWait(millis, statement);
     }
 
     private List<Map<String, Object>> runSelect() {
-        checkLockTransaction();
-        return connection.select(toSql(), grammar.prepareBindings(getBindings()));
+        return runLocked(() -> connection.select(toSql(), grammar.prepareBindings(getBindings())));
     }
 
     /** Runs a copy selecting only the plucked columns when the query selects none, as Laravel does. */

@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.query;
 
 import org.aristonis.diwan.database.Expression;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,6 +16,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.TransactionOptions;
 
 
 /**
@@ -154,6 +156,34 @@ abstract class SelectClauses extends SubqueryWheres {
     public final Builder lock(LockStrength strength, LockWait lockWait) {
         this.lock = new RowLock(strength, lockWait);
         return self();
+    }
+
+    /**
+     * Locks the selected rows and waits for a conflicting lock at most {@code timeout}. The select
+     * must run inside a transaction, where the limit applies to that statement; outside one it
+     * throws {@link IllegalStateException}. A timeout beyond that is refused, and a sub-millisecond
+     * timeout rounds up to one millisecond.
+     *
+     * <p>PostgreSQL renders a plain lock and limits the wait with {@code SET LOCAL lock_timeout}
+     * before the select. SQLite refuses a timed lock with {@link UnsupportedOperationException}.
+     *
+     * @param strength the strength, never {@code null}
+     * @param timeout the longest wait, never {@code null}, more than zero and at most
+     *     {@link Integer#MAX_VALUE} milliseconds
+     * @return this builder
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if {@code timeout} is zero, negative or too long
+     */
+    public final Builder lock(LockStrength strength, Duration timeout) {
+        Objects.requireNonNull(strength, "strength");
+        this.lock = new RowLock(strength, lockTimeoutMillis(timeout));
+        return self();
+    }
+
+    // The checks and the rounding are those of the transaction lock wait.
+    private static long lockTimeoutMillis(Duration timeout) {
+        Objects.requireNonNull(timeout, "timeout");
+        return TransactionOptions.lockWait(timeout).lockWaitMillis().getAsLong();
     }
 
     /**

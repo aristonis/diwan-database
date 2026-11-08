@@ -8,6 +8,7 @@ import java.lang.reflect.Proxy;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
@@ -62,7 +63,7 @@ class PostgresQueryGrammarTest {
     void operatorsWithAQuestionMarkAreNotOffered() {
         for (String operator : PostgresQuery.of(stub("")).grammar().getOperators()) {
             assertTrue(operator.indexOf('?') < 0, operator);
-            assertEquals(operator.toLowerCase(java.util.Locale.ROOT), operator);
+            assertEquals(operator.toLowerCase(Locale.ROOT), operator);
         }
         Builder query = db().table("t").where("a", "?|", "x");
         assertEquals("select * from \"t\" where \"a\" = ?", query.toSql());
@@ -145,6 +146,14 @@ class PostgresQueryGrammarTest {
     void truncateRestartsIdentity() {
         assertEquals(Map.of("truncate \"t\" restart identity", List.of()),
                 db().grammar().compileTruncate(db().table("t")));
+    }
+
+    @Test
+    void truncateManyIsOneStatementWithOptionalCascade() {
+        assertEquals(Map.of("truncate \"a\", \"s\".\"b\" restart identity", List.of()),
+                db().grammar().compileTruncateMany(List.of("a", "s.b"), false));
+        assertEquals(Map.of("truncate \"a\" restart identity cascade", List.of()),
+                db().grammar().compileTruncateMany(List.of("a"), true));
     }
 
     @Test
@@ -271,6 +280,14 @@ class PostgresQueryGrammarTest {
                 db().table("users").lock(LockStrength.KEY_SHARE, LockWait.NOWAIT).toSql());
         assertEquals("select * from \"users\" for update skip locked",
                 db().table("users").lock(LockStrength.UPDATE, LockWait.SKIP_LOCKED).toSql());
+    }
+
+    @Test
+    void timeout() {
+        assertEquals("select * from \"users\" for update",
+                db().table("users").lock(LockStrength.UPDATE, java.time.Duration.ofSeconds(3)).toSql());
+        assertEquals("select * from \"users\" for share",
+                db().table("users").lock(LockStrength.SHARE, java.time.Duration.ofMillis(5)).toSql());
     }
 
     @Test

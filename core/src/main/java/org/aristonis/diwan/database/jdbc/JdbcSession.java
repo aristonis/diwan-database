@@ -22,12 +22,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverCapability;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
@@ -35,6 +37,7 @@ import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.LockWaitGuard;
 import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
@@ -65,6 +68,8 @@ final class JdbcSession implements DriverSession {
     private final boolean isExternal;
     /** The product name used to read vendor codes, or {@code null} if unknown. */
     private final String productName;
+    /** The lock wait strategy of the database, or {@code null} when it has none. */
+    private final JdbcLockWait lockWait;
     /** Savepoints by name, in creation order. */
     private final Map<String, Savepoint> savepoints = new LinkedHashMap<>();
 
@@ -85,6 +90,7 @@ final class JdbcSession implements DriverSession {
         this.connection = connection;
         this.isExternal = isExternal;
         this.productName = productName;
+        this.lockWait = JdbcLockWait.forFamily(DatabaseFamily.of(productName));
         this.shouldRestoreManualCommit = shouldRestoreManualCommit;
     }
 
@@ -685,13 +691,72 @@ final class JdbcSession implements DriverSession {
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
         String codeName = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
                 ? DriverFailureMessages.sqliteCodeName(failure.vendorCode()).orElse(null) : null;
+        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null), failure.error().columns());
         String message = DriverFailureMessages.message(kinds, failure.sqlState().orElse(null),
-                failure.vendorCode(), codeName);
+                failure.vendorCode(), codeName, error);
         return new DriverException(message, failure.sqlState().orElse(null), failure.vendorCode(),
-                failure.databaseMessage().orElse(null), failure.getCause(), kinds);
+                failure.databaseMessage().orElse(null), failure.getCause(), kinds,
+                failure.error().key().orElse(null), failure.error().columns());
     }
 
     private DriverException failure(SQLException e) {
         return JdbcFailures.translate(e, productName);
+    }
+
+    @Override
+    public LockWaitGuard lockWait(long millis) {
+        if (lockWait == null) {
+            return DriverSession.super.lockWait(millis);
+        }
+        return new TranslatingGuard(lockWait.guard(connection, millis));
+    }
+
+    @Override
+    public LockWaitGuard statementLockWait(long millis) {
+        if (lockWait == null) {
+            return DriverSession.super.statementLockWait(millis);
+        }
+        return new TranslatingGuard(lockWait.statement(connection, millis));
+    }
+
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        return lockWait == null ? DriverSession.super.exactDecimalDigits() : lockWait.exactDecimalDigits();
+    }
+
+    /** Translates the SQL failure of a guard step like any other failure of the session. */
+    private final class TranslatingGuard implements LockWaitGuard {
+        private final LockWaitGuard delegate;
+
+        TranslatingGuard(LockWaitGuard delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void beforeBegin() {
+            try {
+                delegate.beforeBegin();
+            } catch (JdbcLockWait.Failure e) {
+                throw failure(e.sqlException());
+            }
+        }
+
+        @Override
+        public void afterBegin() {
+            try {
+                delegate.afterBegin();
+            } catch (JdbcLockWait.Failure e) {
+                throw failure(e.sqlException());
+            }
+        }
+
+        @Override
+        public void restore() {
+            try {
+                delegate.restore();
+            } catch (JdbcLockWait.Failure e) {
+                throw failure(e.sqlException());
+            }
+        }
     }
 }

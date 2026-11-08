@@ -5,6 +5,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.util.EnumSet;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
@@ -31,6 +32,7 @@ public final class JdbcDriver implements Driver {
     private final JdbcConnectionProvider provider;
     /** The database description, read on first use. */
     private final AtomicReference<DriverInfo> info = new AtomicReference<>();
+    private final AtomicReference<OptionalInt> exactDigits = new AtomicReference<>();
 
     /**
      * Creates a driver over a connection provider.
@@ -77,6 +79,24 @@ public final class JdbcDriver implements Driver {
         }
         info.compareAndSet(null, readInfo());
         return info.get();
+    }
+
+    /**
+     * Tells how many significant digits the database stores exactly in a decimal column.
+     *
+     * @implNote The answer is kept after the first call, as the description is.
+     * @return the digits the detected database keeps exactly, or empty when there is no known limit
+     * @throws DriverException if the metadata cannot be read
+     */
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        OptionalInt cached = exactDigits.get();
+        if (cached != null) {
+            return cached;
+        }
+        JdbcLockWait lockWait = JdbcLockWait.forFamily(DatabaseFamily.of(info().databaseName()));
+        exactDigits.compareAndSet(null, lockWait == null ? OptionalInt.empty() : lockWait.exactDecimalDigits());
+        return exactDigits.get();
     }
 
     private DriverInfo readInfo() {

@@ -7,6 +7,8 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.driver.ConstraintDetails;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverFailureMessages;
@@ -24,6 +26,10 @@ final class AndroidSqliteFailures {
     private static final Pattern CODE = Pattern.compile("\\(code (\\d+)");
     private static final String[] UNIQUE_MARKERS = {"UNIQUE constraint failed", "PRIMARY KEY must be unique"};
     private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+    private static final int SQLITE_CONSTRAINT_CHECK = 275;
+    private static final int SQLITE_CONSTRAINT_NOTNULL = 1299;
+    private static final String CHECK_MARKER = "CHECK constraint failed";
+    private static final String NOT_NULL_MARKER = "NOT NULL constraint failed";
     private static final String FOREIGN_KEY_MARKER = "FOREIGN KEY constraint failed";
 
     private AndroidSqliteFailures() {
@@ -40,13 +46,23 @@ final class AndroidSqliteFailures {
                 && (code == SQLITE_CONSTRAINT_FOREIGNKEY || text.contains(FOREIGN_KEY_MARKER))) {
             kinds.add(DriverFailureKind.FOREIGN_KEY_VIOLATION);
         }
+        if (failure instanceof SQLiteConstraintException
+                && (code == SQLITE_CONSTRAINT_CHECK || text.contains(CHECK_MARKER))) {
+            kinds.add(DriverFailureKind.CHECK_VIOLATION);
+        }
+        if (failure instanceof SQLiteConstraintException
+                && (code == SQLITE_CONSTRAINT_NOTNULL || text.contains(NOT_NULL_MARKER))) {
+            kinds.add(DriverFailureKind.NOT_NULL_VIOLATION);
+        }
         if (failure instanceof SQLiteDatabaseLockedException
                 || (code & PRIMARY_CODE_MASK) == SQLITE_BUSY || (code & PRIMARY_CODE_MASK) == SQLITE_LOCKED) {
             kinds.add(DriverFailureKind.CONCURRENCY);
         }
         String codeName = DriverFailureMessages.sqliteCodeName(code).orElse(null);
-        return new DriverException(DriverFailureMessages.message(kinds, null, code, codeName), null, code,
-                failure.getMessage(), failure, kinds);
+        ConstraintDetails details = ConstraintDetails.sqlite(text);
+        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.columns());
+        return new DriverException(DriverFailureMessages.message(kinds, null, code, codeName, error), null, code,
+                failure.getMessage(), failure, kinds, error.key().orElse(null), error.columns());
     }
 
     static boolean isSqliteFailure(RuntimeException failure) {

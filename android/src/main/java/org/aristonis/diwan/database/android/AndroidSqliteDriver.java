@@ -4,6 +4,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import java.util.EnumSet;
 import java.util.Objects;
+import java.util.OptionalInt;
 import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.driver.DriverInfo;
@@ -21,14 +22,20 @@ import org.aristonis.diwan.database.driver.DriverSession;
 public final class AndroidSqliteDriver implements Driver {
 
     private final SQLiteOpenHelper helper;
+    private static final int SQLITE_EXACT_DIGITS = 15;
+    private static final long NO_BUSY_TIMEOUT = 0L;
+
     private final boolean isNonExclusive;
+    private final long busyTimeoutMillis;
     private SQLiteDatabase database;
     private volatile DriverInfo info;
 
-    private AndroidSqliteDriver(SQLiteDatabase database, SQLiteOpenHelper helper, boolean isNonExclusive) {
+    private AndroidSqliteDriver(SQLiteDatabase database, SQLiteOpenHelper helper, boolean isNonExclusive,
+            long busyTimeoutMillis) {
         this.database = database;
         this.helper = helper;
         this.isNonExclusive = isNonExclusive;
+        this.busyTimeoutMillis = busyTimeoutMillis;
     }
 
     /**
@@ -39,7 +46,7 @@ public final class AndroidSqliteDriver implements Driver {
      * @throws NullPointerException if {@code database} is {@code null}
      */
     public static AndroidSqliteDriver of(SQLiteDatabase database) {
-        return new AndroidSqliteDriver(Objects.requireNonNull(database, "database"), null, false);
+        return new AndroidSqliteDriver(Objects.requireNonNull(database, "database"), null, false, NO_BUSY_TIMEOUT);
     }
 
     /**
@@ -53,17 +60,23 @@ public final class AndroidSqliteDriver implements Driver {
      * @throws NullPointerException if {@code helper} is {@code null}
      */
     public static AndroidSqliteDriver of(SQLiteOpenHelper helper) {
-        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), false);
+        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), false, NO_BUSY_TIMEOUT);
     }
 
     // Used by the connector: sessions begin with beginTransactionNonExclusive() when the flag is set.
-    static AndroidSqliteDriver of(SQLiteOpenHelper helper, boolean isNonExclusive) {
-        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), isNonExclusive);
+    // A positive busyTimeoutMillis is set as PRAGMA busy_timeout once the database opens.
+    static AndroidSqliteDriver of(SQLiteOpenHelper helper, boolean isNonExclusive, long busyTimeoutMillis) {
+        return new AndroidSqliteDriver(null, Objects.requireNonNull(helper, "helper"), isNonExclusive,
+                busyTimeoutMillis);
     }
 
     private synchronized SQLiteDatabase database() {
         if (database == null) {
-            database = helper.getWritableDatabase();
+            SQLiteDatabase opened = helper.getWritableDatabase();
+            if (busyTimeoutMillis > NO_BUSY_TIMEOUT) {
+                AndroidSqliteSession.writeBusyTimeout(opened, busyTimeoutMillis);
+            }
+            database = opened;
         }
         return database;
     }
@@ -99,5 +112,15 @@ public final class AndroidSqliteDriver implements Driver {
             info = known;
         }
         return known;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return 15, the digits a SQLite floating point number keeps exactly
+     */
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        return OptionalInt.of(SQLITE_EXACT_DIGITS);
     }
 }

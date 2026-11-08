@@ -5,6 +5,8 @@ import org.aristonis.diwan.database.eloquent.exception.MultipleRecordsFoundExcep
 import org.aristonis.diwan.database.eloquent.page.CursorModelPage;
 import org.aristonis.diwan.database.eloquent.page.ModelPage;
 import org.aristonis.diwan.database.eloquent.page.SimpleModelPage;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -327,6 +329,35 @@ public final class EloquentBuilder<T extends Model> extends EloquentAggregates<T
      */
     public long count() {
         return scoped().count();
+    }
+
+    /**
+     * Sums a column as an exact decimal at a scale, rounded half up; as
+     * {@link Builder#sumDecimal(String, int)}.
+     *
+     * @param column the column, never {@code null}
+     * @param scale the digits after the point, 0 or more
+     * @return the sum at {@code scale}, never {@code null}
+     * @throws NullPointerException if {@code column} is {@code null}
+     * @throws IllegalArgumentException if {@code scale} is negative
+     */
+    public BigDecimal sumDecimal(String column, int scale) {
+        return scoped().sumDecimal(column, scale);
+    }
+
+    /**
+     * Sums a column as an exact decimal at a scale, rounded with a mode; as
+     * {@link Builder#sumDecimal(String, int, RoundingMode)}.
+     *
+     * @param column the column, never {@code null}
+     * @param scale the digits after the point, 0 or more
+     * @param mode how the sum is rounded, never {@code null}
+     * @return the sum at {@code scale}, never {@code null}
+     * @throws NullPointerException if {@code column} or {@code mode} is {@code null}
+     * @throws IllegalArgumentException if {@code scale} is negative
+     */
+    public BigDecimal sumDecimal(String column, int scale, RoundingMode mode) {
+        return scoped().sumDecimal(column, scale, mode);
     }
 
     /**

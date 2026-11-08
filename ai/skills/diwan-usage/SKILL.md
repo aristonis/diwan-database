@@ -39,6 +39,11 @@ Object orderId = db.transaction(tx -> {
 
 - Strict transactions are on. Calling `db` instead of `tx` inside the callback throws
   `IllegalStateException`. Inside a transaction, pass `tx` down; never call the root connection there. For the query factory or schema, call `db.on(tx)` so the work runs on the transaction.
+- Bound a lock wait with `db.transaction(cb, TransactionOptions.lockWait(Duration.ofSeconds(2)).withAttempts(3))`
+  (outermost transaction only; a nested one throws `IllegalStateException`), or with the connection key
+  `lock_wait` (`5s`, `500ms` or ms digits; the same as `busy_timeout` on SQLite). A timeout is a
+  concurrency `QueryException`, so `attempts` retries it. On PostgreSQL `lock_wait` also bounds
+  migration DDL, and PgBouncer transaction pooling may reject it: use `TransactionOptions` there.
 - A retried transaction runs the whole callback again, so keep outside effects in `afterCommit`.
 - On SQLite, set `transaction_mode` to `immediate` when transactions read then update the same rows. With the default `deferred`, the second one fails at once with a busy error.
 - A failed `COMMIT` is never retried. If the connection drops during `COMMIT`, check the database
@@ -48,6 +53,24 @@ Object orderId = db.transaction(tx -> {
 - Values go in as `?` bindings. Never join user input into the SQL string.
 - `TransactionScope` from `db.beginTransaction()` rolls back on close unless `commit()` ran.
 - Errors are unchecked and the message hides binding values. Do not log bindings with personal data.
+- Branch on `((DriverException) e.getCause()).error().code()`, such as `DWN-CST-0001` for a unique
+  violation. Never branch on vendor codes or message text.
+
+## Testing
+
+- Add `org.aristonis:diwan-database-testing` (test scope; JUnit 5.10+). Register
+  `@RegisterExtension static RefreshDatabase db = RefreshDatabase.rollback(() -> SQLiteQuery.of(conn), SQLiteSchema::of, migrations)`
+  (`PostgresQuery`/`PostgresSchema` on PostgreSQL). Test methods may take `DatabaseAssertions`,
+  `QueryFactory` and `Connection` parameters.
+- Migrations run once per run through `Migrator.fresh()`. The supplier must return the same connection
+  instance; the same connection with another migration list in one run throws `IllegalStateException`.
+- Use `rollback` by default (fast, parallel-safe). Use `truncate` for real commits, `afterCommit` hooks
+  and other threads; it must not run under parallel JUnit and does not empty tables a test creates itself.
+- Rollback mode: other threads, executors and `@Timeout(SEPARATE_THREAD)` commit for real; `afterCommit`
+  never fires.
+- Assertions: `assertHas`, `assertMissing`, `assertCount`, `assertEmpty`, `assertModelExists`,
+  `assertModelMissing`, `assertSoftDeleted`, `assertNotSoftDeleted` (models need the eloquent module).
+- PostgreSQL drop-all leaves types, sequences and functions.
 
 ## Porting an existing JDBC or SQL layer
 

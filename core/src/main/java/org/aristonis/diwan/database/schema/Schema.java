@@ -8,6 +8,7 @@ import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 import org.aristonis.diwan.database.schema.internal.DropColumnGuard;
 import org.aristonis.diwan.database.schema.internal.SchemaNames;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -258,6 +259,93 @@ public final class Schema {
     }
 
     /**
+     * Lists the tables, as Laravel's {@code Schema::getTables} does.
+     *
+     * <p>SQLite's internal tables are left out. On PostgreSQL the tables of every schema on the
+     * search path are listed. Names are real names, table prefix included.
+     *
+     * @return the tables ordered by schema, then name, unmodifiable, never {@code null}; empty in
+     *     pretend mode
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
+     */
+    public List<TableInfo> getTables() {
+        List<TableInfo> tables = new ArrayList<>();
+        for (Map<String, Object> row : listing(grammar.compileTables(reader))) {
+            tables.add(new TableInfo(String.valueOf(row.get("name")), String.valueOf(row.get("schema"))));
+        }
+        return Collections.unmodifiableList(tables);
+    }
+
+    /**
+     * Lists the table names, as Laravel's {@code Schema::getTableListing} does.
+     *
+     * @return the bare names, without the schema, in the order of {@link #getTables()}; the table
+     *     prefix is included, as the database holds it, and a name repeats if two schemas hold it;
+     *     unmodifiable, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
+     */
+    public List<String> getTableListing() {
+        List<String> names = new ArrayList<>();
+        for (TableInfo table : getTables()) {
+            names.add(table.name());
+        }
+        return Collections.unmodifiableList(names);
+    }
+
+    /**
+     * Lists the views, as Laravel's {@code Schema::getViews} does.
+     *
+     * @return the views ordered by schema, then name, unmodifiable, never {@code null}; empty in
+     *     pretend mode
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
+     */
+    public List<ViewInfo> getViews() {
+        List<ViewInfo> views = new ArrayList<>();
+        for (Map<String, Object> row : listing(grammar.compileViews(reader))) {
+            views.add(new ViewInfo(String.valueOf(row.get("name")), String.valueOf(row.get("schema"))));
+        }
+        return Collections.unmodifiableList(views);
+    }
+
+    /**
+     * Drops every table that {@link #getTables()} lists, as Laravel's {@code Schema::dropAllTables}
+     * does; nothing runs if there is none.
+     *
+     * <p>Foreign keys between the dropped tables do not block the drop. Where the grammar needs
+     * several statements, they run in one transaction unless the connection is in one already, so a
+     * failure leaves every table in place. Internal tables, such as PostGIS's
+     * {@code spatial_ref_sys}, stay. Names are the real names, so the table prefix is not added again.
+     *
+     * @throws UnsupportedOperationException if the grammar cannot list or drop tables
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
+     */
+    public void dropAllTables() {
+        List<TableInfo> tables = new ArrayList<>();
+        for (TableInfo table : getTables()) {
+            if (!grammar.isInternalTable(table)) {
+                tables.add(table);
+            }
+        }
+        runTogether(grammar.compileDropAllTables(grammar.sortForDrop(reader, tables)));
+    }
+
+    /**
+     * Drops every view that {@link #getViews()} lists, as Laravel's {@code Schema::dropAllViews}
+     * does; nothing runs if there is none.
+     *
+     * <p>Statements run as in {@link #dropAllTables()}.
+     *
+     * @throws UnsupportedOperationException if the grammar cannot list or drop views
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
+     */
+    public void dropAllViews() {
+        runTogether(grammar.compileDropAllViews(getViews()));
+    }
+
+    /**
      * Tells whether a table exists.
      *
      * @param table the table name without prefix, never {@code null}
@@ -304,6 +392,22 @@ public final class Schema {
             }
         }
         return false;
+    }
+
+    private List<Map<String, Object>> listing(SchemaQuery query) {
+        return reader.select(query.sql(), query.bindings());
+    }
+
+    private void runTogether(List<String> statements) {
+        if (statements.size() > 1 && !isPretending() && connection.transactionLevel() == 0
+                && connection.getDriverInfo().supports(DriverCapability.TRANSACTIONAL_DDL)) {
+            connection.transaction(tx -> {
+                run(tx, statements);
+                return null;
+            });
+        } else {
+            run(connection, statements);
+        }
     }
 
     private Blueprint blueprint(String table, boolean isCreating) {

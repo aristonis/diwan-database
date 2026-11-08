@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.internal;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.PretendCallback;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.TransactionOptions;
 import org.aristonis.diwan.database.TransactionScope;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
@@ -75,12 +77,12 @@ class PretendConnection extends AbstractConnection {
         return transaction(callback, 1);
     }
 
+    // Nothing runs, so there is no lock to wait for: the options are checked and the lock wait is
+    // ignored, and the callback runs once whatever the attempts.
     @Override
-    public final <T> T transaction(TransactionCallback<T> callback, int attempts) {
+    public final <T> T transaction(TransactionCallback<T> callback, TransactionOptions options) {
         Objects.requireNonNull(callback, "callback");
-        if (attempts < 1) {
-            throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
-        }
+        Objects.requireNonNull(options, "options");
         ensureOpen();
         return callback.run(this);
     }
@@ -95,6 +97,13 @@ class PretendConnection extends AbstractConnection {
     public final List<LoggedQuery> pretend(PretendCallback callback) {
         ensureOpen();
         return record(settings(), callback);
+    }
+
+    // Nothing runs, so there is no lock to wait for: the limit is ignored.
+    @Override
+    public final <T> T withStatementLockWait(long millis, Supplier<T> statement) {
+        ensureOpen();
+        return statement.get();
     }
 
     @Override

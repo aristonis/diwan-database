@@ -84,7 +84,8 @@ public class AndroidSqliteFailuresTest {
         assertTrue(plain.kinds().isEmpty());
         assertEquals(0, plain.vendorCode());
         assertTrue(silent.kinds().isEmpty());
-        assertFalse(unique.getMessage().contains("email"));
+        assertTrue(unique.getMessage(), unique.getMessage().endsWith("[DWN-CST-0001 unique violation (email)]"));
+        assertFalse(unique.getMessage().contains("u.email"));
     }
 
     @Test
@@ -92,9 +93,9 @@ public class AndroidSqliteFailuresTest {
         DriverException busy = AndroidSqliteFailures.translate(
                 new SQLiteDatabaseLockedException("database is locked (code 5 SQLITE_BUSY)"));
 
-        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY",
-                busy.getMessage());
-        assertEquals(DriverFailureMessages.message(EnumSet.of(DriverFailureKind.CONCURRENCY), null, 5, "SQLITE_BUSY"),
-                busy.getMessage());
+        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY"
+                + " [DWN-TXN-0001 concurrency]", busy.getMessage());
+        assertEquals(DriverFailureMessages.message(EnumSet.of(DriverFailureKind.CONCURRENCY), null, 5, "SQLITE_BUSY",
+                busy.error()), busy.getMessage());
     }
 }

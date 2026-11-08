@@ -1,5 +1,8 @@
 package org.aristonis.diwan.database.query;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -197,6 +200,66 @@ abstract class AggregateQueries extends ReadQueries {
     private static String withoutAlias(String column) {
         int position = column.toLowerCase(Locale.ROOT).indexOf(" as ");
         return position < 0 ? column : column.substring(0, position);
+    }
+
+    /**
+     * Returns the sum of a column as an exact decimal at a scale, rounded half up; {@code 0} at
+     * that scale when no row matches. SQLite sums a decimal column as a double, so
+     * {@code 0.1 + 0.2} comes back as {@code 0.30000000000000004}; rounding the sum back to the
+     * scale removes that drift, and is exact while the sum has at most 15 significant digits.
+     * Other drivers return an exact sum that only gets its scale set.
+     *
+     * @param column the column name, never {@code null}
+     * @param scale the digits after the point, 0 or more
+     * @return the sum at {@code scale}, never {@code null}
+     * @throws NullPointerException if {@code column} is {@code null}
+     * @throws IllegalArgumentException if {@code scale} is negative or the sum is text that is not a number
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
+     */
+    public final BigDecimal sumDecimal(String column, int scale) {
+        return sumDecimal(column, scale, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Returns the sum of a column as an exact decimal at a scale, rounded with a mode, as
+     * {@link Builder#sumDecimal(String, int)}.
+     *
+     * @param column the column name, never {@code null}
+     * @param scale the digits after the point, 0 or more
+     * @param mode how the sum is rounded to the scale, never {@code null}
+     * @return the sum at {@code scale}, never {@code null}
+     * @throws NullPointerException if {@code column} or {@code mode} is {@code null}
+     * @throws IllegalArgumentException if {@code scale} is negative or the sum is text that is not a number
+     * @throws ArithmeticException if {@code mode} is {@code UNNECESSARY} and the sum needs rounding
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
+     */
+    public final BigDecimal sumDecimal(String column, int scale, RoundingMode mode) {
+        Objects.requireNonNull(column, "column");
+        Objects.requireNonNull(mode, "mode");
+        if (scale < 0) {
+            throw new IllegalArgumentException("Decimal scale must not be negative, got " + scale);
+        }
+        return aggregate("sum", column).map(AggregateQueries::toBigDecimal).orElse(BigDecimal.ZERO).setScale(scale, mode);
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        if (value instanceof BigInteger) {
+            return new BigDecimal((BigInteger) value);
+        }
+        if (value instanceof Double || value instanceof Float) {
+            return BigDecimal.valueOf(((Number) value).doubleValue());
+        }
+        if (value instanceof Long || value instanceof Integer || value instanceof Short) {
+            return BigDecimal.valueOf(((Number) value).longValue());
+        }
+        try {
+            return new BigDecimal(value.toString().trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("The sum is not a number", e);
+        }
     }
 
     /**

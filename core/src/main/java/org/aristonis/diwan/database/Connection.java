@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.driver.DriverInfo;
 import org.aristonis.diwan.database.query.QueryCursor;
 
@@ -401,7 +403,45 @@ public interface Connection {
      * @throws QueryException if the database refuses to start, commit or roll back the transaction
      * @throws RuntimeException the failure of the last attempt, rethrown after the rollback
      */
-    <T> T transaction(TransactionCallback<T> callback, int attempts);
+    default <T> T transaction(TransactionCallback<T> callback, int attempts) {
+        Objects.requireNonNull(callback, "callback");
+        return transaction(callback, TransactionOptions.attempts(attempts));
+    }
+
+    /**
+     * Runs a callback inside a transaction with the given options, retrying the whole transaction
+     * after a concurrency failure when the options allow more than one attempt.
+     *
+     * <p>A lock wait applies to the outermost transaction only. A transaction that waits longer for a
+     * lock than the limit fails with a {@link QueryException} of kind
+     * {@link org.aristonis.diwan.database.driver.DriverFailureKind#CONCURRENCY}, which the attempts
+     * of the options retry; each attempt applies the wait again. The wait is taken back when the
+     * transaction ends; a failure to take it back is added as suppressed to the failure of the work,
+     * or thrown when the work succeeded. Inside an external transaction Diwan Database does not own,
+     * the wait is not applied.
+     *
+     * @param <T> the type of the result
+     * @param callback the work to run, never {@code null}
+     * @param options the lock wait and attempts, never {@code null}
+     * @return the result of the successful attempt, may be {@code null}
+     * @throws NullPointerException if {@code callback} or {@code options} is {@code null}
+     * @throws IllegalStateException if called inside a transaction with a lock wait; no SQL is sent
+     * @throws UnsupportedOperationException if the driver cannot limit the wait for a lock
+     * @throws QueryException if the database refuses to start, commit or roll back the transaction
+     * @throws RuntimeException the failure of the last attempt, rethrown after the rollback
+     */
+    <T> T transaction(TransactionCallback<T> callback, TransactionOptions options);
+
+    /**
+     * Tells how many significant digits the database stores exactly in a decimal column.
+     *
+     * @implSpec The default returns empty, meaning no limit is known. A connection that reaches a
+     *     driver session reports what the session reports (SQLite: 15).
+     * @return the number of exact significant digits, or empty when there is no known limit
+     */
+    default OptionalInt exactDecimalDigits() {
+        return OptionalInt.empty();
+    }
 
     /**
      * Starts a transaction that stays open until the returned scope is committed or closed.
@@ -411,6 +451,37 @@ public interface Connection {
      * @throws QueryException if the database refuses to start the transaction
      */
     TransactionScope beginTransaction();
+
+    /**
+     * Starts a transaction that the calling thread's other calls on this connection join; a testing
+     * hook, for rolling back everything a test did.
+     *
+     * <p>It opens a transaction like {@link #beginTransaction()}: {@link TransactionScope#commit()}
+     * commits it, and {@link TransactionScope#close()} without a commit rolls it back. While it is
+     * open, every call the opening thread makes on this connection runs on the scope's transaction,
+     * instead of being refused by strict transactions or borrowing a session of its own. A
+     * {@link #transaction(TransactionCallback)} from that thread becomes a savepoint inside the
+     * joined transaction, so a {@code lockWait} option fails with {@link IllegalStateException} and
+     * attempts are ignored, as for any nested transaction; {@link #beginTransaction()} from that
+     * thread opens a nested scope the same way, and fails while an inner scope is still open. Other
+     * threads are not affected and use sessions of their own. Ending the scope always releases the
+     * thread, even when the rollback fails.
+     *
+     * <p>Callbacks registered with {@link #afterCommit(Runnable)} inside the joined transaction do
+     * not run when it is rolled back.
+     *
+     * @implSpec The default always throws; only the root connection of a builder supports joining.
+     * @return the open scope, never {@code null}; the caller must close it
+     * @throws UnsupportedOperationException if this connection is not a root connection, such as a
+     *     connection inside a transaction, a session or a pretend callback
+     * @throws IllegalStateException if the calling thread already has a joined transaction open on
+     *     this connection, or is inside a transaction callback of it in strict mode
+     * @throws QueryException if the database refuses to start the transaction
+     */
+    @Internal
+    default TransactionScope beginJoinedTransaction() {
+        throw new UnsupportedOperationException("beginJoinedTransaction is only available on the root connection");
+    }
 
     /**
      * Runs a callback on a connection held to one physical database connection.
@@ -451,6 +522,29 @@ public interface Connection {
      * @throws RuntimeException any failure of the callback
      */
     List<LoggedQuery> pretend(PretendCallback callback);
+
+    /**
+     * Runs a statement with a limit on its wait for locks, as the timeout of
+     * {@code lock(strength, Duration)} does. The limit applies to that statement only: once the
+     * statement returned, the wait the transaction had before is back. If the statement throws, the
+     * previous wait is not restored, because the database may have aborted the transaction; ending
+     * the transaction takes the limit back. Query builders call it around a timed locking select.
+     *
+     * @implSpec The default throws {@link IllegalStateException}, because a connection outside a
+     *     transaction has no statement the limit could stay with. A transaction connection forwards
+     *     to its driver session and a pretend connection runs the statement without a limit.
+     * @param <T> the type the statement returns
+     * @param millis the longest wait in milliseconds, more than zero
+     * @param statement the statement to run under the limit, never {@code null}
+     * @return what {@code statement} returned
+     * @throws IllegalStateException if no transaction is open
+     * @throws UnsupportedOperationException if the driver cannot limit the wait for a lock
+     * @throws org.aristonis.diwan.database.exception.DriverException if the limit cannot be applied
+     *     or put back
+     */
+    default <T> T withStatementLockWait(long millis, Supplier<T> statement) {
+        throw new IllegalStateException("A lock wait timeout on a statement needs an open transaction");
+    }
 
     /**
      * Returns the depth of the transaction this connection runs in.

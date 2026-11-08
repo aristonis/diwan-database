@@ -12,7 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import org.aristonis.diwan.database.exception.DriverException;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 
 /**
  * Reports a statement the database refused, with the connection name, SQL and bindings.
@@ -98,7 +98,8 @@ public class QueryException extends DatabaseException {
         Objects.requireNonNull(cause, "cause");
         String base = "SQL: " + MessageText.sql(sql) + " (Connection: " + MessageText.name(connectionName)
                 + ", SQL state " + MessageText.name(cause.sqlState().orElse("unknown"))
-                + ", vendor code " + cause.vendorCode() + ")" + hint(cause);
+                + ", vendor code " + cause.vendorCode() + ")" + hint(cause)
+                + DriverFailureMessages.suffix(cause.error());
         if (!showBindings) {
             return base;
         }

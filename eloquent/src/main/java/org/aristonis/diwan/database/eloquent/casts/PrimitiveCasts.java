@@ -51,6 +51,19 @@ final class PrimitiveCasts {
         return new InvalidCastException(model == null ? null : model.getClass(), key, name, cause);
     }
 
+    /**
+     * Builds the failure for a value that broke a named rule.
+     *
+     * @param model the model, or null when not known
+     * @param key the attribute key
+     * @param name the cast name
+     * @param reason a fixed sentence naming the rule, never the value
+     * @return the exception to throw
+     */
+    static InvalidCastException invalid(Model model, String key, String name, String reason) {
+        return new InvalidCastException(model == null ? null : model.getClass(), key, name, reason, null);
+    }
+
     /** Reads whole numbers as {@code Long}, truncating a fraction as Laravel does. */
     static final class IntCast implements Cast<Object>, CastComparator, CastSerializer<Object> {
 

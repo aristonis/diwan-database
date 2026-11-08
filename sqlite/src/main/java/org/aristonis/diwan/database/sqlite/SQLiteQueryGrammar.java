@@ -10,11 +10,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.query.RowLock;
+import org.aristonis.diwan.database.query.SearchWhere;
 import org.aristonis.diwan.database.query.Where;
 import org.aristonis.diwan.database.values.Instants;
 
@@ -47,8 +50,12 @@ public class SQLiteQueryGrammar extends QueryGrammar {
             "=", "<", ">", "<=", ">=", "<>", "!=",
             "like", "not like", "ilike",
             "&", "|", "<<", ">>")));
+    private static final Pattern SEQUENCE_DELETE =
+            Pattern.compile("^delete from ((?:\"(?:[^\"]|\"\")*\"\\.)?)sqlite_sequence where .*$", Pattern.DOTALL);
     private static final Pattern ALIAS = Pattern.compile("\\s+as\\s+", Pattern.CASE_INSENSITIVE);
     private static final String ROWID = "rowid";
+    /** The pragma that postpones foreign-key checks to the commit, shared with the schema grammar. */
+    static final String DEFER_FOREIGN_KEYS = "PRAGMA defer_foreign_keys = ON";
     private static final int UPSERT_MAJOR = 3;
     private static final int UPSERT_MINOR = 24;
 
@@ -132,6 +139,35 @@ public class SQLiteQueryGrammar extends QueryGrammar {
         }
         return wrap(where.column()) + (where.not() ? " not glob " : " glob ")
                 + String.format(GLOB_PATTERN, parameter(where.value()));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Case-sensitive matches build a {@code glob} pattern with {@code [}, {@code *} and
+     *     {@code ?} in brackets, {@code [} first so later brackets are not escaped again.
+     */
+    @Override
+    public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
+        if (!caseSensitive) {
+            return super.searchPattern(value, anchor, false);
+        }
+        String escaped = value.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]");
+        return (anchor == SearchWhere.Anchor.STARTS_WITH ? "" : "*") + escaped
+                + (anchor == SearchWhere.Anchor.ENDS_WITH ? "" : "*");
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Case-sensitive matches write {@code column [not ]glob ?}.
+     */
+    @Override
+    protected String whereSearch(Builder query, SearchWhere where) {
+        if (!where.caseSensitive()) {
+            return super.whereSearch(query, where);
+        }
+        return wrap(where.column()) + (where.not() ? " not glob " : " glob ") + "?";
     }
 
     /**
@@ -361,6 +397,9 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     @Override
     protected String compileLock(Builder query, RowLock lock) {
         checkLockable(query);
+        if (lock.timeoutMillis().isPresent()) {
+            throw unsupported("The timed row lock wait");
+        }
         if (lock.lockWait() != LockWait.WAIT) {
             throw unsupported("The " + lock.lockWait() + " row lock wait");
         }
@@ -446,6 +485,189 @@ public class SQLiteQueryGrammar extends QueryGrammar {
         statements.put("delete from " + schema + "sqlite_sequence where name = ?", Collections.<Object>singletonList(getTablePrefix() + name));
         statements.put("delete from " + wrapTable(query.getFrom()), Collections.emptyList());
         return Collections.unmodifiableMap(statements);
+    }
+
+    /**
+     * Compiles the statements that empty several tables: defer foreign-key checks to the commit,
+     * delete every row of each table, then reset their {@code autoincrement} counters in
+     * {@code sqlite_sequence}, one statement for each schema.
+     *
+     * <p>Deferred checks make the order of the tables irrelevant; a table outside the list that
+     * still refers to an emptied one makes the commit fail, as PostgreSQL refuses without
+     * {@code cascade}. The connection-aware overload used by the query factory orders the deletes
+     * instead. As with {@link #compileTruncate}, the counter statements need
+     * {@code sqlite_sequence} to exist.
+     *
+     * @param tables the table names, never {@code null}, optionally {@code schema.table}
+     * @param cascade ignored here, as this overload has no connection to find the referring tables; the
+     *     connection-aware overload used by the query factory empties them too
+     * @return the pragma, the deletes, then the counter resets bound to the prefixed table names,
+     *     in run order, unmodifiable, never {@code null}
+     */
+    @Override
+    public Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade) {
+        Map<String, List<Object>> statements = new LinkedHashMap<>();
+        if (tables.isEmpty()) {
+            return Collections.unmodifiableMap(statements);
+        }
+        Map<String, List<Object>> counters = new LinkedHashMap<>();
+        statements.put(DEFER_FOREIGN_KEYS, Collections.emptyList());
+        for (String table : tables) {
+            String bare = ALIAS.split(table)[0];
+            int dot = bare.indexOf('.');
+            String schema = dot < 0 ? "" : wrapValue(bare.substring(0, dot)) + ".";
+            counters.computeIfAbsent(schema, key -> new ArrayList<>()).add(getTablePrefix() + bare.substring(dot + 1));
+            statements.put("delete from " + wrapTable(table), Collections.emptyList());
+        }
+        for (Map.Entry<String, List<Object>> counter : counters.entrySet()) {
+            String marks = String.join(", ", Collections.nCopies(counter.getValue().size(), "?"));
+            statements.put("delete from " + counter.getKey() + "sqlite_sequence where name in (" + marks + ")",
+                    Collections.unmodifiableList(counter.getValue()));
+        }
+        return Collections.unmodifiableMap(statements);
+    }
+
+    /**
+     * Compiles the statements that empty a table, leaving out the counter reset when the schema
+     * has no {@code sqlite_sequence} yet: SQLite creates that table with the first
+     * {@code autoincrement} table, and deleting from it before then fails.
+     *
+     * @param query the query, never {@code null}, with a table
+     * @param connection the connection the statements will run on, never {@code null}
+     * @return the statements that apply to this database, in run order, unmodifiable, never {@code null}
+     */
+    @Override
+    protected Map<String, List<Object>> compileTruncate(Builder query, Connection connection) {
+        return withoutMissingSequence(compileTruncate(query), connection);
+    }
+
+    /**
+     * Compiles the statements that empty several tables, leaving out the counter reset of a schema
+     * that has no {@code sqlite_sequence} yet.
+     *
+     * <p>The deletes are ordered so that a listed table is emptied before any listed table it
+     * refers to, read from {@code pragma_foreign_key_list}; references to tables outside the list
+     * and self-references are ignored. No deferred check is used then, so a table outside the list
+     * that still refers to an emptied one fails at its own delete statement, inside the
+     * transaction, where the rollback works on every driver.
+     *
+     * <p>When the listed tables refer to each other in a cycle no order exists, and the statements
+     * fall back to deferred foreign-key checks. A violation from a table outside the list then
+     * shows at commit; on Android a failed commit cannot be rolled back, so list every referring
+     * table in that case.
+     *
+     * @param tables the table names, never {@code null}, optionally {@code schema.table}
+     * @param cascade emulated: when {@code true}, every table that refers to a listed one, directly or
+     *     through other tables, is emptied too, as PostgreSQL's {@code truncate ... cascade} does; only
+     *     tables that start with the table prefix are found. When {@code false}, only the listed tables
+     * @param connection the connection the statements will run on, never {@code null}
+     * @return the statements that apply to this database, in run order, unmodifiable, never {@code null}
+     */
+    @Override
+    protected Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade,
+            Connection connection) {
+        List<String> all = cascade ? withReferrers(tables, connection) : tables;
+        List<String> ordered = childrenFirst(all, connection);
+        Map<String, List<Object>> statements = compileTruncateMany(ordered == null ? all : ordered, cascade);
+        if (ordered != null) {
+            statements = new LinkedHashMap<>(statements);
+            statements.remove(DEFER_FOREIGN_KEYS);
+        }
+        return withoutMissingSequence(statements, connection);
+    }
+
+    /**
+     * Adds every table that refers to a listed one, directly or through other tables, as
+     * {@code truncate ... cascade} does. Only tables that start with the table prefix are
+     * considered, as only those can be named without their prefix.
+     */
+    private List<String> withReferrers(List<String> tables, Connection connection) {
+        List<String> expanded = new ArrayList<>(tables);
+        Set<String> known = new LinkedHashSet<>();
+        Set<String> schemas = new LinkedHashSet<>();
+        for (String table : tables) {
+            String bare = ALIAS.split(table)[0];
+            int dot = bare.indexOf('.');
+            schemas.add(dot < 0 ? "" : bare.substring(0, dot));
+            known.add(SQLiteForeignKeyOrder.key(dot < 0 ? null : bare.substring(0, dot),
+                    getTablePrefix() + bare.substring(dot + 1)));
+        }
+        for (String schema : schemas) {
+            String master = (schema.isEmpty() ? "" : wrapValue(schema) + ".") + "sqlite_master";
+            String owner = schema.isEmpty() ? null : schema;
+            Map<String, List<String>> parentsOf = new LinkedHashMap<>();
+            for (Map<String, Object> row : connection.select("select name from " + master
+                    + " where type = 'table' and name not like 'sqlite\\_%' escape '\\' order by name")) {
+                String name = String.valueOf(row.get("name"));
+                if (name.length() > getTablePrefix().length() && name.startsWith(getTablePrefix())) {
+                    parentsOf.put(name, SQLiteForeignKeyOrder.referencedTables(
+                            new SQLiteForeignKeyOrder.Ref(owner, name), connection));
+                }
+            }
+            boolean isGrowing = true;
+            while (isGrowing) {
+                isGrowing = false;
+                for (Map.Entry<String, List<String>> candidate : parentsOf.entrySet()) {
+                    String candidateKey = SQLiteForeignKeyOrder.key(owner, candidate.getKey());
+                    if (!known.contains(candidateKey) && refersToKnown(owner, candidate.getValue(), known)) {
+                        known.add(candidateKey);
+                        String bare = candidate.getKey().substring(getTablePrefix().length());
+                        expanded.add(schema.isEmpty() ? bare : schema + "." + bare);
+                        isGrowing = true;
+                    }
+                }
+            }
+        }
+        return expanded;
+    }
+
+    private static boolean refersToKnown(String schema, List<String> parents, Set<String> known) {
+        for (String parent : parents) {
+            if (known.contains(SQLiteForeignKeyOrder.key(schema, parent))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Orders the tables so each comes before the listed tables it refers to; {@code null} on a cycle. */
+    private List<String> childrenFirst(List<String> tables, Connection connection) {
+        List<SQLiteForeignKeyOrder.Ref> refs = new ArrayList<>(tables.size());
+        for (String table : tables) {
+            String bare = ALIAS.split(table)[0];
+            int dot = bare.indexOf('.');
+            refs.add(new SQLiteForeignKeyOrder.Ref(dot < 0 ? null : bare.substring(0, dot),
+                    getTablePrefix() + bare.substring(dot + 1)));
+        }
+        List<Integer> order = SQLiteForeignKeyOrder.childrenFirst(refs, connection);
+        if (order == null) {
+            return null;
+        }
+        List<String> ordered = new ArrayList<>(tables.size());
+        for (int index : order) {
+            ordered.add(tables.get(index));
+        }
+        return ordered;
+    }
+
+    private static Map<String, List<Object>> withoutMissingSequence(Map<String, List<Object>> statements,
+            Connection connection) {
+        Map<String, Boolean> exists = new LinkedHashMap<>();
+        Map<String, List<Object>> kept = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Object>> statement : statements.entrySet()) {
+            Matcher match = SEQUENCE_DELETE.matcher(statement.getKey());
+            if (match.matches()) {
+                String schema = match.group(1);
+                boolean isPresent = exists.computeIfAbsent(schema, key -> connection.scalar(
+                        "select 1 from " + key + "sqlite_master where type = 'table' and name = 'sqlite_sequence'")
+                        .isPresent());
+                if (!isPresent) {
+                    continue;
+                }
+            }
+            kept.put(statement.getKey(), statement.getValue());
+        }
+        return Collections.unmodifiableMap(kept);
     }
 
     /**

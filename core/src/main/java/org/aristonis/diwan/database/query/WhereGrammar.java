@@ -114,6 +114,8 @@ abstract class WhereGrammar extends GrammarQuoting {
             return whereRaw(query, (Where.Raw) where);
         } else if (where instanceof Where.Like) {
             return whereLike(query, (Where.Like) where);
+        } else if (where instanceof SearchWhere) {
+            return whereSearch(query, (SearchWhere) where);
         } else if (where instanceof Where.NullSafeEquals) {
             return whereNullSafeEquals(query, (Where.NullSafeEquals) where);
         } else if (where instanceof Where.In) {
@@ -216,6 +218,38 @@ abstract class WhereGrammar extends GrammarQuoting {
             throw unsupported("Case-sensitive like");
         }
         return basic(where.column(), where.not() ? "not like" : "like", where.value());
+    }
+
+    /**
+     * Builds the {@code like} pattern for an escaped text search: the escape character, {@code %}
+     * and {@code _} in the text become literal, then the text is wrapped in {@code %} per anchor.
+     *
+     * @implSpec The base supports only case-insensitive matching, as {@link #whereLike}.
+     *
+     * @param value the text to find, never {@code null}
+     * @param anchor where the text must appear, never {@code null}
+     * @param caseSensitive whether the match respects case
+     * @return the pattern, never {@code null}
+     * @throws UnsupportedOperationException if the match is case-sensitive
+     */
+    public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
+        if (caseSensitive) {
+            throw unsupported("Case-sensitive like");
+        }
+        String escaped = value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return (anchor == SearchWhere.Anchor.STARTS_WITH ? "" : "%") + escaped
+                + (anchor == SearchWhere.Anchor.ENDS_WITH ? "" : "%");
+    }
+
+    /**
+     * Compiles an escaped text search as {@code column [not ]like ? escape '!'}.
+     *
+     * @param query the query, never {@code null}
+     * @param where the condition, never {@code null}
+     * @return the SQL, never {@code null}
+     */
+    protected String whereSearch(Builder query, SearchWhere where) {
+        return wrap(where.column()) + (where.not() ? " not like " : " like ") + "? escape '!'";
     }
 
     /**

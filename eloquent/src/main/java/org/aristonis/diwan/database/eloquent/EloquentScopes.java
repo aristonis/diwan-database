@@ -22,7 +22,7 @@ import org.aristonis.diwan.database.query.Builder;
  *
  * @param <T> the model class
  */
-abstract class EloquentScopes<T extends Model> extends EloquentWheres<T> {
+abstract class EloquentScopes<T extends Model> extends EloquentSearches<T> {
 
     private Map<String, Scope> scopes = Collections.emptyMap();
     private List<String> removed = Collections.emptyList();
