@@ -5,9 +5,11 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.Set;
+import org.aristonis.diwan.database.driver.ConstraintDetails;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverFailureMessages;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
 
 /** Translates JDBC failures into {@link DriverException}s without exposing database text. */
@@ -18,12 +20,21 @@ final class JdbcFailures {
     private static final String DEADLOCK_STATE = "40P01";
     private static final String CONNECTION_STATE_CLASS = "08";
     private static final String FOREIGN_KEY_STATE = "23503";
+    private static final String CHECK_STATE = "23514";
+    private static final String NOT_NULL_STATE = "23502";
     private static final String CANCELLED_STATE = "57014";
     private static final String LOCK_NOT_AVAILABLE_STATE = "55P03";
     private static final String[] SERVER_GONE_STATES = {"57P01", "57P02", "57P03"};
     private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
     private static final String[] SQLITE_FOREIGN_KEY_MARKERS = {
         "SQLITE_CONSTRAINT_FOREIGNKEY", "FOREIGN KEY constraint failed"
+    };
+
+    private static final String[] SQLITE_CHECK_MARKERS = {
+        "SQLITE_CONSTRAINT_CHECK", "CHECK constraint failed"
+    };
+    private static final String[] SQLITE_NOT_NULL_MARKERS = {
+        "SQLITE_CONSTRAINT_NOTNULL", "NOT NULL constraint failed"
     };
 
     private static final int MYSQL_DUPLICATE = 1062;
@@ -71,6 +82,7 @@ final class JdbcFailures {
         int vendorCode = 0;
         String databaseMessage = null;
         boolean isConnectionFailure = false;
+        SQLException first = null;
         Set<DriverFailureKind> kinds = EnumSet.noneOf(DriverFailureKind.class);
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable t = failure; t != null && visited.size() < MAX_CHAIN && visited.add(t); t = next(t)) {
@@ -78,6 +90,9 @@ final class JdbcFailures {
                 continue;
             }
             SQLException sql = (SQLException) t;
+            if (first == null) {
+                first = sql;
+            }
             String s = sql.getSQLState();
             int code = sql.getErrorCode();
             if (state == null && s != null) {
@@ -100,6 +115,14 @@ final class JdbcFailures {
             if (CANCELLED_STATE.equals(s)) {
                 kinds.add(DriverFailureKind.CANCELLED);
             }
+            if (CHECK_STATE.equals(s) || (family == DatabaseFamily.SQLITE
+                    && mentions(sql.getMessage(), SQLITE_CHECK_MARKERS))) {
+                kinds.add(DriverFailureKind.CHECK_VIOLATION);
+            }
+            if (NOT_NULL_STATE.equals(s) || (family == DatabaseFamily.SQLITE
+                    && mentions(sql.getMessage(), SQLITE_NOT_NULL_MARKERS))) {
+                kinds.add(DriverFailureKind.NOT_NULL_VIOLATION);
+            }
             if (isUnique(family, s, code, sql.getMessage())) {
                 kinds.add(DriverFailureKind.UNIQUE_VIOLATION);
             }
@@ -111,17 +134,37 @@ final class JdbcFailures {
             kinds.remove(DriverFailureKind.CONCURRENCY);
             kinds.add(DriverFailureKind.CONNECTION_LOST);
         }
-        return new DriverException(
-                failureMessage(family, kinds, state, vendorCode), state, vendorCode, databaseMessage, failure, kinds);
+        ConstraintDetails details = details(family, kinds, first);
+        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.columns());
+        return new DriverException(failureMessage(family, kinds, state, vendorCode, error), state, vendorCode,
+                databaseMessage, failure, kinds, error.key().orElse(null), error.columns());
     }
 
-    /** Builds the fixed failure message; the SQLite result code name is added for the SQLite family only. */
+    /** Reads the constraint name and columns from the first SQL exception, for constraint failures only. */
+    private static ConstraintDetails details(DatabaseFamily family, Set<DriverFailureKind> kinds, SQLException first) {
+        boolean isConstraint = kinds.contains(DriverFailureKind.UNIQUE_VIOLATION)
+                || kinds.contains(DriverFailureKind.FOREIGN_KEY_VIOLATION)
+                || kinds.contains(DriverFailureKind.CHECK_VIOLATION)
+                || kinds.contains(DriverFailureKind.NOT_NULL_VIOLATION);
+        if (first == null || !isConstraint) {
+            return ConstraintDetails.sqlite(null);
+        }
+        if (family == DatabaseFamily.POSTGRESQL) {
+            return ConstraintDetails.postgres(first, kinds.contains(DriverFailureKind.UNIQUE_VIOLATION));
+        }
+        if (family == DatabaseFamily.SQLITE) {
+            return ConstraintDetails.sqlite(first.getMessage());
+        }
+        return ConstraintDetails.sqlite(null);
+    }
+
+    /** Builds the failure message; the SQLite result code name is added for the SQLite family only. */
     private static String failureMessage(DatabaseFamily family, Set<DriverFailureKind> kinds, String state,
-            int vendorCode) {
+            int vendorCode, DiwanError error) {
         String codeName = family == DatabaseFamily.SQLITE
                 ? DriverFailureMessages.sqliteCodeName(vendorCode).orElse(null)
                 : null;
-        return DriverFailureMessages.message(kinds, state, vendorCode, codeName);
+        return DriverFailureMessages.message(kinds, state, vendorCode, codeName, error);
     }
 
     private static Throwable next(Throwable t) {

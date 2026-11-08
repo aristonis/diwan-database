@@ -115,7 +115,8 @@ class PostgresFailureKindsTest {
 
         QueryException error = assertThrows(QueryException.class, () -> db.insert("insert into u values (?)", 1));
 
-        assertEquals("Database failure (SQL state 23505, vendor code 0): unique violation",
+        assertEquals("Database failure (SQL state 23505, vendor code 0): unique violation"
+                + " [DWN-CST-0001 unique violation: u_pkey]",
                 driverFailure(error).getMessage());
     }
 }

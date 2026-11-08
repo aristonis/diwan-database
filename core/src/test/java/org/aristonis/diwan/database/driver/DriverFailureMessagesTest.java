@@ -10,6 +10,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.junit.jupiter.api.Test;
 
 class DriverFailureMessagesTest {
@@ -45,5 +46,43 @@ class DriverFailureMessagesTest {
         assertEquals(Optional.of("SQLITE_CONSTRAINT_UNIQUE"), DriverFailureMessages.sqliteCodeName(2067));
         assertFalse(DriverFailureMessages.sqliteCodeName(999999).isPresent());
         assertTrue(DriverFailureMessages.sqliteCodeName(19).isPresent());
+    }
+
+    @Test
+    void suffixNamesTheCodeKindKeyAndColumns() {
+        DiwanError error = DiwanError.of(EnumSet.of(DriverFailureKind.UNIQUE_VIOLATION),
+                "users_email_unique", Arrays.asList("email"));
+
+        assertEquals(" [DWN-CST-0001 unique violation: users_email_unique (email)]",
+                DriverFailureMessages.suffix(error));
+    }
+
+    @Test
+    void suffixListsSeveralColumnsAndOmitsWhatIsMissing() {
+        assertEquals(" [DWN-CST-0004 not null violation (a, b)]", DriverFailureMessages.suffix(DiwanError.of(
+                EnumSet.of(DriverFailureKind.NOT_NULL_VIOLATION), null, Arrays.asList("a", "b"))));
+        assertEquals(" [DWN-CST-0003 check violation: positive]", DriverFailureMessages.suffix(DiwanError.of(
+                EnumSet.of(DriverFailureKind.CHECK_VIOLATION), "positive", Collections.<String>emptyList())));
+    }
+
+    @Test
+    void suffixOfAnUnknownFailureIsTheCodeAlone() {
+        assertEquals(" [DWN-UNK-0000]", DriverFailureMessages.suffix(
+                DiwanError.of(null, null, Collections.<String>emptyList())));
+    }
+
+    @Test
+    void messageWithAnErrorAppendsTheSuffixToTheOldText() {
+        DiwanError error = DiwanError.of(EnumSet.of(DriverFailureKind.CONCURRENCY), null,
+                Collections.<String>emptyList());
+
+        assertEquals(OLD_TEXT + ": concurrency [DWN-TXN-0001 concurrency]", DriverFailureMessages.message(
+                EnumSet.of(DriverFailureKind.CONCURRENCY), null, 5, null, error));
+    }
+
+    @Test
+    void checkAndNotNullCodesHaveNames() {
+        assertEquals(Optional.of("SQLITE_CONSTRAINT_CHECK"), DriverFailureMessages.sqliteCodeName(275));
+        assertEquals(Optional.of("SQLITE_CONSTRAINT_NOTNULL"), DriverFailureMessages.sqliteCodeName(1299));
     }
 }

@@ -50,5 +50,11 @@ public enum DriverFailureKind {
      * <p>Never retried by the library. Check the data before repeating the work; repeating it blindly
      * can apply it twice.
      */
-    COMMIT_OUTCOME_UNKNOWN
+    COMMIT_OUTCOME_UNKNOWN,
+
+    /** Marks a failure caused by a check constraint violation. */
+    CHECK_VIOLATION,
+
+    /** Marks a failure caused by a {@code NOT NULL} constraint violation. */
+    NOT_NULL_VIOLATION
 }

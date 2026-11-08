@@ -110,7 +110,7 @@ class JdbcSessionCommitTest {
         assertTrue(failure.isConcurrencyFailure());
         assertTrue(failure.kinds().contains(DriverFailureKind.CONCURRENCY));
         assertEquals(DriverFailureMessages.message(failure.kinds(), failure.sqlState().orElse(null), SQLITE_BUSY,
-                "SQLITE_BUSY"), failure.getMessage());
+                "SQLITE_BUSY", failure.error()), failure.getMessage());
         assertFalse(isAutoCommit);
         session.rollback();
         assertTrue(events.contains("rollback"));

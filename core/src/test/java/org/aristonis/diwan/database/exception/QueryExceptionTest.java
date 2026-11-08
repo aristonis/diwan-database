@@ -44,8 +44,8 @@ class QueryExceptionTest {
                 "main", "select * from users where email = ?", Arrays.<Object>asList("ana@example.com"),
                 failure("42P01"), false);
 
-        assertEquals("SQL: select * from users where email = ? (Connection: main, SQL state 42P01, vendor code 7)",
-                error.getMessage());
+        assertEquals("SQL: select * from users where email = ? (Connection: main, SQL state 42P01, vendor code 7)"
+                + " [DWN-UNK-0000]", error.getMessage());
         assertFalse(error.getMessage().contains("ana@example.com"));
     }
 
@@ -62,7 +62,8 @@ class QueryExceptionTest {
     void namesAMissingSqlStateAsUnknown() {
         QueryException error = new QueryException("main", "select 1", Arrays.asList(), failure(null), false);
 
-        assertEquals("SQL: select 1 (Connection: main, SQL state unknown, vendor code 7)", error.getMessage());
+        assertEquals("SQL: select 1 (Connection: main, SQL state unknown, vendor code 7)"
+                + " [DWN-UNK-0000]", error.getMessage());
     }
 
     @Test

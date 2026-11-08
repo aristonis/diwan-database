@@ -50,6 +50,9 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
   Use the listed operators.
 - An empty `whereIn` matches no row; an empty `whereNotIn` matches every row, as in Laravel. Check
   the list before a delete.
+- User text goes through `whereContains`, `whereStartsWith` or `whereEndsWith`, which escape `%`
+  and `_`. Never build a `whereLike` pattern from user input: `whereLike` takes `%` and `_` as
+  wildcards and escapes nothing.
 - Row locks need a transaction on PostgreSQL, which throws `IllegalStateException` outside one.
   SQLite has no row locks: every strength is a no-op there, and `NOWAIT` and `SKIP_LOCKED` are refused.
 - `upsert` needs a unique index on exactly the `uniqueBy` columns, and SQLite 3.24 (Android API 30).

@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `Casts.decimal(precision, scale)` and `Casts.decimal(precision, scale, RoundingMode)`, with the
+  `decimal:P,S` and `decimal:P,S,MODE` cast strings. The strict decimal refuses too many integer
+  digits, and refuses extra decimals unless a rounding mode is given.
+- `whereContains`, `whereStartsWith` and `whereEndsWith` on the query builder and the model builder,
+  with `or`, `Not` and `orNot` forms and a `caseSensitive` flag. The search value is always literal.
+- `DriverException.error()`, which returns a `DiwanError` with a stable `DWN-` code, the constraint
+  or index name (`key()`) and the columns (`columns()`).
+- `DriverFailureKind.CHECK_VIOLATION` and `NOT_NULL_VIOLATION`, with the codes `DWN-CST-0003` and
+  `DWN-CST-0004`.
+
+### Changed
+
+- Driver failure messages and query exception messages end with the Diwan error code, such as
+  `[DWN-CST-0001 unique violation: users_email_unique (email)]`. The rest of each message is
+  unchanged.
+
 ## [0.2.0] - 2026-11-08
 
 ### Added
@@ -228,5 +248,6 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/aristonis/diwan-database/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aristonis/diwan-database/releases/tag/v0.1.0

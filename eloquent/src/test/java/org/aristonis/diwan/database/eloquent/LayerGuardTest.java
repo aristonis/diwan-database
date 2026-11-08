@@ -93,7 +93,8 @@ class LayerGuardTest {
 
     @Test
     void scopeLayerSitsBetweenWheresAndClauses() {
-        assertSame(EloquentWheres.class, EloquentScopes.class.getSuperclass());
+        assertSame(EloquentWheres.class, EloquentSearches.class.getSuperclass());
+        assertSame(EloquentSearches.class, EloquentScopes.class.getSuperclass());
         assertSame(EloquentScopes.class, EloquentClauses.class.getSuperclass());
         assertSame(EloquentClauses.class, EloquentCreators.class.getSuperclass());
         assertSame(EloquentCreators.class, EloquentRelationQueries.class.getSuperclass());

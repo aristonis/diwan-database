@@ -136,8 +136,8 @@ class JdbcFailuresTest {
     void busyMessageNamesTheKind() {
         DriverException busy = translate(null, 5, "SQLite");
 
-        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY",
-                busy.getMessage());
+        assertEquals("Database failure (SQL state unknown, vendor code 5): concurrency, SQLITE_BUSY"
+                + " [DWN-TXN-0001 concurrency]", busy.getMessage());
     }
 
     @Test
@@ -157,5 +157,32 @@ class JdbcFailuresTest {
                 "08006", 0, null);
 
         assertTrue(message.contains("connection lost, commit outcome unknown"), message);
+    }
+
+    @Test
+    void stateTablesGiveTheStableCodes() {
+        assertEquals("DWN-TXN-0001", translate("40001", 0, "PostgreSQL").error().code());
+        assertEquals("DWN-TXN-0001", translate(null, 5, "SQLite").error().code());
+        assertEquals("DWN-QRY-0001", translate("57014", 0, "PostgreSQL").error().code());
+        assertEquals("DWN-CNX-0001", translate("08006", 0, "PostgreSQL").error().code());
+        assertEquals("DWN-CST-0003", translate("23514", 0, "PostgreSQL").error().code());
+        assertEquals("DWN-CST-0004", translate("23502", 0, "PostgreSQL").error().code());
+        assertEquals("DWN-UNK-0000", translate("42P01", 0, "PostgreSQL").error().code());
+    }
+
+    @Test
+    void sqliteCheckAndNotNullAreReadFromTheText() {
+        DriverException check = JdbcFailures.translate(new SQLException(
+                "[SQLITE_CONSTRAINT_CHECK] A CHECK constraint failed (CHECK constraint failed: positive)", null, 19),
+                "SQLite");
+        DriverException notNull = JdbcFailures.translate(new SQLException(
+                "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: t.a)", null,
+                19), "SQLite");
+
+        assertTrue(check.kinds().contains(DriverFailureKind.CHECK_VIOLATION));
+        assertEquals("positive", check.error().key().orElseThrow());
+        assertTrue(notNull.kinds().contains(DriverFailureKind.NOT_NULL_VIOLATION));
+        assertEquals(java.util.Arrays.asList("a"), notNull.error().columns());
+        assertTrue(notNull.getMessage().endsWith(" [DWN-CST-0004 not null violation (a)]"));
     }
 }

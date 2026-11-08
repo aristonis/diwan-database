@@ -15,6 +15,7 @@ import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.query.RowLock;
+import org.aristonis.diwan.database.query.SearchWhere;
 import org.aristonis.diwan.database.query.Where;
 import org.aristonis.diwan.database.values.Instants;
 
@@ -132,6 +133,35 @@ public class SQLiteQueryGrammar extends QueryGrammar {
         }
         return wrap(where.column()) + (where.not() ? " not glob " : " glob ")
                 + String.format(GLOB_PATTERN, parameter(where.value()));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Case-sensitive matches build a {@code glob} pattern with {@code [}, {@code *} and
+     *     {@code ?} in brackets, {@code [} first so later brackets are not escaped again.
+     */
+    @Override
+    public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
+        if (!caseSensitive) {
+            return super.searchPattern(value, anchor, false);
+        }
+        String escaped = value.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]");
+        return (anchor == SearchWhere.Anchor.STARTS_WITH ? "" : "*") + escaped
+                + (anchor == SearchWhere.Anchor.ENDS_WITH ? "" : "*");
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Case-sensitive matches write {@code column [not ]glob ?}.
+     */
+    @Override
+    protected String whereSearch(Builder query, SearchWhere where) {
+        if (!where.caseSensitive()) {
+            return super.whereSearch(query, where);
+        }
+        return wrap(where.column()) + (where.not() ? " not glob " : " glob ") + "?";
     }
 
     /**

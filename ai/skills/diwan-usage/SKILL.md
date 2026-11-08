@@ -48,6 +48,8 @@ Object orderId = db.transaction(tx -> {
 - Values go in as `?` bindings. Never join user input into the SQL string.
 - `TransactionScope` from `db.beginTransaction()` rolls back on close unless `commit()` ran.
 - Errors are unchecked and the message hides binding values. Do not log bindings with personal data.
+- Branch on `((DriverException) e.getCause()).error().code()`, such as `DWN-CST-0001` for a unique
+  violation. Never branch on vendor codes or message text.
 
 ## Porting an existing JDBC or SQL layer
 

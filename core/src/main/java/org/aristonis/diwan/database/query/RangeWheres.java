@@ -23,7 +23,7 @@ import org.aristonis.diwan.database.Connection;
 /**
  * The in, null and between where layer of {@link Builder}.
  */
-abstract class RangeWheres extends BasicWheres {
+abstract class RangeWheres extends SearchWheres {
 
     /** Canonical decimal integer text: no sign on zero, no leading zero, at most 19 digits. */
     private static final Pattern INTEGER_TEXT = Pattern.compile("0|-?[1-9][0-9]{0,18}");

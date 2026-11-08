@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent.casts;
 
+import java.math.RoundingMode;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -158,7 +159,7 @@ final class CastSpecParser {
     private static Cast<?> withArgument(String type, String argument, String spec) {
         switch (type) {
             case "decimal":
-                return new DecimalCast(scale(argument, spec));
+                return decimal(argument, spec);
             case "date":
             case "immutable_date":
                 return date(argument);
@@ -174,6 +175,27 @@ final class CastSpecParser {
                 throw new IllegalArgumentException("Cast [" + spec + "] has an unknown JSON option");
             default:
                 throw unknown(spec);
+        }
+    }
+
+    private static Cast<?> decimal(String argument, String spec) {
+        if (argument.indexOf(',') < 0) {
+            return new DecimalCast(scale(argument, spec));
+        }
+        String[] parts = argument.split(",", -1);
+        if (parts.length < 2 || parts.length > 3) {
+            throw new IllegalArgumentException("Cast [" + spec + "] must be decimal:N, decimal:P,S or decimal:P,S,MODE");
+        }
+        try {
+            int precision = Integer.parseInt(parts[0].trim());
+            int scale = Integer.parseInt(parts[1].trim());
+            RoundingMode mode = parts.length == 3
+                    ? RoundingMode.valueOf(parts[2].trim().toUpperCase(Locale.ROOT))
+                    : RoundingMode.UNNECESSARY;
+            return new StrictDecimalCast(precision, scale, mode);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Cast [" + spec + "] must be decimal:P,S or decimal:P,S,MODE "
+                    + "with a valid precision, scale and rounding mode");
         }
     }
 

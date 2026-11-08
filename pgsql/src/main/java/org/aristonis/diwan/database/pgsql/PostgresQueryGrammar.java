@@ -14,6 +14,7 @@ import org.aristonis.diwan.database.query.LockStrength;
 import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.query.RowLock;
+import org.aristonis.diwan.database.query.SearchWhere;
 import org.aristonis.diwan.database.query.Where;
 
 /**
@@ -119,6 +120,27 @@ public class PostgresQueryGrammar extends QueryGrammar {
     protected String whereLike(Builder query, Where.Like where) {
         String operator = (where.not() ? "not " : "") + (where.caseSensitive() ? "like" : "ilike");
         return likeClause(where.column(), operator, where.value());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Both case modes use the base pattern.
+     */
+    @Override
+    public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
+        return super.searchPattern(value, anchor, false);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Writes {@code column::text like|ilike ? escape '!'}.
+     */
+    @Override
+    protected String whereSearch(Builder query, SearchWhere where) {
+        String operator = (where.not() ? "not " : "") + (where.caseSensitive() ? "like" : "ilike");
+        return wrap(where.column()) + "::text " + operator + " ? escape '!'";
     }
 
     private String likeClause(String column, String operator, Object value) {

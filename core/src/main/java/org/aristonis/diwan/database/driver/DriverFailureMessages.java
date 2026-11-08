@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import org.aristonis.diwan.database.Internal;
+import org.aristonis.diwan.database.exception.DiwanError;
 
 /**
  * Builds the message of a driver failure from its SQL state, vendor code, kinds and result code name.
@@ -26,6 +27,8 @@ public final class DriverFailureMessages {
     private static final int SQLITE_BUSY = 5;
     private static final int SQLITE_LOCKED = 6;
     private static final int SQLITE_CONSTRAINT = 19;
+    private static final int SQLITE_CONSTRAINT_CHECK = 275;
+    private static final int SQLITE_CONSTRAINT_NOTNULL = 1299;
     private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
     private static final int SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
     private static final int SQLITE_CONSTRAINT_UNIQUE = 2067;
@@ -56,6 +59,46 @@ public final class DriverFailureMessages {
             details.add(codeName);
         }
         return details.isEmpty() ? base : base + ": " + String.join(", ", details);
+    }
+
+    /**
+     * Builds the message of a driver failure with the Diwan error suffix.
+     *
+     * @param kinds the kinds the driver recognised, may be {@code null} or empty
+     * @param sqlState the SQL state the database reported, or {@code null} when it gave none
+     * @param vendorCode the vendor-specific error code, {@code 0} when there is none
+     * @param codeName the database's own name for the result code, or {@code null} when there is none
+     * @param error the Diwan error whose suffix is appended, never {@code null}
+     * @return the text of {@link #message(Set, String, int, String)} followed by {@link #suffix(DiwanError)}
+     */
+    public static String message(Set<DriverFailureKind> kinds, String sqlState, int vendorCode, String codeName,
+            DiwanError error) {
+        return message(kinds, sqlState, vendorCode, codeName) + suffix(error);
+    }
+
+    /**
+     * Builds the suffix that ends a failure message.
+     *
+     * <p>The form is {@code  [<code> <kind words>[: <key>][ (<columns>)]]}, for example
+     * {@code  [DWN-CST-0001 unique violation: users_email_unique (email)]}, and {@code  [DWN-UNK-0000]}
+     * alone for a failure Diwan does not recognise. It holds schema names, never values.
+     *
+     * @param error the Diwan error, never {@code null}
+     * @return the suffix with a leading space, never {@code null}
+     */
+    public static String suffix(DiwanError error) {
+        StringBuilder text = new StringBuilder(" [").append(error.code());
+        Optional<DriverFailureKind> kind = DiwanErrorCodes.kindOf(error.code());
+        if (kind.isPresent()) {
+            text.append(' ').append(words(kind.get()));
+            if (error.key().isPresent()) {
+                text.append(": ").append(error.key().get());
+            }
+            if (!error.columns().isEmpty()) {
+                text.append(" (").append(String.join(", ", error.columns())).append(')');
+            }
+        }
+        return text.append(']').toString();
     }
 
     /**
@@ -92,6 +135,10 @@ public final class DriverFailureMessages {
                 return "SQLITE_CONSTRAINT_FOREIGNKEY";
             case SQLITE_CONSTRAINT_PRIMARYKEY:
                 return "SQLITE_CONSTRAINT_PRIMARYKEY";
+            case SQLITE_CONSTRAINT_CHECK:
+                return "SQLITE_CONSTRAINT_CHECK";
+            case SQLITE_CONSTRAINT_NOTNULL:
+                return "SQLITE_CONSTRAINT_NOTNULL";
             case SQLITE_CONSTRAINT_UNIQUE:
                 return "SQLITE_CONSTRAINT_UNIQUE";
             default:

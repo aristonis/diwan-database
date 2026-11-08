@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverCapability;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
@@ -685,10 +686,12 @@ final class JdbcSession implements DriverSession {
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
         String codeName = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
                 ? DriverFailureMessages.sqliteCodeName(failure.vendorCode()).orElse(null) : null;
+        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null), failure.error().columns());
         String message = DriverFailureMessages.message(kinds, failure.sqlState().orElse(null),
-                failure.vendorCode(), codeName);
+                failure.vendorCode(), codeName, error);
         return new DriverException(message, failure.sqlState().orElse(null), failure.vendorCode(),
-                failure.databaseMessage().orElse(null), failure.getCause(), kinds);
+                failure.databaseMessage().orElse(null), failure.getCause(), kinds,
+                failure.error().key().orElse(null), failure.error().columns());
     }
 
     private DriverException failure(SQLException e) {
