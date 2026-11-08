@@ -56,6 +56,22 @@ Object orderId = db.transaction(tx -> {
 - Branch on `((DriverException) e.getCause()).error().code()`, such as `DWN-CST-0001` for a unique
   violation. Never branch on vendor codes or message text.
 
+## Testing
+
+- Add `org.aristonis:diwan-database-testing` (test scope; JUnit 5.10+). Register
+  `@RegisterExtension static RefreshDatabase db = RefreshDatabase.rollback(() -> SQLiteQuery.of(conn), SQLiteSchema::of, migrations)`
+  (`PostgresQuery`/`PostgresSchema` on PostgreSQL). Test methods may take `DatabaseAssertions`,
+  `QueryFactory` and `Connection` parameters.
+- Migrations run once per run through `Migrator.fresh()`. The supplier must return the same connection
+  instance; the same connection with another migration list in one run throws `IllegalStateException`.
+- Use `rollback` by default (fast, parallel-safe). Use `truncate` for real commits, `afterCommit` hooks
+  and other threads; it must not run under parallel JUnit and does not empty tables a test creates itself.
+- Rollback mode: other threads, executors and `@Timeout(SEPARATE_THREAD)` commit for real; `afterCommit`
+  never fires.
+- Assertions: `assertHas`, `assertMissing`, `assertCount`, `assertEmpty`, `assertModelExists`,
+  `assertModelMissing`, `assertSoftDeleted`, `assertNotSoftDeleted` (models need the eloquent module).
+- PostgreSQL drop-all leaves types, sequences and functions.
+
 ## Porting an existing JDBC or SQL layer
 
 - Map each table to a model and each column to a schema builder call.

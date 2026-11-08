@@ -33,6 +33,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `DriverFailureKind.CHECK_VIOLATION` and `NOT_NULL_VIOLATION`, with the codes `DWN-CST-0003` and
   `DWN-CST-0004`.
 
+- Testing module `org.aristonis:diwan-database-testing`: the `RefreshDatabase` JUnit 5 extension
+  (`rollback` and `truncate` modes, migrations once per run) and `DatabaseAssertions` (`assertHas`,
+  `assertMissing`, `assertCount`, `assertEmpty`, `assertModelExists`, `assertModelMissing`,
+  `assertSoftDeleted`, `assertNotSoftDeleted`).
+- `Schema.getTables()`, `getTableListing()`, `getViews()`, `dropAllTables()` and `dropAllViews()`,
+  with the `TableInfo` and `ViewInfo` values, and `Migrator.fresh()`.
+- `QueryFactory.truncate(List)` and `truncate(List, boolean cascade)`: several tables in one call,
+  native on PostgreSQL, emulated on SQLite and Android.
+- `Connection.beginJoinedTransaction`, an `@Internal` hook the testing module uses.
+
+### Fixed
+
+- SQLite `truncate` failed when the `sqlite_sequence` table did not exist.
+
 ### Changed
 
 - Driver failure messages and query exception messages end with the Diwan error code, such as
@@ -53,6 +67,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A transaction opened outside Diwan gets no lock wait.
 - A timed lock on a locking cursor bounds only the opening of the cursor.
 - On SQLite `sumDecimal` is a double rounded to the scale: approximate for very large sums.
+- `RefreshDatabase` rollback mode: work on other threads, executors and `@Timeout(SEPARATE_THREAD)`
+  commits for real, and `afterCommit` callbacks never fire. Truncate mode must not run under parallel
+  JUnit and does not empty tables a test creates itself.
+- `dropAllTables` on PostgreSQL leaves types, sequences and functions. On SQLite before 3.37 the
+  table listing is built from `sqlite_master`.
 
 ## [0.2.0] - 2026-11-08
 

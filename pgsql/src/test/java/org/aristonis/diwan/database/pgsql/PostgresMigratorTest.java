@@ -52,7 +52,7 @@ class PostgresMigratorTest {
         }
     }
 
-    private static List<Migration> blog() {
+    static List<Migration> blog() {
         return Arrays.asList(
                 new Step("2026_01_users", s -> s.create("users", t -> {
                     t.id();

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.pgsql;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -326,6 +327,27 @@ public class PostgresQueryGrammar extends QueryGrammar {
     public Map<String, List<Object>> compileTruncate(Builder query) {
         Map<String, List<Object>> statements = new LinkedHashMap<>();
         statements.put("truncate " + wrapTable(query.getFrom()) + " restart identity", Collections.emptyList());
+        return Collections.unmodifiableMap(statements);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Writes one {@code truncate "a", "b" restart identity}, with {@code cascade} added
+     *     when asked.
+     */
+    @Override
+    public Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade) {
+        Map<String, List<Object>> statements = new LinkedHashMap<>();
+        if (tables.isEmpty()) {
+            return Collections.unmodifiableMap(statements);
+        }
+        List<String> wrapped = new ArrayList<>();
+        for (String table : tables) {
+            wrapped.add(wrapTable(table));
+        }
+        statements.put("truncate " + String.join(", ", wrapped) + " restart identity" + (cascade ? " cascade" : ""),
+                Collections.emptyList());
         return Collections.unmodifiableMap(statements);
     }
 

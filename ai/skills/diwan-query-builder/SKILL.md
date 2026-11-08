@@ -65,5 +65,8 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
 - `cursorPaginate` needs an `orderBy` on columns that are never null. Cursor tokens are not signed.
 - Batched `insert`, `upsert` and `insertOrIgnore` must stay under the binding limit (999 on SQLite
   before 3.32, 32766 after, 65535 on PostgreSQL).
+- `query.truncate(List.of("a", "b"))` empties several tables in one call; `truncate(tables, true)` cascades
+  (native on PostgreSQL, emulated on SQLite: referring tables carrying the connection prefix are emptied
+  too, children first). An empty list runs nothing; a null or blank name throws.
 
 Docs: Query builder on https://aristonis.org/open-source/diwan-database/docs/main/home

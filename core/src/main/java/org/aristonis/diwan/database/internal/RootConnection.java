@@ -15,6 +15,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.lang.ref.WeakReference;
 import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.exception.DriverException;
@@ -24,8 +28,9 @@ import org.aristonis.diwan.database.driver.RowCursor;
 /**
  * Runs each statement on a session borrowed from the driver for that one call, and opens
  * transactions on a session of their own. Its only mutable state is the strict-mode map of threads
- * inside a transaction it opened, with a nesting count per thread; the map is synchronized and holds
- * its threads weakly, so the connection is safe to share and dead threads never accumulate.
+ * inside a transaction it opened, with a nesting count per thread, and the map of threads that joined
+ * a transaction through {@code beginJoinedTransaction}; both maps are synchronized and hold their threads
+ * weakly, so the connection is safe to share and dead threads never accumulate.
  */
 @Internal
 public final class RootConnection extends AbstractConnection {
@@ -37,6 +42,14 @@ public final class RootConnection extends AbstractConnection {
     private final Map<Thread, Integer> threadsInTransaction =
             Collections.synchronizedMap(new WeakHashMap<Thread, Integer>());
 
+    // Threads that joined a transaction (a testing hook): their root calls run on that scope. Values
+    // never reference their thread, so the weak keys still let dead threads go.
+    private final Map<Thread, TransactionScopeConnection> joined =
+            Collections.synchronizedMap(new WeakHashMap<Thread, TransactionScopeConnection>());
+
+    // How many joined transactions are open: zero lets every root call skip the synchronized map.
+    private final AtomicInteger joinedCount = new AtomicInteger();
+
     @Internal
     public RootConnection(Driver driver, ConnectionSettings settings) {
         super(settings);
@@ -45,6 +58,10 @@ public final class RootConnection extends AbstractConnection {
 
     @Override
     <T> T run(PendingStatement<T> statement) {
+        return joinedOr(scope -> scope.run(statement), () -> runOwn(statement));
+    }
+
+    private <T> T runOwn(PendingStatement<T> statement) {
         refuseInsideOwnTransaction();
         DriverSession session = open(statement.sql(), statement.bindings());
         T result;
@@ -66,6 +83,10 @@ public final class RootConnection extends AbstractConnection {
     // reaching the end.
     @Override
     RowCursor openCursor(String sql, List<Object> bindings) {
+        return joinedOr(scope -> scope.openCursor(sql, bindings), () -> openCursorOwn(sql, bindings));
+    }
+
+    private RowCursor openCursorOwn(String sql, List<Object> bindings) {
         refuseInsideOwnTransaction();
         DriverSession session = open(sql, bindings);
         RowCursor driverCursor;
@@ -121,6 +142,10 @@ public final class RootConnection extends AbstractConnection {
     public <T> T transaction(TransactionCallback<T> callback, TransactionOptions options) {
         Objects.requireNonNull(callback, "callback");
         Objects.requireNonNull(options, "options");
+        return joinedOr(scope -> scope.transaction(callback, options), () -> transactionOwn(callback, options));
+    }
+
+    private <T> T transactionOwn(TransactionCallback<T> callback, TransactionOptions options) {
         refuseInsideOwnTransaction();
         boolean isTracked = settings().strictTransactions();
         Thread thread = Thread.currentThread();
@@ -298,6 +323,10 @@ public final class RootConnection extends AbstractConnection {
 
     @Override
     public TransactionScope beginTransaction() {
+        return joinedOr(TransactionScopeConnection::beginTransaction, this::beginTransactionOwn);
+    }
+
+    private TransactionScope beginTransactionOwn() {
         refuseInsideOwnTransaction();
         TransactionState state = openTransaction(TransactionOptions.none());
         Thread thread = Thread.currentThread();
@@ -313,11 +342,65 @@ public final class RootConnection extends AbstractConnection {
         });
     }
 
+    @Override
+    public TransactionScope beginJoinedTransaction() {
+        Thread thread = Thread.currentThread();
+        if (joined.containsKey(thread)) {
+            throw new IllegalStateException("This thread already has a joined transaction open on connection '"
+                    + getName() + "'; end it before joining another");
+        }
+        refuseInsideOwnTransaction();
+        TransactionState state = openTransaction(TransactionOptions.none());
+        WeakReference<Thread> owner = new WeakReference<>(thread);
+        TransactionScopeConnection scope = new TransactionScopeConnection(settings(), state, 1,
+                state.isExternal() ? TransactionState.OUTERMOST_SAVEPOINT : null, null, () -> {
+            Thread joinedThread = owner.get();
+            if (joinedThread != null && joined.remove(joinedThread) != null) {
+                joinedCount.decrementAndGet();
+            }
+        });
+        joinedCount.incrementAndGet();
+        joined.put(thread, scope);
+        return scope;
+    }
+
+    // A thread that joined a transaction runs every root call on that scope; any other thread runs it here.
+    private <R> R joinedOr(Function<TransactionScopeConnection, R> onJoined, Supplier<R> onOwn) {
+        TransactionScopeConnection scope = joinedCount.get() == 0 ? null : joined.get(Thread.currentThread());
+        return scope != null ? onJoined.apply(scope) : onOwn.get();
+    }
+
+    @Override
+    public void afterCommit(Runnable callback) {
+        joinedOr(scope -> {
+            scope.afterCommit(callback);
+            return null;
+        }, () -> {
+            super.afterCommit(callback);
+            return null;
+        });
+    }
+
+    @Override
+    public void afterRollback(Runnable callback) {
+        joinedOr(scope -> {
+            scope.afterRollback(callback);
+            return null;
+        }, () -> {
+            super.afterRollback(callback);
+            return null;
+        });
+    }
+
     // A failed callback may have left a session setting it could not restore, so the session is
     // discarded rather than closed and handed back as clean.
     @Override
     public <T> T session(TransactionCallback<T> callback) {
         Objects.requireNonNull(callback, "callback");
+        return joinedOr(scope -> scope.session(callback), () -> sessionOwn(callback));
+    }
+
+    private <T> T sessionOwn(TransactionCallback<T> callback) {
         refuseInsideOwnTransaction();
         boolean canRelease = getDriverInfo().supports(DriverCapability.SAVEPOINT_RELEASE);
         DriverSession session = open("session", Collections.<Object>emptyList());
@@ -346,6 +429,6 @@ public final class RootConnection extends AbstractConnection {
 
     @Override
     public int transactionLevel() {
-        return 0;
+        return joinedOr(TransactionScopeConnection::transactionLevel, () -> 0);
     }
 }

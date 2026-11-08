@@ -609,7 +609,7 @@ abstract class WriteQueries extends AggregateQueries {
      */
     public final void truncate() {
         requireTable();
-        Map<String, List<Object>> statements = grammar.compileTruncate(self());
+        Map<String, List<Object>> statements = grammar.compileTruncate(self(), connection);
         if (statements.size() > 1 && connection.transactionLevel() == 0) {
             connection.transaction(tx -> {
                 runAll(tx, statements);

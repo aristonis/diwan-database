@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -213,6 +214,13 @@ class QueryGrammarTest {
         assertEquals("delete from \"t\"", grammar.compileDelete(db().table("t")));
         assertEquals(Map.of("truncate table \"t\"", List.of()), grammar.compileTruncate(query));
         assertThrows(IllegalArgumentException.class, () -> grammar.compileUpdate(query, row()));
+    }
+
+    @Test
+    void truncateManyWritesOneStatementPerTableAndRefusesCascade() {
+        assertEquals(List.of("truncate table \"a\"", "truncate table \"b\""),
+                new ArrayList<>(grammar.compileTruncateMany(List.of("a", "b"), false).keySet()));
+        assertThrows(UnsupportedOperationException.class, () -> grammar.compileTruncateMany(List.of("a"), true));
     }
 
     @Test

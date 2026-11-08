@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.query;
 
+import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.Expression;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,6 +20,53 @@ abstract class JoinUnionGrammar extends WhereGrammar {
     /** Creates the layer for a prefix already checked for {@code null}. */
     JoinUnionGrammar(String tablePrefix) {
         super(tablePrefix);
+    }
+
+    // ---- truncate hooks ----
+
+    /**
+     * Compiles the statements that empty a table, as {@link QueryGrammar#compileTruncate(Builder)}.
+     *
+     * @param query the query, never {@code null}, with a table
+     * @return each statement mapped to its bindings, in run order, unmodifiable, never {@code null}
+     */
+    abstract Map<String, List<Object>> compileTruncate(Builder query);
+
+    /**
+     * Compiles the statements that empty several tables, as
+     * {@link QueryGrammar#compileTruncateMany(List, boolean)}.
+     *
+     * @param tables the table names, never {@code null}, optionally {@code schema.table}
+     * @param cascade whether tables that refer to these are emptied too
+     * @return each statement mapped to its bindings, in run order, unmodifiable, never {@code null}
+     */
+    abstract Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade);
+
+    /**
+     * Compiles the statements that empty a table, after looking at the database the statements will
+     * run on. The default ignores the connection; a grammar whose statements depend on the database,
+     * as SQLite's do on {@code sqlite_sequence}, overrides it.
+     *
+     * @param query the query, never {@code null}, with a table
+     * @param connection the connection the statements will run on, never {@code null}
+     * @return each statement mapped to its bindings, in run order, unmodifiable, never {@code null}
+     */
+    protected Map<String, List<Object>> compileTruncate(Builder query, Connection connection) {
+        return compileTruncate(query);
+    }
+
+    /**
+     * Compiles the statements that empty several tables, after looking at the database the statements
+     * will run on; the default ignores the connection, as {@link QueryGrammar#compileTruncate(Builder, Connection)}.
+     *
+     * @param tables the table names, never {@code null}, optionally {@code schema.table}
+     * @param cascade whether tables that refer to these are emptied too
+     * @param connection the connection the statements will run on, never {@code null}
+     * @return each statement mapped to its bindings, in run order, unmodifiable, never {@code null}
+     */
+    protected Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade,
+            Connection connection) {
+        return compileTruncateMany(tables, cascade);
     }
 
     // ---- joins ----

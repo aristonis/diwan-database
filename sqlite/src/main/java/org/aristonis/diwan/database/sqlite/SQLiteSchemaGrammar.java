@@ -25,6 +25,8 @@ import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
+import org.aristonis.diwan.database.schema.TableInfo;
+import org.aristonis.diwan.database.schema.ViewInfo;
 import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
@@ -51,6 +53,14 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     private static final int[] DROP_COLUMN_SINCE = {3, 35, 0};
     private static final int[] GENERATED_COLUMNS_SINCE = {3, 31, 0};
     private static final int[] TABLE_XINFO_SINCE = {3, 26, 0};
+    private static final int[] TABLE_LIST_SINCE = {3, 37, 0};
+    private static final String ANDROID_METADATA = "android_metadata";
+
+    // Names a virtual table v owns, from the suffixes of FTS3 to FTS5 and R-Tree; v is the alias of the
+    // virtual table in the sqlite_master form of compileTables.
+    private static final String SHADOW_NAMES = "(v.name || '_data', v.name || '_idx', v.name || '_content',"
+            + " v.name || '_docsize', v.name || '_config', v.name || '_segments', v.name || '_segdir',"
+            + " v.name || '_stat', v.name || '_node', v.name || '_rowid', v.name || '_parent')";
 
     private static final String[] KEY_CHANGES = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
         Command.DROP_FOREIGN, Command.CHECK, Command.DROP_CHECK};
@@ -406,6 +416,108 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
         return new SchemaQuery("select name from pragma_table_info(?)", Collections.singletonList(table));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the tables of the {@code main} database without {@code sqlite_} internal ones, from
+     *     {@code pragma_table_list} on SQLite 3.37 and later and from {@code sqlite_master} before,
+     *     such as on Android 9's 3.22; virtual tables are listed, their shadow tables never: the
+     *     {@code sqlite_master} form leaves out the tables a virtual table owns by the suffixes of
+     *     FTS3 to FTS5 and R-Tree
+     */
+    @Override
+    public SchemaQuery compileTables(Connection connection) {
+        if (DatabaseVersion.atLeast(version(connection), TABLE_LIST_SINCE)) {
+            return new SchemaQuery("select name, schema from pragma_table_list where schema = 'main'"
+                    + " and type in ('table', 'virtual') and name not like 'sqlite\\_%' escape '\\' and name <> 'android_metadata'"
+                    + " order by schema, name", Collections.emptyList());
+        }
+        return new SchemaQuery("select name, 'main' as schema from sqlite_master as t where type = 'table'"
+                + " and name not like 'sqlite\\_%' escape '\\' and name <> '" + ANDROID_METADATA + "'"
+                + " and not exists (select 1 from sqlite_master as v where v.sql like 'create virtual table%'"
+                + " and t.name in " + SHADOW_NAMES + ") order by name", Collections.emptyList());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the views of the {@code main} database from {@code sqlite_master}
+     */
+    @Override
+    public SchemaQuery compileViews(Connection connection) {
+        return new SchemaQuery("select name, 'main' as schema from sqlite_master where type = 'view'"
+                + " order by name", Collections.emptyList());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code true} for {@code android_metadata} and the {@code sqlite_} tables
+     */
+    @Override
+    public boolean isInternalTable(TableInfo table) {
+        return ANDROID_METADATA.equals(table.name()) || table.name().startsWith("sqlite_");
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the tables, each before the listed tables it refers to, read from the foreign keys;
+     *     the input order if they refer to each other in a cycle, where the deferred checks of
+     *     {@link #compileDropAllTables} carry the drop. A {@code RESTRICT} action is not deferred, so
+     *     the order is what lets such a schema drop
+     */
+    @Override
+    public List<TableInfo> sortForDrop(Connection connection, List<TableInfo> tables) {
+        List<SQLiteForeignKeyOrder.Ref> refs = new ArrayList<>(tables.size());
+        for (TableInfo table : tables) {
+            refs.add(new SQLiteForeignKeyOrder.Ref(table.schema(), table.name()));
+        }
+        List<Integer> order = SQLiteForeignKeyOrder.childrenFirst(refs, connection);
+        if (order == null) {
+            return tables;
+        }
+        List<TableInfo> sorted = new ArrayList<>(tables.size());
+        for (int index : order) {
+            sorted.add(tables.get(index));
+        }
+        return sorted;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code PRAGMA defer_foreign_keys = ON} and one {@code drop table} per table. The pragma
+     *     works inside a transaction and resets when it ends, so the statements must run in one;
+     *     the schema builder does so. A foreign key whose action is {@code RESTRICT} still stops
+     *     the drop of a table that rows refer to
+     */
+    @Override
+    public List<String> compileDropAllTables(List<TableInfo> tables) {
+        List<String> statements = new ArrayList<>();
+        if (!tables.isEmpty()) {
+            statements.add(SQLiteQueryGrammar.DEFER_FOREIGN_KEYS);
+        }
+        for (TableInfo table : tables) {
+            statements.add("drop table " + wrapTable(table.name()));
+        }
+        return Collections.unmodifiableList(statements);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return one {@code drop view} per view
+     */
+    @Override
+    public List<String> compileDropAllViews(List<ViewInfo> views) {
+        List<String> statements = new ArrayList<>();
+        for (ViewInfo view : views) {
+            statements.add("drop view " + wrapTable(view.name()));
+        }
+        return Collections.unmodifiableList(statements);
     }
 
     /**

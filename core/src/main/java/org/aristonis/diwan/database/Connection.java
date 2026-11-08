@@ -453,6 +453,37 @@ public interface Connection {
     TransactionScope beginTransaction();
 
     /**
+     * Starts a transaction that the calling thread's other calls on this connection join; a testing
+     * hook, for rolling back everything a test did.
+     *
+     * <p>It opens a transaction like {@link #beginTransaction()}: {@link TransactionScope#commit()}
+     * commits it, and {@link TransactionScope#close()} without a commit rolls it back. While it is
+     * open, every call the opening thread makes on this connection runs on the scope's transaction,
+     * instead of being refused by strict transactions or borrowing a session of its own. A
+     * {@link #transaction(TransactionCallback)} from that thread becomes a savepoint inside the
+     * joined transaction, so a {@code lockWait} option fails with {@link IllegalStateException} and
+     * attempts are ignored, as for any nested transaction; {@link #beginTransaction()} from that
+     * thread opens a nested scope the same way, and fails while an inner scope is still open. Other
+     * threads are not affected and use sessions of their own. Ending the scope always releases the
+     * thread, even when the rollback fails.
+     *
+     * <p>Callbacks registered with {@link #afterCommit(Runnable)} inside the joined transaction do
+     * not run when it is rolled back.
+     *
+     * @implSpec The default always throws; only the root connection of a builder supports joining.
+     * @return the open scope, never {@code null}; the caller must close it
+     * @throws UnsupportedOperationException if this connection is not a root connection, such as a
+     *     connection inside a transaction, a session or a pretend callback
+     * @throws IllegalStateException if the calling thread already has a joined transaction open on
+     *     this connection, or is inside a transaction callback of it in strict mode
+     * @throws QueryException if the database refuses to start the transaction
+     */
+    @Internal
+    default TransactionScope beginJoinedTransaction() {
+        throw new UnsupportedOperationException("beginJoinedTransaction is only available on the root connection");
+    }
+
+    /**
      * Runs a callback on a connection held to one physical database connection.
      *
      * <p>Every statement and transaction the callback runs on the connection it is given uses the

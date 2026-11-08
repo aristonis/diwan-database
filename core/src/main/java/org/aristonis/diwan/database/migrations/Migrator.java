@@ -189,6 +189,26 @@ public final class Migrator {
     }
 
     /**
+     * Drops every view and table of the default connection, the migrations table included, then
+     * runs every migration.
+     *
+     * <p>Tables that no migration made are dropped too. Migrations of other connections are not
+     * touched until they run.
+     *
+     * @return what {@link #run()} returns
+     * @throws IllegalStateException if a connection is inside a transaction
+     * @throws UnsupportedOperationException if the grammar cannot list or drop tables
+     * @throws MigrationFailedException if a migration fails
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement outside a migration fails
+     */
+    public List<MigrationResult> fresh() {
+        ensureNoOpenTransaction();
+        defaultSchema.dropAllViews();
+        defaultSchema.dropAllTables();
+        return run();
+    }
+
+    /**
      * Rolls back the last batch.
      *
      * @return one result per entry of the batch, newest first; empty when nothing ran
@@ -412,17 +432,7 @@ public final class Migrator {
                 return 0;
             }
             repository.requireChecksumColumn();
-            Map<String, Optional<String>> stored = repository.checksums();
-            int changed = 0;
-            for (Migration migration : given) {
-                Optional<String> recorded = stored.get(migration.name());
-                Optional<String> current = MigrationChecksums.declared(migration);
-                if (recorded != null && current.isPresent() && !current.equals(recorded)) {
-                    repository.setChecksum(migration.name(), current);
-                    changed++;
-                }
-            }
-            return changed;
+            return MigrationChecksums.repair(repository, given);
         });
     }
 
@@ -445,14 +455,7 @@ public final class Migrator {
                 return 0;
             }
             repository.requireChecksumColumn();
-            int changed = 0;
-            for (Map.Entry<String, Optional<String>> entry : repository.checksums().entrySet()) {
-                if (entry.getValue().isPresent()) {
-                    repository.setChecksum(entry.getKey(), Optional.<String>empty());
-                    changed++;
-                }
-            }
-            return changed;
+            return MigrationChecksums.clear(repository);
         });
     }
 

@@ -7,6 +7,8 @@ import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.Expression;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
+import org.aristonis.diwan.database.schema.TableInfo;
+import org.aristonis.diwan.database.schema.ViewInfo;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -532,6 +534,91 @@ public abstract class SchemaGrammar {
      */
     public SchemaQuery compileColumnNames(Connection connection, String table) {
         throw unsupported("Listing columns");
+    }
+
+    /**
+     * Returns a query that lists the user tables, one row each with the columns {@code name} and
+     * {@code schema}.
+     *
+     * @implSpec The base refuses the listing.
+     *
+     * @param connection the connection, never {@code null}; lets a grammar choose by database version
+     * @return the query, never {@code null}; ordered by schema, then name
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     */
+    public SchemaQuery compileTables(Connection connection) {
+        throw unsupported("Listing tables");
+    }
+
+    /**
+     * Returns a query that lists the views, one row each with the columns {@code name} and
+     * {@code schema}.
+     *
+     * @implSpec The base refuses the listing.
+     *
+     * @param connection the connection, never {@code null}; lets a grammar choose by database version
+     * @return the query, never {@code null}; ordered by schema, then name
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     */
+    public SchemaQuery compileViews(Connection connection) {
+        throw unsupported("Listing views");
+    }
+
+    /**
+     * Tells whether a listed table belongs to the database engine or an extension, so that dropping
+     * or emptying every table must leave it alone.
+     *
+     * @implSpec The base returns {@code false}.
+     *
+     * @param table the table as {@link #compileTables} lists it, never {@code null}
+     * @return {@code true} if the table is internal
+     */
+    public boolean isInternalTable(TableInfo table) {
+        return false;
+    }
+
+    /**
+     * Orders the tables so that dropping them one after the other respects foreign keys.
+     *
+     * @implSpec The base returns the tables unchanged: a grammar whose drop is one statement, or
+     *     whose foreign keys do not block a drop, needs no order.
+     *
+     * @param connection the connection the tables were listed on, never {@code null}
+     * @param tables the tables to drop, never {@code null}
+     * @return the tables in drop order, never {@code null}; the input order when no order exists
+     */
+    public List<TableInfo> sortForDrop(Connection connection, List<TableInfo> tables) {
+        return tables;
+    }
+
+    /**
+     * Returns the statements that drop the given tables.
+     *
+     * <p>More than one statement means they must run together in one transaction.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param tables the tables to drop, never {@code null}, as listed by {@link #compileTables}
+     * @return the statements in order, never {@code null}; empty if {@code tables} is empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    public List<String> compileDropAllTables(List<TableInfo> tables) {
+        throw unsupported("Dropping all tables");
+    }
+
+    /**
+     * Returns the statements that drop the given views.
+     *
+     * <p>More than one statement means they must run together in one transaction.
+     *
+     * @implSpec The base refuses the command.
+     *
+     * @param views the views to drop, never {@code null}, as listed by {@link #compileViews}
+     * @return the statements in order, never {@code null}; empty if {@code views} is empty
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     */
+    public List<String> compileDropAllViews(List<ViewInfo> views) {
+        throw unsupported("Dropping all views");
     }
 
     /**

@@ -4,7 +4,7 @@ pluginManagement {
 
 rootProject.name = "diwan-database"
 
-include("core", "sqlite", "pgsql", "eloquent")
+include("core", "sqlite", "pgsql", "eloquent", "testing")
 
 // The Android driver compiles against android.jar from an Android SDK; without one it is left out.
 val androidSdk = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")

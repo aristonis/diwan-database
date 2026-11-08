@@ -618,6 +618,19 @@ public abstract class QueryGrammar extends JoinUnionGrammar {
         return Collections.unmodifiableMap(statements);
     }
 
+    /**
+     * Compiles the statements that empty several tables.
+     *
+     * @implSpec The base returns one {@code truncate table "t"} per table, and throws
+     *     {@link UnsupportedOperationException} when {@code cascade} is set.
+     * @param tables the table names, never {@code null}, optionally {@code schema.table}
+     * @param cascade whether tables that refer to these are emptied too
+     * @return each statement mapped to its bindings, in run order, unmodifiable, never {@code null}
+     */
+    public Map<String, List<Object>> compileTruncateMany(List<String> tables, boolean cascade) {
+        return TruncateGrammar.eachTable(this, tables, cascade);
+    }
+
     // ---- bindings and raw SQL ----
 
     /**

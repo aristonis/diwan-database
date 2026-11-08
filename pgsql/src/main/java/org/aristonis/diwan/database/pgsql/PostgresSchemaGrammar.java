@@ -16,6 +16,8 @@ import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
+import org.aristonis.diwan.database.schema.TableInfo;
+import org.aristonis.diwan.database.schema.ViewInfo;
 import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
@@ -30,6 +32,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private static final int MAX_IDENTIFIER_LENGTH = 63;
     private static final int VIRTUAL_COLUMNS_SINCE = 18;
+    private static final String SPATIAL_REF_SYS = "spatial_ref_sys";
     private static final String CURRENT_YEAR = "EXTRACT(YEAR FROM CURRENT_DATE)";
 
     /** Creates the grammar. */
@@ -371,6 +374,79 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     public SchemaQuery compileTableExists(Connection connection, String table) {
         return new SchemaQuery("select count(*) from pg_class where relname = ? and relkind in ('r', 'p')"
                 + " and relnamespace = (select oid from pg_namespace where nspname = current_schema())", Collections.singletonList(table));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the ordinary and partitioned tables of every schema on the search path, from
+     *     {@code pg_class}
+     */
+    @Override
+    public SchemaQuery compileTables(Connection connection) {
+        return new SchemaQuery("select c.relname as name, n.nspname as schema from pg_class c"
+                + " join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r', 'p')"
+                + " and n.nspname = any(current_schemas(false)) order by n.nspname, c.relname",
+                Collections.emptyList());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the views of every schema on the search path, from {@code pg_views}
+     */
+    @Override
+    public SchemaQuery compileViews(Connection connection) {
+        return new SchemaQuery("select viewname as name, schemaname as schema from pg_views"
+                + " where schemaname = any(current_schemas(false)) order by schemaname, viewname",
+                Collections.emptyList());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return one {@code drop table ... cascade} over all tables, schema-qualified, by their real
+     *     names. Types, sequences and functions are not dropped: a migration that creates one drops
+     *     it itself, or lives in a schema of its own
+     */
+    @Override
+    public List<String> compileDropAllTables(List<TableInfo> tables) {
+        List<String> targets = new ArrayList<>();
+        for (TableInfo table : tables) {
+            targets.add(wrap(table.schema()) + "." + wrap(table.name()));
+        }
+        return dropAll("drop table ", targets);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code true} for PostGIS's {@code spatial_ref_sys}
+     */
+    @Override
+    public boolean isInternalTable(TableInfo table) {
+        return SPATIAL_REF_SYS.equals(table.name());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return one {@code drop view ... cascade} over all views, schema-qualified
+     */
+    @Override
+    public List<String> compileDropAllViews(List<ViewInfo> views) {
+        List<String> targets = new ArrayList<>();
+        for (ViewInfo view : views) {
+            targets.add(wrap(view.schema()) + "." + wrap(view.name()));
+        }
+        return dropAll("drop view ", targets);
+    }
+
+    private static List<String> dropAll(String command, List<String> targets) {
+        if (targets.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Collections.singletonList(command + String.join(", ", targets) + " cascade");
     }
 
     /**

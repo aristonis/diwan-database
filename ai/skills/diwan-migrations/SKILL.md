@@ -65,5 +65,9 @@ default) or `manager.seed(DatabaseSeeder::new, SeedOptions.defaults().inTransact
 - The migrator refuses to run inside your own transaction.
 - On several processes, plug in a lock: `.lock(new PostgresMigrationLock(dataSource))`.
 - Rollback with a recorded migration missing from your list throws `MissingMigrationsException`.
+- `migrator.fresh()` drops every view and table (migrations table included), then runs. For test and local
+  databases only. `schema.getTables()`, `getTableListing()` and `getViews()` return real names (with the
+  prefix); `dropAllTables()` / `dropAllViews()` keep `spatial_ref_sys` and `android_metadata`, and on
+  PostgreSQL leave types, sequences and functions.
 
 Docs: Schema and Migrations on https://aristonis.org/open-source/diwan-database/docs/main/home
