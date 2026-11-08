@@ -106,6 +106,7 @@ class ScopedTerminalsTest {
         table.put("value", new Entry(1, q -> q.value("title")));
         table.put("pluck", new Entry(1, q -> q.pluck("title")));
         table.put("count", new Entry(1, q -> q.count()));
+        table.put("sumDecimal", new Entry(1, q -> q.sumDecimal("views", 0)));
         table.put("exists", new Entry(1, q -> q.exists()));
         table.put("toBase.sum", new Entry(1, q -> q.toBase().sum("views")));
         table.put("toBase.max", new Entry(1, q -> q.toBase().max("id")));

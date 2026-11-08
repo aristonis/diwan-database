@@ -413,8 +413,7 @@ abstract class ChunkQueries extends WriteQueries {
      * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses the query
      */
     public final QueryCursor<Map<String, Object>> cursor() {
-        checkLockTransaction();
-        return connection.cursor(toSql(), grammar.prepareBindings(getBindings()));
+        return runLocked(() -> connection.cursor(toSql(), grammar.prepareBindings(getBindings())));
     }
 
     private boolean chunkByKey(int count, Predicate<List<Map<String, Object>>> callback, String column, String alias,

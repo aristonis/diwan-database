@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.driver;
 
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.Internal;
+import java.util.OptionalInt;
 
 /**
  * Opens sessions on one database for Diwan Database.
@@ -36,4 +37,15 @@ public interface Driver {
      * @throws DriverException if the description cannot be read
      */
     DriverInfo info();
+
+    /**
+     * Tells how many significant digits the database stores exactly in a decimal column.
+     *
+     * @implSpec The default returns empty, meaning no limit is known. A driver for a database that
+     *     keeps decimals as binary floating point returns the digits it keeps (SQLite: 15).
+     * @return the number of exact significant digits, or empty when there is no known limit
+     */
+    default OptionalInt exactDecimalDigits() {
+        return OptionalInt.empty();
+    }
 }

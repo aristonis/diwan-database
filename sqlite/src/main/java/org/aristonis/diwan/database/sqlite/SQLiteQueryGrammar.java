@@ -391,6 +391,9 @@ public class SQLiteQueryGrammar extends QueryGrammar {
     @Override
     protected String compileLock(Builder query, RowLock lock) {
         checkLockable(query);
+        if (lock.timeoutMillis().isPresent()) {
+            throw unsupported("The timed row lock wait");
+        }
         if (lock.lockWait() != LockWait.WAIT) {
             throw unsupported("The " + lock.lockWait() + " row lock wait");
         }

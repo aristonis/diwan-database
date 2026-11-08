@@ -21,6 +21,11 @@ import org.aristonis.diwan.database.migrations.MigrationLock;
  * in transaction or statement mode, where lock and unlock could reach different sessions. If the
  * process dies, PostgreSQL ends its session and frees the lock.
  *
+ * <p>The session of the lock is set to no {@code lock_timeout} while it holds the lock, so a
+ * {@code lock_wait} configured on the data source never cuts the migration lock short; the earlier
+ * value is put back, as a bound parameter, before the connection is closed. This covers the lock's
+ * own session only: the migrations run on the connection of the migrator and keep its settings.
+ *
  * <p>The key is made from a name with FNV-1a, so the same name gives the same key in every version
  * of this library; changing it would let an old and a new application migrate at once.
  */
@@ -38,6 +43,8 @@ public final class PostgresMigrationLock implements MigrationLock {
     private final long key;
     private final long waitMillis;
     private java.sql.Connection held;
+    /** The {@code lock_timeout} of the held session before the lock set it to none. */
+    private String heldLockTimeout;
 
     /**
      * Creates a lock with the default name and wait.
@@ -92,10 +99,12 @@ public final class PostgresMigrationLock implements MigrationLock {
             throw new IllegalStateException("The migration lock is already held");
         }
         java.sql.Connection connection = null;
+        String savedTimeout = null;
         try {
             connection = dataSource.getConnection();
             connection.setAutoCommit(true);
             keepSessionAlive(connection);
+            savedTimeout = clearLockTimeout(connection);
             // nanoTime, so a wall-clock jump neither ends the wait early nor stretches it.
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMillis);
             while (!ask(connection, "select pg_try_advisory_lock(?)")) {
@@ -106,15 +115,16 @@ public final class PostgresMigrationLock implements MigrationLock {
                 Thread.sleep(POLL_MILLIS);
             }
             held = connection;
+            heldLockTimeout = savedTimeout;
         } catch (SQLException e) {
-            closeQuietly(connection);
+            abandon(connection, savedTimeout);
             throw new IllegalStateException("The migration lock could not be taken", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            closeQuietly(connection);
+            abandon(connection, savedTimeout);
             throw new IllegalStateException("Interrupted while waiting for the migration lock", e);
         } catch (RuntimeException e) {
-            closeQuietly(connection);
+            abandon(connection, savedTimeout);
             throw e;
         }
     }
@@ -129,7 +139,9 @@ public final class PostgresMigrationLock implements MigrationLock {
     @Override
     public synchronized void release() {
         java.sql.Connection connection = held;
+        String savedTimeout = heldLockTimeout;
         held = null;
+        heldLockTimeout = null;
         if (connection == null) {
             return;
         }
@@ -145,11 +157,46 @@ public final class PostgresMigrationLock implements MigrationLock {
             cause = e;
             unlockAll(connection);
         } finally {
-            closeQuietly(connection);
+            abandon(connection, savedTimeout);
         }
         if (problem != null) {
             throw new IllegalStateException(problem, cause);
         }
+    }
+
+    // Migrations are not bounded by a configured lock_wait: the session waits for no lock timeout.
+    private static String clearLockTimeout(java.sql.Connection connection) throws SQLException {
+        String saved;
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("select current_setting('lock_timeout')")) {
+            if (!result.next()) {
+                throw new SQLException("current_setting('lock_timeout') returned no row");
+            }
+            saved = result.getString(1);
+        }
+        setLockTimeout(connection, "0");
+        return saved;
+    }
+
+    private static void setLockTimeout(java.sql.Connection connection, String value) throws SQLException {
+        try (PreparedStatement statement =
+                connection.prepareStatement("select set_config('lock_timeout', ?, false)")) {
+            statement.setString(1, value);
+            // execute, not executeQuery: the row only echoes the value, so nothing is read.
+            statement.execute();
+        }
+    }
+
+    // The connection may go back to a pool, so the setting it came with is put back before it is closed.
+    private static void abandon(java.sql.Connection connection, String savedTimeout) {
+        if (connection != null && savedTimeout != null) {
+            try {
+                setLockTimeout(connection, savedTimeout);
+            } catch (SQLException e) {
+                // The session may be gone already; closing the connection is all that is left.
+            }
+        }
+        closeQuietly(connection);
     }
 
     private boolean ask(java.sql.Connection connection, String sql) throws SQLException {

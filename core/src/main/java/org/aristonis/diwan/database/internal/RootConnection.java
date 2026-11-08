@@ -5,6 +5,7 @@ import org.aristonis.diwan.database.Internal;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.PretendCallback;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.TransactionOptions;
 import org.aristonis.diwan.database.TransactionScope;
 import org.aristonis.diwan.database.exception.QueryException;
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.WeakHashMap;
 import org.aristonis.diwan.database.driver.Driver;
 import org.aristonis.diwan.database.driver.DriverCapability;
@@ -87,6 +89,11 @@ public final class RootConnection extends AbstractConnection {
                 });
     }
 
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        return driver.exactDecimalDigits();
+    }
+
     private DriverSession open(String sql, List<Object> bindings) {
         try {
             return driver.open();
@@ -111,11 +118,9 @@ public final class RootConnection extends AbstractConnection {
     }
 
     @Override
-    public <T> T transaction(TransactionCallback<T> callback, int attempts) {
+    public <T> T transaction(TransactionCallback<T> callback, TransactionOptions options) {
         Objects.requireNonNull(callback, "callback");
-        if (attempts < 1) {
-            throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
-        }
+        Objects.requireNonNull(options, "options");
         refuseInsideOwnTransaction();
         boolean isTracked = settings().strictTransactions();
         Thread thread = Thread.currentThread();
@@ -128,7 +133,7 @@ public final class RootConnection extends AbstractConnection {
         T result = null;
         Throwable failure = null;
         try {
-            result = withRetries(callback, attempts, deferred);
+            result = withRetries(callback, options, deferred);
         } catch (RuntimeException | Error attemptFailure) {
             failure = attemptFailure;
         } finally {
@@ -169,9 +174,11 @@ public final class RootConnection extends AbstractConnection {
     // A retry runs the whole callback again, on a fresh session. Only a concurrency failure
     // raised on the attempt's own session before the commit was sent is retried: a failed commit
     // may have landed, and a concurrency failure from elsewhere says nothing about this transaction.
-    private <T> T withRetries(TransactionCallback<T> callback, int attempts, List<Runnable> deferred) {
+    private <T> T withRetries(TransactionCallback<T> callback, TransactionOptions options,
+            List<Runnable> deferred) {
+        int attempts = options.attempts();
         for (int attempt = 1; ; attempt++) {
-            TransactionState state = openTransaction();
+            TransactionState state = openTransaction(options);
             try {
                 return runAttempt(new TransactionalConnection(settings(), state), callback, deferred);
             } catch (RuntimeException | Error failure) {
@@ -206,6 +213,13 @@ public final class RootConnection extends AbstractConnection {
             connection.end();
         }
         deferred.add(afterEnd(connection, true, true));
+        // The work is committed, so a wait that cannot be taken back is reported, and the session that
+        // keeps it is dropped instead of handed back.
+        Throwable restoreFailure = connection.state().restoreLockWait();
+        if (restoreFailure != null) {
+            Sessions.endAfterFailure(session, restoreFailure, true);
+            Sessions.rethrow(restoreFailure);
+        }
         Sessions.closeAfterSuccess(session, settings().cleanupFailureHandler());
         return result;
     }
@@ -233,35 +247,51 @@ public final class RootConnection extends AbstractConnection {
         } catch (Throwable rollbackFailure) {
             Sessions.suppress(failure, rollbackFailure);
         } finally {
-            Sessions.endAfterFailure(session, failure, !hasRolledBack);
+            Throwable restoreFailure = connection.state().restoreLockWait();
+            if (restoreFailure != null) {
+                Sessions.suppress(failure, restoreFailure);
+            }
+            Sessions.endAfterFailure(session, failure, !hasRolledBack || restoreFailure != null);
         }
     }
 
     /** Opens a session and starts level 1: a real transaction, or a savepoint inside an external one. */
-    private TransactionState openTransaction() {
+    private TransactionState openTransaction(TransactionOptions options) {
         DriverSession session = open(BEGIN, Collections.<Object>emptyList());
+        LockWaitBegin.Handle lockWait = null;
+        boolean isSessionEnded = false;
         try {
             boolean isExternal = session.inExternalTransaction();
             if (isExternal) {
                 session.savepoint(TransactionState.OUTERMOST_SAVEPOINT);
             } else {
-                session.begin();
+                // Inside an external transaction no begin runs, so there is nothing to apply a wait to.
+                lockWait = LockWaitBegin.begin(session, options, session::begin);
             }
             boolean canRelease = driver.info().supports(DriverCapability.SAVEPOINT_RELEASE);
             TransactionState state = new TransactionState(session, isExternal, canRelease);
+            state.setLockWait(lockWait);
             try {
                 TransactionState.fire(settings(), TransactionPhase.BEGINNING, 1, isExternal);
             } catch (RuntimeException | Error listenerFailure) {
-                TransactionState.undoBegin(session, isExternal, listenerFailure);
+                boolean isUndoFailed = TransactionState.undoBegin(session, isExternal, listenerFailure);
+                boolean isRestoreFailed = LockWaitBegin.restoreAfterFailure(lockWait, listenerFailure);
+                // A session that could not be undone or restored is dropped, not handed back as clean.
+                isSessionEnded = true;
+                Sessions.endAfterFailure(session, listenerFailure, isUndoFailed || isRestoreFailed);
                 throw listenerFailure;
             }
             return state;
         } catch (DriverException failure) {
             QueryException error = queryFailure(BEGIN, Collections.<Object>emptyList(), failure);
-            Sessions.endAfterFailure(session, error, false);
+            if (!isSessionEnded) {
+                Sessions.endAfterFailure(session, error, failure.getSuppressed().length > 0);
+            }
             throw error;
         } catch (RuntimeException | Error failure) {
-            Sessions.closeAfterFailure(session, failure);
+            if (!isSessionEnded) {
+                Sessions.closeAfterFailure(session, failure);
+            }
             throw failure;
         }
     }
@@ -269,7 +299,7 @@ public final class RootConnection extends AbstractConnection {
     @Override
     public TransactionScope beginTransaction() {
         refuseInsideOwnTransaction();
-        TransactionState state = openTransaction();
+        TransactionState state = openTransaction(TransactionOptions.none());
         Thread thread = Thread.currentThread();
         boolean isTracked = settings().strictTransactions();
         if (isTracked) {

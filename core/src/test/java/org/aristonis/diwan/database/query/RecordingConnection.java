@@ -43,6 +43,11 @@ final class RecordingConnection {
                             return proxy == args[0];
                         case "getDriverInfo":
                             return new DriverInfo("recording", version, EnumSet.noneOf(DriverCapability.class));
+                        case "withStatementLockWait":
+                            calls.add(new Call("statementLockWait", String.valueOf(args[0]), List.of()));
+                            Object statementResult = ((java.util.function.Supplier<?>) args[1]).get();
+                            calls.add(new Call("statementLockWaitRestore", String.valueOf(args[0]), List.of()));
+                            return statementResult;
                         case "transactionLevel":
                             return level;
                         case "transaction":

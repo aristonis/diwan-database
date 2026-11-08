@@ -301,6 +301,32 @@ class SQLiteConnectorTest {
     }
 
     @Test
+    void lockWaitConflictsWithBusyTimeout() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db")
+                .option("lock_wait", "2s").option("busy_timeout", "250").build();
+
+        DatabaseConfigException e = assertThrows(DatabaseConfigException.class, () -> SQLiteConnector.jdbcUrl(config));
+
+        assertTrue(e.getMessage().contains("main") && e.getMessage().contains("lock_wait"), e.getMessage());
+    }
+
+    @Test
+    void lockWaitAgreeingWithBusyTimeoutIsAccepted() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db")
+                .option("lock_wait", "250ms").option("busy_timeout", "250").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?foreign_keys=true&busy_timeout=250", SQLiteConnector.jdbcUrl(config));
+    }
+
+    @Test
+    void lockWaitSetsBusyTimeout() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database("/tmp/z.db")
+                .option("lock_wait", "2s").build();
+
+        assertEquals("jdbc:sqlite:/tmp/z.db?foreign_keys=true&busy_timeout=2000", SQLiteConnector.jdbcUrl(config));
+    }
+
+    @Test
     void theDriverNameIsSqlite() {
         assertEquals("sqlite", new SQLiteConnector().driver());
     }

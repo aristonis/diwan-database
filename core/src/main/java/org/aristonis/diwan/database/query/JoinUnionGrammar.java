@@ -91,6 +91,9 @@ abstract class JoinUnionGrammar extends WhereGrammar {
         if (lock.strength() == LockStrength.NO_KEY_UPDATE || lock.strength() == LockStrength.KEY_SHARE) {
             throw unsupported("The " + lock.strength() + " row lock");
         }
+        if (lock.timeoutMillis().isPresent()) {
+            throw unsupported("The timed row lock wait");
+        }
         if (lock.lockWait() != LockWait.WAIT) {
             throw unsupported("The " + lock.lockWait() + " row lock wait");
         }

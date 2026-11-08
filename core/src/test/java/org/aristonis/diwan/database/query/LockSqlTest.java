@@ -149,6 +149,6 @@ class LockSqlTest {
     @Test
     void aLockNeedsAStrengthAndAWait() {
         assertThrows(NullPointerException.class, () -> plain.table("users").lock(null));
-        assertThrows(NullPointerException.class, () -> plain.table("users").lock(LockStrength.SHARE, null));
+        assertThrows(NullPointerException.class, () -> plain.table("users").lock(LockStrength.SHARE, (LockWait) null));
     }
 }

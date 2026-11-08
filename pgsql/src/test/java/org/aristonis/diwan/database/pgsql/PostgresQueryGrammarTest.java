@@ -274,6 +274,14 @@ class PostgresQueryGrammarTest {
     }
 
     @Test
+    void timeout() {
+        assertEquals("select * from \"users\" for update",
+                db().table("users").lock(LockStrength.UPDATE, java.time.Duration.ofSeconds(3)).toSql());
+        assertEquals("select * from \"users\" for share",
+                db().table("users").lock(LockStrength.SHARE, java.time.Duration.ofMillis(5)).toSql());
+    }
+
+    @Test
     void aUnionWithALockIsRefused() {
         assertThrows(IllegalArgumentException.class,
                 () -> db().table("a").lockForUpdate().union(db().table("b")).toSql());

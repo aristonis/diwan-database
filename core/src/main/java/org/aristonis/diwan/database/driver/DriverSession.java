@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.driver;
 import org.aristonis.diwan.database.exception.DriverException;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import org.aristonis.diwan.database.Internal;
 
 /**
@@ -124,6 +125,50 @@ public interface DriverSession extends AutoCloseable {
      * @throws IllegalStateException if {@link #inExternalTransaction()} is {@code true}; optional
      */
     void begin();
+
+    /**
+     * Prepares a lock wait for the next transaction of this session.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}, for drivers written before
+     *     lock waits. The returned guard is used for one transaction: the core calls its steps around
+     *     {@link #begin()} and then {@link LockWaitGuard#restore()}.
+     * @param millis the longest wait in milliseconds, more than zero
+     * @return the guard that applies and removes the wait, never {@code null}
+     * @throws UnsupportedOperationException if the driver cannot limit the wait for a lock
+     */
+    default LockWaitGuard lockWait(long millis) {
+        throw new UnsupportedOperationException("Lock wait is not supported by this driver");
+    }
+
+    /**
+     * Prepares a limit on the wait for the locks of one statement, inside the open transaction. The
+     * limit applies to that statement only. The core calls {@link LockWaitGuard#beforeBegin()} on the
+     * guard to apply it, runs the statement, and calls {@link LockWaitGuard#restore()} to put the
+     * previous wait back, unless the statement failed. {@link LockWaitGuard#afterBegin()} is not
+     * used. Nothing is applied before {@code beforeBegin}.
+     *
+     * @implSpec The default throws {@link UnsupportedOperationException}, for drivers written before
+     *     lock waits. A guard must not restore after a failed statement, because the database may
+     *     have aborted the transaction; ending the transaction takes the limit back.
+     * @param millis the longest wait in milliseconds, more than zero
+     * @return the guard of that one statement, never {@code null}
+     * @throws UnsupportedOperationException if the driver cannot limit the wait for a lock
+     */
+    default LockWaitGuard statementLockWait(long millis) {
+        throw new UnsupportedOperationException("Lock wait is not supported by this driver");
+    }
+
+    /**
+     * Tells how many significant digits the database keeps exactly in a decimal column.
+     *
+     * @implSpec The default returns empty, meaning the database keeps every digit its column type
+     *     allows. A database that stores decimals as binary floating point returns the digits it keeps
+     *     (SQLite: 15).
+     * @return the number of exact significant digits, or empty when there is no such limit
+     */
+    default OptionalInt exactDecimalDigits() {
+        return OptionalInt.empty();
+    }
 
     /**
      * Commits the transaction {@link #begin()} started.

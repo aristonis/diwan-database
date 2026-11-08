@@ -3,8 +3,11 @@ package org.aristonis.diwan.database.pgsql;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.config.LockWaitOption;
 import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
@@ -23,6 +26,10 @@ import org.aristonis.diwan.database.schema.Schema;
  * URL already sets them. The user name and password are never put in the URL; they go to the
  * driver separately. The PostgreSQL JDBC driver must be on the application's class path.
  *
+ * <p>The {@code lock_wait} option, a duration such as {@code 5s} or {@code 500ms}, sets the
+ * {@code lock_timeout} of every session through the {@code options} parameter of the URL; a value the
+ * URL already has in {@code options} is kept and the setting is added after it.
+ *
  * <p>The migration lock is a {@link PostgresMigrationLock} over the connection's data source.
  *
  * <p>Instances hold no state and are safe to share across threads.
@@ -35,6 +42,7 @@ public final class PostgresConnector implements Connector {
     /** The port used when a connection sets none. */
     public static final int DEFAULT_PORT = 5432;
 
+    private static final Pattern OPTIONS_PARAMETER = Pattern.compile("[?&]options=");
     private static final String URL_PREFIX = "jdbc:postgresql://";
 
     /**
@@ -97,7 +105,29 @@ public final class PostgresConnector implements Connector {
         if (schema == null) {
             schema = config.options().get("schema");
         }
-        return withParameter(base, "currentSchema", schema);
+        return withLockTimeout(withParameter(base, "currentSchema", schema), config);
+    }
+
+    private static String withLockTimeout(String url, ConnectionConfig config) {
+        String raw = config.options().get(LockWaitOption.KEY);
+        if (raw == null) {
+            return url;
+        }
+        long millis = LockWaitOption.parseMillis(config.name(), LockWaitOption.KEY, raw);
+        String setting = "-c lock_timeout=" + millis;
+        int start = optionsValueStart(url);
+        if (start < 0) {
+            return url + (url.indexOf('?') >= 0 ? "&" : "?") + "options=" + encode(setting);
+        }
+        int end = url.indexOf('&', start);
+        int stop = end < 0 ? url.length() : end;
+        return url.substring(0, stop) + "%20" + encode(setting) + url.substring(stop);
+    }
+
+    // The index just after "options=" in the query, or -1 when the URL has no such parameter.
+    private static int optionsValueStart(String url) {
+        Matcher matcher = OPTIONS_PARAMETER.matcher(url);
+        return matcher.find() ? matcher.end() : -1;
     }
 
     private static String hostUrl(ConnectionConfig config) {

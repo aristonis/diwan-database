@@ -38,6 +38,7 @@ public final class TransactionState {
     private final TransactionCallbacks callbacks = new TransactionCallbacks();
     private final Map<Integer, Integer> savepointsByLevel = new HashMap<>();
     private final CursorGuard cursorGuard;
+    private volatile LockWaitBegin.Handle lockWait;
 
     TransactionState(DriverSession session, boolean external, boolean canReleaseSavepoints) {
         this(session, external, canReleaseSavepoints, new CursorGuard());
@@ -54,6 +55,17 @@ public final class TransactionState {
             // Level 1 already holds OUTERMOST_SAVEPOINT.
             savepointsByLevel.put(1, 1);
         }
+    }
+
+    /** Records the lock wait applied to this transaction, so its end can take it back. */
+    final void setLockWait(LockWaitBegin.Handle handle) {
+        this.lockWait = handle;
+    }
+
+    /** Takes back the lock wait of this transaction once; returns a failure instead of throwing it. */
+    final Throwable restoreLockWait() {
+        LockWaitBegin.Handle handle = lockWait;
+        return handle == null ? null : handle.restore();
     }
 
     /** Name of the savepoint that starts level 1 inside an external transaction. */
@@ -229,16 +241,20 @@ public final class TransactionState {
     /**
      * Undoes a transaction or savepoint that was just opened when a listener refused it, attaching a
      * failure of the undo to {@code failure}.
+     *
+     * @return {@code true} if the undo failed, which leaves the session in an unknown state
      */
-    static void undoBegin(DriverSession session, boolean isExternal, Throwable failure) {
+    static boolean undoBegin(DriverSession session, boolean isExternal, Throwable failure) {
         try {
             if (isExternal) {
                 session.rollbackToSavepoint(OUTERMOST_SAVEPOINT);
             } else {
                 session.rollback();
             }
+            return false;
         } catch (Throwable undoFailure) {
             Sessions.suppress(failure, undoFailure);
+            return true;
         }
     }
 }

@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.eloquent;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.query.Builder;
@@ -407,6 +408,20 @@ abstract class EloquentClauses<T extends Model> extends EloquentScopes<T> {
      */
     public final EloquentBuilder<T> lock(LockStrength strength) {
         query.lock(strength);
+        return self();
+    }
+
+    /**
+     * Locks the selected rows with a wait limit, as {@link Builder#lock(LockStrength, Duration)}.
+     *
+     * @param strength the strength, never {@code null}
+     * @param timeout the longest wait, never {@code null}, more than zero
+     * @return this builder
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if {@code timeout} is zero, negative or too long
+     */
+    public final EloquentBuilder<T> lock(LockStrength strength, Duration timeout) {
+        query.lock(strength, timeout);
         return self();
     }
 

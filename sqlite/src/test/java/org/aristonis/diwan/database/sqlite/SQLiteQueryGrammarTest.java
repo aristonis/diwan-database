@@ -324,4 +324,15 @@ class SQLiteQueryGrammarTest {
         assertEquals(900, grammar.eagerKeyChunkSize());
         assertEquals(20_000, grammar.inlineKeyChunkSize());
     }
+
+    @Test
+    void timeoutUnsupported() {
+        Builder query = db.table("items").lock(org.aristonis.diwan.database.query.LockStrength.UPDATE,
+                java.time.Duration.ofSeconds(1));
+
+        UnsupportedOperationException error = org.junit.jupiter.api.Assertions
+                .assertThrows(UnsupportedOperationException.class, query::toSql);
+
+        assertTrue(error.getMessage().contains("timed row lock wait"));
+    }
 }

@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- `Casts.decimalText(precision, scale)` and `decimalText(precision, scale, RoundingMode)`: the strict decimal cast for a text column, without the SQLite 15-digit limit.
 
 - `Casts.decimal(precision, scale)` and `Casts.decimal(precision, scale, RoundingMode)`, with the
   `decimal:P,S` and `decimal:P,S,MODE` cast strings. The strict decimal refuses too many integer
@@ -16,6 +17,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with `or`, `Not` and `orNot` forms and a `caseSensitive` flag. The search value is always literal.
 - `DriverException.error()`, which returns a `DiwanError` with a stable `DWN-` code, the constraint
   or index name (`key()`) and the columns (`columns()`).
+- `TransactionOptions` with `lockWait(Duration)`, `attempts(int)` and `withLockWait` / `withAttempts`,
+  and `Connection.transaction(callback, options)`. A lock wait applies to the outermost transaction
+  only: PostgreSQL runs `SET LOCAL lock_timeout` after `BEGIN`, and SQLite and Android set
+  `busy_timeout` before `BEGIN` and restore it afterwards. A timeout is a concurrency failure, so
+  attempts retry it.
+- `lock(LockStrength, Duration)` on the query builder and the model builder, a timed row lock for
+  one statement on PostgreSQL.
+- `lock_wait` connection option (`5s`, `500ms` or milliseconds), also the `busy_timeout` alias on
+  SQLite and a `PRAGMA` on Android.
+- `sumDecimal(column, scale)` and `sumDecimal(column, scale, RoundingMode)` on the query builder and
+  the model builder.
+- Driver SPI: `DriverSession` lock-wait methods and `LockWaitGuard`, and `Driver.exactDecimalDigits()`,
+  all with defaults, so an existing driver keeps compiling.
 - `DriverFailureKind.CHECK_VIOLATION` and `NOT_NULL_VIOLATION`, with the codes `DWN-CST-0003` and
   `DWN-CST-0004`.
 
@@ -24,6 +38,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Driver failure messages and query exception messages end with the Diwan error code, such as
   `[DWN-CST-0001 unique violation: users_email_unique (email)]`. The rest of each message is
   unchanged.
+- The strict decimal cast refuses a value with more than 15 significant digits on SQLite, where a
+  decimal column is a double. The `InvalidCastException` names the column, not the value. For
+  longer exact values use a text column with `Casts.decimalText(precision, scale)`. PostgreSQL is
+  unchanged.
+- `Connection.transaction(callback, int)` is now a default method that delegates to
+  `transaction(callback, TransactionOptions.attempts(n))`.
+
+### Known limitations
+
+- On PostgreSQL the `lock_wait` option bounds every lock wait of the session, including migration
+  DDL; the migration lock itself is exempt. PgBouncer transaction pooling may reject the `options`
+  startup parameter, so use `TransactionOptions.lockWait` there.
+- A transaction opened outside Diwan gets no lock wait.
+- A timed lock on a locking cursor bounds only the opening of the cursor.
+- On SQLite `sumDecimal` is a double rounded to the scale: approximate for very large sums.
 
 ## [0.2.0] - 2026-11-08
 

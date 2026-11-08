@@ -17,9 +17,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.LockWaitGuard;
 import org.aristonis.diwan.database.driver.RowCursor;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
@@ -40,6 +42,8 @@ import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
  */
 final class AndroidSqliteSession implements DriverSession {
 
+    private static final int SQLITE_EXACT_DIGITS = 15;
+
     private static final Pattern SAVEPOINT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,29}");
 
     private final SQLiteDatabase database;
@@ -56,6 +60,97 @@ final class AndroidSqliteSession implements DriverSession {
     AndroidSqliteSession(SQLiteDatabase database, boolean isNonExclusive) {
         this.database = database;
         this.isNonExclusive = isNonExclusive;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Sets {@code PRAGMA busy_timeout} before the transaction begins and puts the earlier
+     *     value back after it ends, so the wait covers the lock taken when the transaction starts.
+     * @return a guard that sets and restores the busy timeout of the shared database
+     */
+    @Override
+    public LockWaitGuard lockWait(long millis) {
+        ensureOpen();
+        return new BusyTimeoutGuard(millis);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @throws UnsupportedOperationException always, since SQLite has no per-statement lock wait
+     */
+    @Override
+    public LockWaitGuard statementLockWait(long millis) {
+        throw new UnsupportedOperationException(
+                "A lock wait timeout on a single statement is not supported by SQLite; use TransactionOptions.lockWait");
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return 15, the digits a SQLite floating point number keeps exactly
+     */
+    @Override
+    public OptionalInt exactDecimalDigits() {
+        return OptionalInt.of(SQLITE_EXACT_DIGITS);
+    }
+
+    /** Reads {@code PRAGMA busy_timeout} of a database, in milliseconds. */
+    static long readBusyTimeout(SQLiteDatabase database) {
+        try (Cursor cursor = database.rawQuery("PRAGMA busy_timeout", null)) {
+            return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    /** Sets {@code PRAGMA busy_timeout} of a database; the pragma returns a row, so it runs as a query. */
+    static void writeBusyTimeout(SQLiteDatabase database, long millis) {
+        try (Cursor cursor = database.rawQuery("PRAGMA busy_timeout = " + millis, null)) {
+            cursor.moveToFirst();
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    /**
+     * Sets the busy timeout for one transaction and puts the earlier value back.
+     *
+     * <p>{@code busy_timeout} belongs to the {@link SQLiteDatabase}, not to one session, so
+     * lock-wait transactions that overlap on the same database share it: the one that ends last
+     * restores the value it saw when it started, which can be the other transaction's shorter wait
+     * instead of the database's own.
+     */
+    private final class BusyTimeoutGuard implements LockWaitGuard {
+
+        private final long millis;
+        private long saved;
+        private boolean hasSaved;
+
+        BusyTimeoutGuard(long millis) {
+            this.millis = millis;
+        }
+
+        @Override
+        public void beforeBegin() {
+            saved = readBusyTimeout(database);
+            hasSaved = true;
+            writeBusyTimeout(database, millis);
+        }
+
+        @Override
+        public void afterBegin() {
+            // The wait is already applied before the transaction starts.
+        }
+
+        @Override
+        public void restore() {
+            if (hasSaved) {
+                hasSaved = false;
+                writeBusyTimeout(database, saved);
+            }
+        }
     }
 
     @Override

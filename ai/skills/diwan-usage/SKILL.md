@@ -39,6 +39,11 @@ Object orderId = db.transaction(tx -> {
 
 - Strict transactions are on. Calling `db` instead of `tx` inside the callback throws
   `IllegalStateException`. Inside a transaction, pass `tx` down; never call the root connection there. For the query factory or schema, call `db.on(tx)` so the work runs on the transaction.
+- Bound a lock wait with `db.transaction(cb, TransactionOptions.lockWait(Duration.ofSeconds(2)).withAttempts(3))`
+  (outermost transaction only; a nested one throws `IllegalStateException`), or with the connection key
+  `lock_wait` (`5s`, `500ms` or ms digits; the same as `busy_timeout` on SQLite). A timeout is a
+  concurrency `QueryException`, so `attempts` retries it. On PostgreSQL `lock_wait` also bounds
+  migration DDL, and PgBouncer transaction pooling may reject it: use `TransactionOptions` there.
 - A retried transaction runs the whole callback again, so keep outside effects in `afterCommit`.
 - On SQLite, set `transaction_mode` to `immediate` when transactions read then update the same rows. With the default `deferred`, the second one fails at once with a busy error.
 - A failed `COMMIT` is never retried. If the connection drops during `COMMIT`, check the database

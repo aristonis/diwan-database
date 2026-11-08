@@ -65,6 +65,9 @@ public Optional<Unit> find(long id) {
 - `casts()` and `accessors()` are read once per class and must not use instance state.
 - Money: use `Casts.decimal(precision, scale)` (or `decimal:P,S`) with the same numbers as the
   migration's decimal column. It refuses extra decimals; `decimal:N` rounds half up instead.
+- On SQLite the strict decimal cast refuses a value with more than 15 significant digits
+  (`InvalidCastException` names the column). For longer exact values use a text column with
+  `Casts.decimalText(p, s)` (same strict rules, no 15-digit limit). PostgreSQL is unchanged.
 - Model `upsert` and `insertOrIgnore` skip events and casts. `upsert` needs SQLite 3.24.
 - `query().fillAndInsert(rows)` inserts many rows in one statement with casts and timestamps, but skips the fillable guard and events.
 

@@ -111,11 +111,43 @@ public final class Casts {
      * @param scale the digits after the point, 0 to the precision and at most 30
      * @param mode how extra decimals are rounded; {@code UNNECESSARY} refuses them
      * @return a cast reading {@code BigDecimal} at the given scale
-     * @throws IllegalArgumentException if {@code precision} or {@code scale} is out of range
-     * @throws NullPointerException if {@code mode} is null
+     * @throws IllegalArgumentException if {@code precision} or {@code scale} is out of range, or
+     *     {@code mode} is null
      */
     public static Cast<Object> decimal(int precision, int scale, RoundingMode mode) {
         return new StrictDecimalCast(precision, scale, mode);
+    }
+
+    /**
+     * Returns the strict decimal cast for a text column, which keeps every digit on every database.
+     *
+     * <p>The precision and scale rules are those of {@link #decimal(int, int)}. The 15-digit limit that
+     * {@code decimal(p, s)} applies on SQLite is skipped, because a text column stores the digits as
+     * written; use it for long exact values, such as exchange rates, on a {@code string} column. SQL
+     * sorts, compares and sums such a column as text, so do that math in Java.
+     *
+     * @param precision the total number of digits, 1 to 1000
+     * @param scale the digits after the point, 0 to the precision and at most 30
+     * @return a cast reading {@code BigDecimal} at the given scale
+     * @throws IllegalArgumentException if {@code precision} or {@code scale} is out of range
+     */
+    public static Cast<Object> decimalText(int precision, int scale) {
+        return new StrictDecimalCast(precision, scale, RoundingMode.UNNECESSARY, true);
+    }
+
+    /**
+     * Returns the strict decimal cast for a text column, rounding extra decimals with a mode; as
+     * {@link #decimalText(int, int)}.
+     *
+     * @param precision the total number of digits, 1 to 1000
+     * @param scale the digits after the point, 0 to the precision and at most 30
+     * @param mode how extra decimals are rounded; {@code UNNECESSARY} refuses them
+     * @return a cast reading {@code BigDecimal} at the given scale
+     * @throws IllegalArgumentException if {@code precision} or {@code scale} is out of range, or
+     *     {@code mode} is null
+     */
+    public static Cast<Object> decimalText(int precision, int scale, RoundingMode mode) {
+        return new StrictDecimalCast(precision, scale, mode, true);
     }
 
     /**

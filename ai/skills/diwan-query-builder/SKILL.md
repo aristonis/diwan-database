@@ -55,6 +55,10 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
   wildcards and escapes nothing.
 - Row locks need a transaction on PostgreSQL, which throws `IllegalStateException` outside one.
   SQLite has no row locks: every strength is a no-op there, and `NOWAIT` and `SKIP_LOCKED` are refused.
+- `lock(LockStrength.UPDATE, Duration.ofSeconds(2))` is a timed row lock: PostgreSQL only, inside a
+  transaction, that statement only. SQLite and Android throw `UnsupportedOperationException`.
+- For money totals use `sumDecimal(column, scale)`: exact on PostgreSQL, a rounded double on SQLite
+  (approximate for very large sums). `sum` returns a `Number`.
 - `upsert` needs a unique index on exactly the `uniqueBy` columns, and SQLite 3.24 (Android API 30).
   `updateOrInsert` reads then writes and is not atomic.
 - `chunk` pages by offset and can skip rows on a changing table. Use `chunkById`.

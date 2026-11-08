@@ -4,14 +4,18 @@ import org.aristonis.diwan.database.event.TransactionPhase;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.PretendCallback;
 import org.aristonis.diwan.database.TransactionCallback;
+import org.aristonis.diwan.database.TransactionOptions;
 import org.aristonis.diwan.database.TransactionScope;
 import org.aristonis.diwan.database.exception.QueryException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.DriverSession;
+import org.aristonis.diwan.database.driver.LockWaitGuard;
 import org.aristonis.diwan.database.driver.RowCursor;
 
 /**
@@ -289,10 +293,11 @@ class TransactionalConnection extends AbstractConnection {
     // Attempts are ignored below the outermost level: a concurrency failure is rethrown at once so
     // the outermost transaction decides whether to retry.
     @Override
-    public final <T> T transaction(TransactionCallback<T> callback, int attempts) {
+    public final <T> T transaction(TransactionCallback<T> callback, TransactionOptions options) {
         Objects.requireNonNull(callback, "callback");
-        if (attempts < 1) {
-            throw new IllegalArgumentException("attempts must be at least 1, was " + attempts);
+        Objects.requireNonNull(options, "options");
+        if (options.lockWaitMillis().isPresent()) {
+            throw new IllegalStateException(LockWaitBegin.NESTED_MESSAGE);
         }
         String savepoint = enterSavepoint();
         int level = state.depth();
@@ -353,6 +358,24 @@ class TransactionalConnection extends AbstractConnection {
     public final List<LoggedQuery> pretend(PretendCallback callback) {
         ensureOpen();
         return PretendConnection.record(settings(), callback);
+    }
+
+    @Override
+    public final OptionalInt exactDecimalDigits() {
+        ensureOpen();
+        return state.session().exactDecimalDigits();
+    }
+
+    @Override
+    public final <T> T withStatementLockWait(long millis, Supplier<T> statement) {
+        ensureOpen();
+        Objects.requireNonNull(statement, "statement");
+        LockWaitGuard guard = state.session().statementLockWait(millis);
+        guard.beforeBegin();
+        // A failed statement leaves the guard unrestored: the transaction may be aborted.
+        T result = statement.get();
+        guard.restore();
+        return result;
     }
 
     @Override
