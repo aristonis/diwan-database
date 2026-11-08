@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-08
+
 ### Added
 - `Casts.decimalText(precision, scale)` and `decimalText(precision, scale, RoundingMode)`: the strict decimal cast for a text column, without the SQLite 15-digit limit.
 
