@@ -20,6 +20,8 @@ final class JdbcFailures {
     private static final String DEADLOCK_STATE = "40P01";
     private static final String CONNECTION_STATE_CLASS = "08";
     private static final String FOREIGN_KEY_STATE = "23503";
+    // PostgreSQL raises restrict_violation, not 23503, for a key declared ON DELETE/UPDATE RESTRICT.
+    private static final String RESTRICT_STATE = "23001";
     private static final String CHECK_STATE = "23514";
     private static final String NOT_NULL_STATE = "23502";
     private static final String CANCELLED_STATE = "57014";
@@ -107,7 +109,7 @@ final class JdbcFailures {
             if (s != null && (s.startsWith(CONNECTION_STATE_CLASS) || isServerGone(s))) {
                 isConnectionFailure = true;
             }
-            if (FOREIGN_KEY_STATE.equals(s) || family == DatabaseFamily.SQLITE
+            if (FOREIGN_KEY_STATE.equals(s) || RESTRICT_STATE.equals(s) || family == DatabaseFamily.SQLITE
                     && (code == SQLITE_CONSTRAINT_FOREIGNKEY || code == SQLITE_CONSTRAINT
                     && mentions(sql.getMessage(), SQLITE_FOREIGN_KEY_MARKERS))) {
                 kinds.add(DriverFailureKind.FOREIGN_KEY_VIOLATION);

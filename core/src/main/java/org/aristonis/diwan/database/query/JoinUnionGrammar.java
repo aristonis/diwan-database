@@ -69,6 +69,52 @@ abstract class JoinUnionGrammar extends WhereGrammar {
         return compileTruncateMany(tables, cascade);
     }
 
+    /**
+     * Runs the statements that empty one or more tables. When there are several, they run in one
+     * transaction, unless the connection is already inside one. A grammar whose database needs
+     * more around the statements, as SQLite does for keys declared {@code on delete restrict},
+     * overrides it.
+     *
+     * @param connection the connection to run on, never {@code null}
+     * @param tables the table names as the caller gave them, never {@code null}, optionally
+     *     {@code schema.table} or with an alias
+     * @param statements each statement mapped to its bindings, in run order, never {@code null}
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement;
+     *     inside the transaction, every statement is then undone
+     */
+    protected void runTruncate(Connection connection, List<String> tables, Map<String, List<Object>> statements) {
+        if (statements.size() > 1 && connection.transactionLevel() == 0) {
+            connection.transaction(tx -> {
+                runStatements(tx, statements);
+                return null;
+            });
+        } else {
+            runStatements(connection, statements);
+        }
+    }
+
+    /**
+     * Runs each statement in order on the given connection, with its bindings prepared for the
+     * database, and nothing around them.
+     *
+     * @param target the connection to run on, never {@code null}
+     * @param statements each statement mapped to its bindings, in run order, never {@code null}
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
+     */
+    protected final void runStatements(Connection target, Map<String, List<Object>> statements) {
+        for (Map.Entry<String, List<Object>> statement : statements.entrySet()) {
+            target.statement(statement.getKey(), prepareBindings(statement.getValue()));
+        }
+    }
+
+    /**
+     * Converts bindings to what the database stores, as {@link QueryGrammar#prepareBindings(List)}.
+     *
+     * @param bindings the bindings, never {@code null}, may contain {@code null}
+     * @return the converted bindings, unmodifiable, never {@code null}
+     */
+    public abstract List<Object> prepareBindings(List<?> bindings);
+
     // ---- joins ----
 
     /**

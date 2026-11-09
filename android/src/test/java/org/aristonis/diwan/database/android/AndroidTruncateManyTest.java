@@ -107,4 +107,25 @@ public class AndroidTruncateManyTest {
 
         assertEquals(1L, query.table("invoices").count());
     }
+
+    @Test
+    public void truncateManyEmptiesASelfReferencingRestrictTable() {
+        query.connection().statement("create table categories (id integer primary key autoincrement,"
+                + " parent_id integer references categories (id) on delete restrict)");
+        query.table("categories").insert(Map.of("id", 1));
+        query.table("categories").insert(Map.of("id", 2, "parent_id", 1));
+
+        query.truncate(List.of("categories", "invoices", "lines", "notes"));
+
+        assertEquals(0L, query.table("categories").count());
+        assertThrows(DatabaseException.class, () -> query.table("categories").insert(Map.of("parent_id", 99)));
+    }
+
+    @Test
+    public void aReferringTableOutsideTheListStillFailsWithForeignKeysOff() {
+        assertThrows(DatabaseException.class, () -> query.truncate(List.of("invoices", "lines")));
+
+        assertEquals(1L, query.table("notes").count());
+        assertEquals(1L, query.table("invoices").count());
+    }
 }
