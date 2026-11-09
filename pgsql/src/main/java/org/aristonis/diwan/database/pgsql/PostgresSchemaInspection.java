@@ -5,6 +5,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.schema.ColumnGeneration;
+import org.aristonis.diwan.database.schema.ColumnInfo;
+import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.TableInfo;
@@ -21,11 +24,25 @@ import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 final class PostgresSchemaInspection {
 
     private static final String SPATIAL_REF_SYS = "spatial_ref_sys";
+    private static final int IDENTITY_SINCE = 10;
+    private static final int GENERATED_SINCE = 12;
+
+    private static final String CURRENT_SCHEMA_OID = "(select oid from pg_namespace where nspname = current_schema())";
+
+    /**
+     * Returns the condition that finds a relation (table, view, ...) by name in the current schema.
+     *
+     * @param alias the alias of the {@code pg_class} row in the query
+     * @return the condition, with one {@code ?} for the relation name
+     */
+    static String relationInCurrentSchema(String alias) {
+        return alias + ".relname = ? and " + alias + ".relnamespace = " + CURRENT_SCHEMA_OID;
+    }
 
     /** Returns a query that counts the table in the current schema. */
     SchemaQuery compileTableExists(Connection connection, String table) {
-        return new SchemaQuery("select count(*) from pg_class where relname = ? and relkind in ('r', 'p')"
-                + " and relnamespace = (select oid from pg_namespace where nspname = current_schema())", Collections.singletonList(table));
+        return new SchemaQuery("select count(*) from pg_class c where " + relationInCurrentSchema("c")
+                + " and c.relkind in ('r', 'p')", Collections.singletonList(table));
     }
 
     /** Returns a query that lists the ordinary and partitioned tables on the search path. */
@@ -51,8 +68,56 @@ final class PostgresSchemaInspection {
     /** Returns a query that lists the table's column names in definition order. */
     SchemaQuery compileColumnNames(Connection connection, String table) {
         return new SchemaQuery("select a.attname from pg_attribute a join pg_class c on c.oid = a.attrelid"
-                + " where c.relname = ? and c.relnamespace = (select oid from pg_namespace where nspname = current_schema()) and a.attnum > 0"
+                + " where " + relationInCurrentSchema("c") + " and a.attnum > 0"
                 + " and not a.attisdropped order by a.attnum", Collections.singletonList(table));
+    }
+
+    /**
+     * Reads the table's or view's columns in the current schema; the identity and generation
+     * columns of the catalog are selected only on servers that have them.
+     */
+    List<ColumnInfo> columns(Connection connection, String table) {
+        List<ColumnInfo> found = new ArrayList<>();
+        for (Map<String, Object> row : connection.select(columnsSql(PostgresVersion.of(connection)), table)) {
+            found.add(column(row));
+        }
+        return Collections.unmodifiableList(found);
+    }
+
+    /**
+     * Builds the column query for a server version; the identity and generation columns of the
+     * catalog are selected only where the server has them, and read as empty text elsewhere.
+     */
+    static String columnsSql(String version) {
+        String identity = DatabaseVersion.atLeast(version, IDENTITY_SINCE) ? "a.attidentity" : "'' as attidentity";
+        String generated = DatabaseVersion.atLeast(version, GENERATED_SINCE) ? "a.attgenerated" : "'' as attgenerated";
+        return "select a.attname, t.typname,"
+                + " format_type(a.atttypid, a.atttypmod) as type,"
+                + " (select cl.collname from pg_collation cl where cl.oid = a.attcollation"
+                + " and a.attcollation <> t.typcollation) as collation,"
+                + " not a.attnotnull as nullable, pg_get_expr(d.adbin, d.adrelid) as dflt, " + identity + ", " + generated
+                + ", col_description(a.attrelid, a.attnum) as comment"
+                + " from pg_attribute a join pg_class c on c.oid = a.attrelid join pg_type t on t.oid = a.atttypid"
+                + " left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum"
+                + " where " + relationInCurrentSchema("c") + " and a.attnum > 0 and not a.attisdropped"
+                + " order by a.attnum";
+    }
+
+    private static ColumnInfo column(Map<String, Object> row) {
+        String expression = text(row.get("dflt"));
+        String identity = String.valueOf(row.get("attidentity"));
+        String generated = String.valueOf(row.get("attgenerated"));
+        boolean isGenerated = "s".equals(generated) || "v".equals(generated);
+        boolean isAutoIncrement = "a".equals(identity) || "d".equals(identity)
+                || (expression != null && expression.startsWith("nextval("));
+        return new ColumnInfo(String.valueOf(row.get("attname")), String.valueOf(row.get("typname")),
+                String.valueOf(row.get("type")), text(row.get("collation")), Boolean.TRUE.equals(row.get("nullable")),
+                isGenerated ? null : expression, isAutoIncrement, text(row.get("comment")),
+                isGenerated ? new ColumnGeneration("s".equals(generated), expression == null ? "" : expression) : null);
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
     }
 
     /** Reads the table's indexes through {@link PostgresIndexReader}. */
@@ -72,7 +137,7 @@ final class PostgresSchemaInspection {
                 + " as foreign_columns, c.confupdtype as on_update, c.confdeltype as on_delete"
                 + " from pg_constraint c join pg_class tc on tc.oid = c.conrelid"
                 + " join pg_class ft on ft.oid = c.confrelid"
-                + " where c.contype = 'f' and tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
+                + " where c.contype = 'f' and " + relationInCurrentSchema("tc")
                 + " order by c.conname", table)) {
             found.add(new ForeignKeyInfo(split(row.get("columns")), String.valueOf(row.get("foreign_table")),
                     split(row.get("foreign_columns")), action(row.get("on_update")), action(row.get("on_delete"))));

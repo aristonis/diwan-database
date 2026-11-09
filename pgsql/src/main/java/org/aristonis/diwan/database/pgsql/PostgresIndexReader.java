@@ -46,7 +46,7 @@ final class PostgresIndexReader {
                 + " join pg_class ic on ic.oid = i.indexrelid"
                 + " join lateral unnest(i.indkey) with ordinality as k(num, ord) on true"
                 + " left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.num and k.num <> 0"
-                + " where tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
+                + " where " + PostgresSchemaInspection.relationInCurrentSchema("tc")
                 + " and k.ord <= i.indnkeyatts"
                 + " group by ic.relname, i.indisunique, i.indisprimary order by ic.relname", table)) {
             Object predicate = row.get("predicate");

@@ -12,6 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Index order and collation: `asc`, `desc` and `collate` on `IndexDefinition`.
 - `IndexInfo.orders()`, `IndexInfo.collations()` and `IndexInfo.where()`.
 - `DiwanError.table()`, the table a failure concerns, where the driver can name it.
+- Schema inspection: `Schema.getColumns` (with `ColumnInfo` and `ColumnGeneration`), `getColumnListing`, `hasColumns`, `getIndexListing` and four `hasIndex` overloads with the `IndexType` filter (`PRIMARY`, `UNIQUE`), on SQLite, PostgreSQL and Android.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.

@@ -27,10 +27,9 @@ abstract class ConstraintGrammar extends SchemaTypes {
      * @return the statement, never {@code null}
      */
     protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
-        // Safe cast: SchemaGrammar is the only subclass of this package-private class.
         return "create unique index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + IndexSql.parts((SchemaGrammar) this, command) + ")"
-                + IndexSql.where((SchemaGrammar) this, command);
+                + " (" + IndexSql.columnParts(this, command) + ")"
+                + IndexSql.whereClause(this, command);
     }
 
     /**
@@ -45,10 +44,9 @@ abstract class ConstraintGrammar extends SchemaTypes {
      * @return the statement, never {@code null}
      */
     protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
-        // Safe cast: SchemaGrammar is the only subclass of this package-private class.
         return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + IndexSql.parts((SchemaGrammar) this, command) + ")"
-                + IndexSql.where((SchemaGrammar) this, command);
+                + " (" + IndexSql.columnParts(this, command) + ")"
+                + IndexSql.whereClause(this, command);
     }
 
     /**

@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.schema.grammar;
 
 import java.util.List;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.TableInfo;
@@ -29,6 +30,20 @@ abstract class InspectionGrammar extends ConstraintGrammar {
      */
     public List<IndexInfo> indexes(Connection connection, String table) {
         throw unsupported("Listing indexes");
+    }
+
+    /**
+     * Lists the columns of a table or view, in column order.
+     *
+     * @implSpec The base refuses the listing.
+     *
+     * @param connection the connection to read with, never {@code null}
+     * @param table the full table name, prefix included, never {@code null}
+     * @return the columns, unmodifiable, never {@code null}; empty if the table does not exist
+     * @throws UnsupportedOperationException if the grammar does not support the listing
+     */
+    public List<ColumnInfo> columns(Connection connection, String table) {
+        throw unsupported("Listing column details");
     }
 
     /**

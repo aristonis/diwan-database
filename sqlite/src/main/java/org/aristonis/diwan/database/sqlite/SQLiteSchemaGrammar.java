@@ -16,6 +16,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.Collation;
+import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.grammar.Command;
@@ -232,6 +233,16 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     @Override
     public List<IndexInfo> indexes(Connection connection, String table) {
         return inspection.indexes(connection, table);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the columns of a table or view; the hidden columns of a virtual table are left out
+     */
+    @Override
+    public List<ColumnInfo> columns(Connection connection, String table) {
+        return inspection.columns(connection, table);
     }
 
     /**

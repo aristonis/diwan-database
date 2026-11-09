@@ -3,9 +3,7 @@ package org.aristonis.diwan.database.sqlite;
 import org.aristonis.diwan.database.Connection;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -46,7 +44,7 @@ final class SQLiteIndexReader {
 
     private final Connection connection;
     private final String table;
-    private Map<String, String> ownCollations;
+    private SQLiteColumnDefinitions definitions;
 
     private SQLiteIndexReader(Connection connection, String table) {
         this.connection = connection;
@@ -93,40 +91,15 @@ final class SQLiteIndexReader {
         if (column == null || reported == null || BINARY.equalsIgnoreCase(reported.toString())) {
             return "";
         }
-        String own = ownCollations().get(column.toLowerCase(Locale.ROOT));
+        String own = definitions().collation(column);
         return reported.toString().equalsIgnoreCase(own) ? "" : reported.toString();
     }
 
-    // The collations written on the table's own columns, by lower-case column name.
-    private Map<String, String> ownCollations() {
-        if (ownCollations == null) {
-            ownCollations = new HashMap<>();
-            Optional<Object> sql = connection.scalar(
-                    "select sql from sqlite_master where type = 'table' and name = ?", table);
-            if (sql.isPresent()) {
-                collectCollations(SQLiteSqlTokens.tokenize(sql.get().toString()));
-            }
+    private SQLiteColumnDefinitions definitions() {
+        if (definitions == null) {
+            definitions = SQLiteColumnDefinitions.read(connection, table);
         }
-        return ownCollations;
-    }
-
-    private void collectCollations(List<SQLiteSqlTokens.Token> tokens) {
-        List<List<SQLiteSqlTokens.Token>> parts = SQLiteSqlTokens.parts(tokens);
-        parts.remove(parts.size() - 1);
-        for (List<SQLiteSqlTokens.Token> part : parts) {
-            if (SQLiteSqlTokens.isTableConstraint(part)) {
-                continue;
-            }
-            int depth = 0;
-            for (int i = 1; i + 1 < part.size(); i++) {
-                SQLiteSqlTokens.Token token = part.get(i);
-                depth += token.isPunct('(') ? 1 : token.isPunct(')') ? -1 : 0;
-                if (depth == 0 && token.isWord("collate")) {
-                    ownCollations.put(part.get(0).text.toLowerCase(Locale.ROOT), part.get(i + 1).text);
-                    break;
-                }
-            }
-        }
+        return definitions;
     }
 
     // The text after the closing parenthesis of the column list, without the leading where.

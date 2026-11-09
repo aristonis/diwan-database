@@ -7,6 +7,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
+import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
@@ -54,7 +55,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
         }
         for (ColumnDefinition column : blueprint.columns()) {
             if (column.virtualAs().isPresent()) {
-                String version = String.valueOf(connection.scalar("show server_version").orElse("0"));
+                String version = PostgresVersion.of(connection);
                 if (!DatabaseVersion.atLeast(version, VIRTUAL_COLUMNS_SINCE)) {
                     throw new UnsupportedOperationException("Virtual generated columns need PostgreSQL 18 or later;"
                             + " this database runs " + version + "; use storedAs");
@@ -300,7 +301,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     protected List<String> compileDropPrimary(Blueprint blueprint, Command command, Connection connection) {
         Object name = connection.scalar("select c.conname from pg_constraint c join pg_class t on t.oid = c.conrelid"
-                + " where c.contype = 'p' and t.relname = ? and t.relnamespace = (select oid from pg_namespace where nspname = current_schema())",
+                + " where c.contype = 'p' and " + PostgresSchemaInspection.relationInCurrentSchema("t"),
                 blueprint.table()).orElse(blueprint.table() + "_pkey");
         return Collections.singletonList(dropConstraint(blueprint, name.toString()));
     }
@@ -480,6 +481,19 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
         return inspection.compileColumnNames(connection, table);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the table's or view's columns from {@code pg_attribute} in the current schema, dropped
+     *     columns left out; {@code typeName} is the type's {@code typname} and {@code type} its
+     *     {@code format_type} text; the generation and identity details need PostgreSQL 12 and 10
+     *     and are left out on older servers
+     */
+    @Override
+    public List<ColumnInfo> columns(Connection connection, String table) {
+        return inspection.columns(connection, table);
     }
 
     /**

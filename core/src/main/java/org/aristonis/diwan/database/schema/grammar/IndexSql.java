@@ -27,6 +27,17 @@ public final class IndexSql {
      * @return the column list, never {@code null}; ascending order, the default, is not written
      */
     public static String parts(SchemaGrammar grammar, Command command) {
+        return columnParts(grammar, command);
+    }
+
+    /**
+     * Writes the index columns for any grammar layer; see {@link #parts(SchemaGrammar, Command)}.
+     *
+     * @param grammar the grammar layer that quotes names, never {@code null}
+     * @param command the index command, never {@code null}
+     * @return the column list, never {@code null}
+     */
+    static String columnParts(SchemaTypes grammar, Command command) {
         Map<String, String> orders = map(command, Command.ORDERS);
         Map<String, String> collations = map(command, Command.COLLATIONS);
         StringBuilder sql = new StringBuilder();
@@ -55,6 +66,18 @@ public final class IndexSql {
      *     {@code and}
      */
     public static String where(SchemaGrammar grammar, Command command) {
+        return whereClause(grammar, command);
+    }
+
+    /**
+     * Writes the {@code WHERE} clause for any grammar layer; see {@link #where(SchemaGrammar, Command)}.
+     *
+     * @param grammar the grammar layer that quotes names and values, never {@code null}
+     * @param command the index command, never {@code null}
+     * @return an empty string, or a space followed by {@code where} and the conditions joined by
+     *     {@code and}
+     */
+    static String whereClause(SchemaTypes grammar, Command command) {
         Object value = command.get(Command.WHERE).orElse(null);
         if (!(value instanceof List) || ((List<?>) value).isEmpty()) {
             return "";
@@ -76,7 +99,7 @@ public final class IndexSql {
                     sql.append(" is not null");
                     break;
                 default:
-                    sql.append(" = ").append(literal(grammar, condition.value()));
+                    sql.append(" = ").append(valueLiteral(grammar, condition.value()));
             }
         }
         return sql.toString();
@@ -91,6 +114,19 @@ public final class IndexSql {
      * @throws IllegalArgumentException if text holds a NUL character
      */
     public static String literal(SchemaGrammar grammar, Object value) {
+        return valueLiteral(grammar, value);
+    }
+
+    /**
+     * Writes a checked condition value as SQL for any grammar layer; see
+     * {@link #literal(SchemaGrammar, Object)}.
+     *
+     * @param grammar the grammar layer that spells booleans, never {@code null}
+     * @param value a text, boolean or number the index definition accepted, never {@code null}
+     * @return the literal, never {@code null}
+     * @throws IllegalArgumentException if text holds a NUL character
+     */
+    static String valueLiteral(SchemaTypes grammar, Object value) {
         if (value instanceof Boolean) {
             return grammar.booleanLiteral((Boolean) value);
         }

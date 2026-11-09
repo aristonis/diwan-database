@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.LoggedQuery;
 import org.aristonis.diwan.database.driver.DriverCapability;
@@ -215,6 +216,145 @@ public final class Schema {
     }
 
     /**
+     * Lists a table's or view's columns with their types, defaults and other details. Like
+     * {@link #indexes(String)} it reads the live schema, also in pretend mode.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @return the columns in column order, unmodifiable, never {@code null}; empty if the table does
+     *     not exist
+     * @throws NullPointerException if {@code table} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws UnsupportedOperationException if the grammar cannot list columns
+     */
+    public List<ColumnInfo> getColumns(String table) {
+        return grammar.columns(reader, prefixed(table));
+    }
+
+    /**
+     * Lists the column names of a table or view.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @return the names in column order, never {@code null}; empty if the table does not exist
+     * @throws NullPointerException if {@code table} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws UnsupportedOperationException if the grammar cannot list columns
+     */
+    public List<String> getColumnListing(String table) {
+        List<String> names = new ArrayList<>();
+        for (ColumnInfo column : getColumns(table)) {
+            names.add(column.name());
+        }
+        return names;
+    }
+
+    /**
+     * Tells whether a table has every column of a list. Letter case is ignored. Like
+     * {@link #getColumns(String)} it reads the live schema, also in pretend mode.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @param columns the column names, never {@code null}; an empty list gives {@code true}
+     * @return {@code true} if every column exists
+     * @throws NullPointerException if an argument or a name in the list is {@code null}
+     * @throws IllegalArgumentException if a name is invalid
+     * @throws UnsupportedOperationException if the grammar cannot list columns
+     */
+    public boolean hasColumns(String table, List<String> columns) {
+        checkColumns(columns);
+        List<String> existing = getColumnListing(table);
+        for (String wanted : columns) {
+            if (!containsName(existing, wanted)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Lists the names of a table's indexes, the primary key included.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @return the names in lower case, never {@code null}; empty if the table does not exist
+     * @throws NullPointerException if {@code table} is {@code null}
+     * @throws IllegalArgumentException if the name is empty or has a control character
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public List<String> getIndexListing(String table) {
+        List<String> names = new ArrayList<>();
+        for (IndexInfo index : indexes(table)) {
+            names.add(index.name().toLowerCase(Locale.ROOT));
+        }
+        return names;
+    }
+
+    /**
+     * Tells whether a table has an index with a name. Letter case is ignored.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @param name the index name, never {@code null}
+     * @return {@code true} if the index exists; {@code false} for an unknown table
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if a name is invalid
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public boolean hasIndex(String table, String name) {
+        String wanted = SchemaNames.check("index", name);
+        return anyIndex(table, index -> sameName(index.name(), wanted));
+    }
+
+    /**
+     * Tells whether a table has an index with a name and a kind. Letter case is ignored. The kind
+     * {@link IndexType#UNIQUE} also matches the primary key, as in Laravel.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @param name the index name, never {@code null}
+     * @param type the kind the index must have, never {@code null}
+     * @return {@code true} if such an index exists; {@code false} for an unknown table
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if a name is invalid
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public boolean hasIndex(String table, String name, IndexType type) {
+        String wanted = SchemaNames.check("index", name);
+        Objects.requireNonNull(type, "type");
+        return anyIndex(table, index -> sameName(index.name(), wanted) && isOfType(index, type));
+    }
+
+    /**
+     * Tells whether a table has an index on exactly these columns, in this order. Letter case is
+     * ignored.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @param columns the indexed columns in index order, never {@code null}
+     * @return {@code true} if such an index exists; {@code false} for an unknown table
+     * @throws NullPointerException if an argument or a name in the list is {@code null}
+     * @throws IllegalArgumentException if a name is invalid
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public boolean hasIndex(String table, List<String> columns) {
+        checkColumns(columns);
+        return anyIndex(table, index -> sameNames(index.columns(), columns));
+    }
+
+    /**
+     * Tells whether a table has an index of a kind on exactly these columns, in this order. Letter
+     * case is ignored. The kind {@link IndexType#UNIQUE} also matches the primary key, as in
+     * Laravel.
+     *
+     * @param table the table name without prefix, never {@code null}
+     * @param columns the indexed columns in index order, never {@code null}
+     * @param type the kind the index must have, never {@code null}
+     * @return {@code true} if such an index exists; {@code false} for an unknown table
+     * @throws NullPointerException if an argument or a name in the list is {@code null}
+     * @throws IllegalArgumentException if a name is invalid
+     * @throws UnsupportedOperationException if the grammar cannot list indexes
+     */
+    public boolean hasIndex(String table, List<String> columns, IndexType type) {
+        checkColumns(columns);
+        Objects.requireNonNull(type, "type");
+        return anyIndex(table, index -> sameNames(index.columns(), columns) && isOfType(index, type));
+    }
+
+    /**
      * Runs schema work in one transaction with foreign key enforcement switched off, as Laravel's
      * {@code Schema::withoutForeignKeyConstraints} does.
      *
@@ -381,17 +521,62 @@ public final class Schema {
      * @throws org.aristonis.diwan.database.exception.QueryException if the query fails
      */
     public boolean hasColumn(String table, String column) {
-        String wanted = SchemaNames.check("column", column).toLowerCase(Locale.ROOT);
+        String wanted = SchemaNames.check("column", column);
         SchemaQuery query = grammar.compileColumnNames(connection, prefixed(table));
         List<Map<String, Object>> rows = connection.select(query.sql(), query.bindings());
         for (Map<String, Object> row : rows) {
             Iterator<Object> values = row.values().iterator();
             Object name = values.hasNext() ? values.next() : null;
-            if (name != null && name.toString().toLowerCase(Locale.ROOT).equals(wanted)) {
+            if (name != null && sameName(name.toString(), wanted)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static void checkColumns(List<String> columns) {
+        Objects.requireNonNull(columns, "columns");
+        for (String column : columns) {
+            SchemaNames.check("column", column);
+        }
+    }
+
+    private boolean anyIndex(String table, Predicate<IndexInfo> test) {
+        for (IndexInfo index : indexes(table)) {
+            if (test.test(index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean sameName(String first, String second) {
+        return first.toLowerCase(Locale.ROOT).equals(second.toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean containsName(List<String> names, String wanted) {
+        for (String name : names) {
+            if (sameName(name, wanted)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean sameNames(List<String> first, List<String> second) {
+        if (first.size() != second.size()) {
+            return false;
+        }
+        for (int i = 0; i < first.size(); i++) {
+            if (!sameName(first.get(i), Objects.requireNonNull(second.get(i), "column"))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isOfType(IndexInfo index, IndexType type) {
+        return type == IndexType.PRIMARY ? index.isPrimary() : index.isUnique() || index.isPrimary();
     }
 
     private List<Map<String, Object>> listing(SchemaQuery query) {
