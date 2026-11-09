@@ -119,4 +119,18 @@ class PostgresFailureKindsTest {
                 + " [DWN-CST-0001 unique violation: u_pkey]",
                 driverFailure(error).getMessage());
     }
+
+    @Test
+    void aRestrictViolationIsAForeignKeyViolationWithTheConstraintName() {
+        Connection db = PostgresServer.newDatabase();
+        db.statement("create table nodes (id int primary key, parent_id int,"
+                + " constraint nodes_parent_id_foreign foreign key (parent_id) references nodes (id) on delete restrict)");
+        db.insert("insert into nodes values (1, null), (2, 1)");
+
+        ForeignKeyViolationException error = assertThrows(ForeignKeyViolationException.class,
+                () -> db.delete("delete from nodes where id = 1"));
+        assertEquals("23001", driverFailure(error).sqlState().orElse(""));
+        assertTrue(driverFailure(error).isForeignKeyViolation());
+        assertEquals("nodes_parent_id_foreign", driverFailure(error).error().key().orElse(""));
+    }
 }

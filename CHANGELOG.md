@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- SQLite and Android: `truncate()` and `truncate(List)` failed with a foreign key violation on a
+  table whose key is declared `restrictOnDelete()` and refers to its own table, which also broke
+  `RefreshDatabase` truncate mode. When a restrict key links listed tables, the deletes now run outside a
+  transaction with enforcement switched off, and `pragma foreign_key_check` refuses any new orphan
+  before the commit. Other keys keep their cascade and set-null actions.
+- PostgreSQL: SQL state 23001 (`restrict_violation`) is now a foreign key violation, with the
+  constraint name in `DriverException.error().key()`.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added
