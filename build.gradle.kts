@@ -68,3 +68,45 @@ tasks.register<Javadoc>("apiDocs") {
         group("Testing", "$apiBase.testing*")
     }
 }
+
+// Code-size report: lists main Java files over codeSizeLimit code lines. It only reports; it never fails the
+// build and is not wired into check.
+val codeSizeLimit = 500
+val blockCommentPattern = Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL)
+val rootDirectory = rootDir
+val subprojectDirectories = subprojects.map { it.projectDir }
+
+fun countCodeLines(source: String): Int =
+    source.replace(blockCommentPattern, "").lines().count { line ->
+        val trimmed = line.trim()
+        trimmed.isNotEmpty() && !trimmed.startsWith("//")
+    }
+
+tasks.register("codeSize") {
+    group = "verification"
+    description = "Lists main Java files over $codeSizeLimit code lines."
+    doLast {
+        val oversized = subprojectDirectories
+            .map { File(it, "src/main/java") }
+            .flatMap { sourceRoot -> sourceRoot.walkTopDown().filter { it.isFile && it.extension == "java" }.toList() }
+            .map { Pair(countCodeLines(it.readText()), it.relativeTo(rootDirectory).invariantSeparatorsPath) }
+            .filter { (count, _) -> count > codeSizeLimit }
+            .sortedWith(compareByDescending<Pair<Int, String>> { it.first }.thenBy { it.second })
+        if (oversized.isEmpty()) {
+            println("No main file over $codeSizeLimit code lines")
+        }
+        oversized.forEach { (count, path) -> println("$count $path") }
+    }
+}
+
+// Compile classpath, not runtime: the testing module's JUnit API is compile-only, and the API
+// listing in scripts/api-diff.sh must load the exact versions the build uses.
+listOf("core", "sqlite", "pgsql", "eloquent", "testing").forEach { name ->
+    project(":$name").tasks.register("apiClasspath") {
+        description = "Prints this module's compile classpath."
+        val classpath = project(":$name").configurations.getByName("compileClasspath")
+        doLast {
+            println(classpath.files.joinToString(File.pathSeparator))
+        }
+    }
+}

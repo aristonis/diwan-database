@@ -3,7 +3,6 @@ package org.aristonis.diwan.database.pgsql;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.Collation;
@@ -32,8 +31,9 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private static final int MAX_IDENTIFIER_LENGTH = 63;
     private static final int VIRTUAL_COLUMNS_SINCE = 18;
-    private static final String SPATIAL_REF_SYS = "spatial_ref_sys";
     private static final String CURRENT_YEAR = "EXTRACT(YEAR FROM CURRENT_DATE)";
+
+    private final PostgresSchemaInspection inspection = new PostgresSchemaInspection();
 
     /** Creates the grammar. */
     public PostgresSchemaGrammar() {
@@ -401,8 +401,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTableExists(Connection connection, String table) {
-        return new SchemaQuery("select count(*) from pg_class where relname = ? and relkind in ('r', 'p')"
-                + " and relnamespace = (select oid from pg_namespace where nspname = current_schema())", Collections.singletonList(table));
+        return inspection.compileTableExists(connection, table);
     }
 
     /**
@@ -413,10 +412,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTables(Connection connection) {
-        return new SchemaQuery("select c.relname as name, n.nspname as schema from pg_class c"
-                + " join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r', 'p')"
-                + " and n.nspname = any(current_schemas(false)) order by n.nspname, c.relname",
-                Collections.emptyList());
+        return inspection.compileTables(connection);
     }
 
     /**
@@ -426,9 +422,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileViews(Connection connection) {
-        return new SchemaQuery("select viewname as name, schemaname as schema from pg_views"
-                + " where schemaname = any(current_schemas(false)) order by schemaname, viewname",
-                Collections.emptyList());
+        return inspection.compileViews(connection);
     }
 
     /**
@@ -454,7 +448,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public boolean isInternalTable(TableInfo table) {
-        return SPATIAL_REF_SYS.equals(table.name());
+        return inspection.isInternalTable(table);
     }
 
     /**
@@ -485,9 +479,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
-        return new SchemaQuery("select a.attname from pg_attribute a join pg_class c on c.oid = a.attrelid"
-                + " where c.relname = ? and c.relnamespace = (select oid from pg_namespace where nspname = current_schema()) and a.attnum > 0"
-                + " and not a.attisdropped order by a.attnum", Collections.singletonList(table));
+        return inspection.compileColumnNames(connection, table);
     }
 
     /**
@@ -500,7 +492,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<IndexInfo> indexes(Connection connection, String table) {
-        return PostgresIndexReader.read(connection, table);
+        return inspection.indexes(connection, table);
     }
 
     /**
@@ -510,22 +502,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<ForeignKeyInfo> foreignKeys(Connection connection, String table) {
-        List<ForeignKeyInfo> found = new ArrayList<>();
-        for (Map<String, Object> row : connection.select("select"
-                + " (select string_agg(a.attname, ',' order by k.ord) from unnest(c.conkey) with ordinality"
-                + " as k(num, ord) join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.num) as columns,"
-                + " ft.relname as foreign_table,"
-                + " (select string_agg(a.attname, ',' order by k.ord) from unnest(c.confkey) with ordinality"
-                + " as k(num, ord) join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.num)"
-                + " as foreign_columns, c.confupdtype as on_update, c.confdeltype as on_delete"
-                + " from pg_constraint c join pg_class tc on tc.oid = c.conrelid"
-                + " join pg_class ft on ft.oid = c.confrelid"
-                + " where c.contype = 'f' and tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
-                + " order by c.conname", table)) {
-            found.add(new ForeignKeyInfo(split(row.get("columns")), String.valueOf(row.get("foreign_table")),
-                    split(row.get("foreign_columns")), action(row.get("on_update")), action(row.get("on_delete"))));
-        }
-        return Collections.unmodifiableList(found);
+        return inspection.foreignKeys(connection, table);
     }
 
     /**
@@ -718,25 +695,5 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private static StringBuilder separate(StringBuilder sql) {
         return sql.length() > 0 ? sql.append(", ") : sql;
-    }
-
-    private static List<String> split(Object joined) {
-        return PostgresIndexReader.split(joined, ",");
-    }
-
-    // pg_constraint stores actions as one letter.
-    private static String action(Object code) {
-        switch (String.valueOf(code)) {
-            case "c":
-                return "cascade";
-            case "n":
-                return "set null";
-            case "d":
-                return "set default";
-            case "r":
-                return "restrict";
-            default:
-                return "no action";
-        }
     }
 }

@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Android: a commit that fails on a deferred foreign key now rolls back instead of leaving the transaction open.
 
+### Internal
+- Large classes split by responsibility (schema grammars, JDBC session, SQLite table state); public API unchanged. New `codeSize` task lists main files over 500 code lines.
+
 ## [0.3.1] - 2026-11-09
 
 ### Fixed
