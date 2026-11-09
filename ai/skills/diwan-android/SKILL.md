@@ -31,6 +31,21 @@ manager.migrator("app").migrations(migrations).build().run();
 QueryFactory db = manager.query();
 ```
 
+Kotlin:
+
+```kotlin
+val config = DatabaseConfig.builder()
+    .defaultConnection("app")
+    .connection(ConnectionConfig.builder("app").driver("android").build())
+    .build()
+val manager = DatabaseManager.builder()
+    .config(config)
+    .connector(AndroidConnector.of({ AppDb(context) }, SQLiteQuery::of, SQLiteSchema::of))
+    .build()
+manager.migrator("app").migrations(migrations).build().run()
+val db = manager.query()
+```
+
 ```
 -keepnames class * extends org.aristonis.diwan.database.eloquent.Model
 ```

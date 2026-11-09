@@ -130,21 +130,9 @@ public final class QueryFactory {
             return;
         }
         Map<String, List<Object>> statements = grammar.compileTruncateMany(names, cascade, connection);
-        if (statements.size() > 1 && connection.transactionLevel() == 0) {
-            connection.transaction(tx -> {
-                runAll(tx, statements);
-                return null;
-            });
-        } else {
-            runAll(connection, statements);
-        }
+        grammar.runTruncate(connection, names, statements);
     }
 
-    private void runAll(Connection target, Map<String, List<Object>> statements) {
-        for (Map.Entry<String, List<Object>> statement : statements.entrySet()) {
-            target.statement(statement.getKey(), grammar.prepareBindings(statement.getValue()));
-        }
-    }
 
     /**
      * Returns a factory with the same grammar and processor that runs on another connection of the

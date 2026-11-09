@@ -610,21 +610,9 @@ abstract class WriteQueries extends AggregateQueries {
     public final void truncate() {
         requireTable();
         Map<String, List<Object>> statements = grammar.compileTruncate(self(), connection);
-        if (statements.size() > 1 && connection.transactionLevel() == 0) {
-            connection.transaction(tx -> {
-                runAll(tx, statements);
-                return null;
-            });
-        } else {
-            runAll(connection, statements);
-        }
+        grammar.runTruncate(connection, Collections.singletonList(from), statements);
     }
 
-    private void runAll(Connection target, Map<String, List<Object>> statements) {
-        for (Map.Entry<String, List<Object>> statement : statements.entrySet()) {
-            target.statement(statement.getKey(), grammar.prepareBindings(statement.getValue()));
-        }
-    }
 
     private static Map<String, Number> singleAmount(String column, Number amount) {
         Map<String, Number> amounts = new LinkedHashMap<>();

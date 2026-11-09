@@ -84,6 +84,31 @@ final class SQLiteForeignKeyOrder {
         return ordered.size() == size ? ordered : null;
     }
 
+    /**
+     * Tells whether a listed table has a key declared {@code on delete restrict} that refers to a
+     * listed table, itself included: the keys SQLite checks row by row, which no delete order or
+     * deferral gets past.
+     */
+    static boolean hasRestrictWithin(List<Ref> tables, Connection connection) {
+        Set<String> listed = new LinkedHashSet<>();
+        for (Ref table : tables) {
+            listed.add(key(table.schemaOrMain(), table.name));
+        }
+        for (Ref table : tables) {
+            List<Map<String, Object>> keys = table.schema == null
+                    ? connection.select("select \"table\", on_delete from pragma_foreign_key_list(?)", table.name)
+                    : connection.select("select \"table\", on_delete from pragma_foreign_key_list(?, ?)",
+                            table.name, table.schema);
+            for (Map<String, Object> foreignKey : keys) {
+                if ("RESTRICT".equalsIgnoreCase(String.valueOf(foreignKey.get("on_delete")))
+                        && listed.contains(key(table.schemaOrMain(), String.valueOf(foreignKey.get("table"))))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     static List<String> referencedTables(Ref table, Connection connection) {
         List<Map<String, Object>> rows = table.schema == null
                 ? connection.select("select \"table\" from pragma_foreign_key_list(?)", table.name)

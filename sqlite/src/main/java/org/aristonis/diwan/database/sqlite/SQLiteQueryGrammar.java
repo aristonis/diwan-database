@@ -650,6 +650,39 @@ public class SQLiteQueryGrammar extends QueryGrammar {
         return ordered;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Outside a transaction, when a listed table has a key declared
+     *     {@code on delete restrict} to a listed table, the statements run with foreign key
+     *     enforcement switched off on one held connection: SQLite checks such a key row by row, even
+     *     when deferred, so it would stop the delete of a table that refers to itself. Other keys keep
+     *     the usual path, so {@code on delete cascade} and {@code set null} still act. Before the
+     *     commit, {@code pragma foreign_key_check} must show no new violation, so a table outside
+     *     the list that still refers to an emptied one fails the truncate and undoes it. Inside a transaction SQLite ignores the switch, and such a key
+     *     still fails.
+     */
+    @Override
+    protected void runTruncate(Connection connection, List<String> tables, Map<String, List<Object>> statements) {
+        if (connection.transactionLevel() > 0 || !SQLiteForeignKeyOrder.hasRestrictWithin(refs(tables), connection)) {
+            super.runTruncate(connection, tables, statements);
+            return;
+        }
+        SQLiteTruncation.run(connection, tx -> runStatements(tx, statements),
+                session -> super.runTruncate(session, tables, statements));
+    }
+
+    private List<SQLiteForeignKeyOrder.Ref> refs(List<String> tables) {
+        List<SQLiteForeignKeyOrder.Ref> refs = new ArrayList<>(tables.size());
+        for (String table : tables) {
+            String bare = ALIAS.split(table.trim())[0];
+            int dot = bare.indexOf('.');
+            refs.add(new SQLiteForeignKeyOrder.Ref(dot < 0 ? null : bare.substring(0, dot),
+                    getTablePrefix() + bare.substring(dot + 1)));
+        }
+        return refs;
+    }
+
     private static Map<String, List<Object>> withoutMissingSequence(Map<String, List<Object>> statements,
             Connection connection) {
         Map<String, Boolean> exists = new LinkedHashMap<>();
