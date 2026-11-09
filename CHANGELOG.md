@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Partial indexes: `where`, `whereNull` and `whereNotNull` on the `IndexDefinition` that `index` and `unique` return.
+- Index order and collation: `asc`, `desc` and `collate` on `IndexDefinition`.
+- `IndexInfo.orders()`, `IndexInfo.collations()` and `IndexInfo.where()`.
+- `DiwanError.table()`, the table a failure concerns, where the driver can name it.
+
+### Changed
+- `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.
+
+### Fixed
+- Android: a commit that fails on a deferred foreign key now rolls back instead of leaving the transaction open.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

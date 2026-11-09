@@ -193,7 +193,8 @@ public abstract class SchemaGrammar {
     /**
      * Compiles {@link Command#UNIQUE}.
      *
-     * @implSpec The base returns {@code create unique index <index> on <table> (<columns>)}.
+     * @implSpec The base returns {@code create unique index <index> on <table> (<columns>)}, with {@code where} for a
+     *     partial index.
      *
      * @param blueprint the blueprint, never {@code null}
      * @param command the command, never {@code null}
@@ -202,13 +203,15 @@ public abstract class SchemaGrammar {
      */
     protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
         return "create unique index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
+                + " (" + IndexSql.parts(this, command) + ")"
+                + IndexSql.where(this, command);
     }
 
     /**
      * Compiles {@link Command#PLAIN_INDEX}.
      *
-     * @implSpec The base returns {@code create index <index> on <table> (<columns>)}.
+     * @implSpec The base returns {@code create index <index> on <table> (<columns>)}, with {@code where} for a
+     *     partial index.
      *
      * @param blueprint the blueprint, never {@code null}
      * @param command the command, never {@code null}
@@ -217,7 +220,8 @@ public abstract class SchemaGrammar {
      */
     protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
         return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
+                + " (" + IndexSql.parts(this, command) + ")"
+                + IndexSql.where(this, command);
     }
 
     /**
@@ -752,6 +756,18 @@ public abstract class SchemaGrammar {
             throw new IllegalArgumentException("Strings with NUL characters cannot be escaped");
         }
         return "'" + text.replace("'", "''") + "'";
+    }
+
+    /**
+     * Writes a boolean in an index condition.
+     *
+     * @implSpec The base returns {@code 1} for {@code true} and {@code 0} for {@code false}.
+     *
+     * @param value the value
+     * @return the SQL literal, never {@code null}
+     */
+    protected String booleanLiteral(boolean value) {
+        return value ? "1" : "0";
     }
 
     /**

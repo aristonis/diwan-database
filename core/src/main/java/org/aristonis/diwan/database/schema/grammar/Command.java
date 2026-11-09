@@ -73,6 +73,21 @@ public final class Command {
     public static final String NAME = "name";
     /** Attribute holding trusted SQL, a {@code String}. */
     public static final String SQL = "sql";
+    /**
+     * Attribute holding the {@code WHERE} conditions of a partial index, a {@code List<IndexCondition>};
+     * absent when the index is not partial.
+     */
+    public static final String WHERE = "where";
+    /**
+     * Attribute holding the sort order of index columns, a {@code Map<String, String>} from column
+     * name to {@code "asc"} or {@code "desc"}; absent when no order was set.
+     */
+    public static final String ORDERS = "orders";
+    /**
+     * Attribute holding the collation of index columns, a {@code Map<String, String>} from column
+     * name to collation name; absent when no collation was set.
+     */
+    public static final String COLLATIONS = "collations";
     /** Attribute holding a {@link ForeignKeyDefinition}. */
     public static final String FOREIGN_KEY = "foreignKey";
 

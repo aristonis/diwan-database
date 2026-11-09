@@ -246,18 +246,16 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         if (!key.isEmpty()) {
             found.add(new IndexInfo("primary", key, true, true));
         }
-        for (Map<String, Object> row : connection.select(
-                "select name, \"unique\", origin from pragma_index_list(?) order by seq", table)) {
-            if ("pk".equals(String.valueOf(row.get("origin")))) {
+        for (SQLiteIndexReader.Entry entry : SQLiteIndexReader.read(connection, table)) {
+            if ("pk".equals(entry.origin)) {
                 continue;
             }
-            String name = row.get("name").toString();
             List<String> columns = new ArrayList<>();
-            for (Map<String, Object> part : connection.select(
-                    "select name from pragma_index_info(?) order by seqno", name)) {
-                columns.add(String.valueOf(part.get("name")));
+            for (String column : entry.columns) {
+                columns.add(String.valueOf(column));
             }
-            found.add(new IndexInfo(name, columns, SQLiteTableState.number(row.get("unique")) == 1, false));
+            found.add(new IndexInfo(entry.name, columns, entry.isUnique, false, entry.orders, entry.collations,
+                    entry.where));
         }
         return Collections.unmodifiableList(found);
     }

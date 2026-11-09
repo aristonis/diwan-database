@@ -43,6 +43,7 @@ abstract class BlueprintState {
 
     // Holds a requested index name until the blueprint is checked; never reaches a grammar.
     static final String REQUESTED = "requestedName";
+    static final String DEFINITION = "indexDefinition";
 
     final String table;
     final String prefix;

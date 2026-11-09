@@ -87,11 +87,20 @@ final class SQLiteTableState {
         String name;
         final List<String> columns;
         final boolean isUnique;
+        // One entry per column: "asc" or "desc", and a collation name or "" for the column's own.
+        final List<String> orders;
+        final List<String> collations;
+        // The condition of a partial index without its leading where, or null.
+        final String where;
 
-        Index(String name, List<String> columns, boolean isUnique) {
+        Index(String name, List<String> columns, boolean isUnique, List<String> orders, List<String> collations,
+                String where) {
             this.name = name;
             this.columns = columns;
             this.isUnique = isUnique;
+            this.orders = orders;
+            this.collations = collations;
+            this.where = where;
         }
     }
 
@@ -412,39 +421,21 @@ final class SQLiteTableState {
     }
 
     private void readIndexes(Connection connection) {
-        List<Map<String, Object>> rows = connection.select(
-                "select name, \"unique\", origin, partial from pragma_index_list(?) order by seq", table);
-        for (Map<String, Object> row : rows) {
-            String origin = text(row.get("origin"));
-            if ("pk".equals(origin)) {
+        for (SQLiteIndexReader.Entry entry : SQLiteIndexReader.read(connection, table)) {
+            if ("pk".equals(entry.origin)) {
                 continue;
             }
-            String name = text(row.get("name"));
-            if (number(row.get("partial")) == 1) {
-                throw new UnsupportedOperationException("Index " + name + " of table " + table
-                        + " is partial, which a SQLite table rebuild cannot carry over");
-            }
-            List<String> indexed = indexColumns(connection, name);
-            if ("u".equals(origin)) {
-                uniqueConstraints.add(indexed);
-            } else {
-                indexes.add(new Index(name, indexed, number(row.get("unique")) == 1));
-            }
-        }
-    }
-
-    private List<String> indexColumns(Connection connection, String index) {
-        List<String> names = new ArrayList<>();
-        for (Map<String, Object> row : connection.select(
-                "select name from pragma_index_info(?) order by seqno", index)) {
-            Object name = row.get("name");
-            if (name == null) {
-                throw new UnsupportedOperationException("Index " + index + " of table " + table
+            if (entry.hasExpression()) {
+                throw new UnsupportedOperationException("Index " + entry.name + " of table " + table
                         + " is on an expression, which a SQLite table rebuild cannot carry over");
             }
-            names.add(name.toString());
+            if ("u".equals(entry.origin)) {
+                uniqueConstraints.add(entry.columns);
+            } else {
+                indexes.add(new Index(entry.name, entry.columns, entry.isUnique, entry.orders, entry.collations,
+                        entry.where));
+            }
         }
-        return names;
     }
 
     private static long readSequence(Connection connection, String table) {
@@ -527,10 +518,25 @@ final class SQLiteTableState {
         for (TableCheck check : checks) {
             refuseIfNames(check.sql, name);
         }
+        for (Index index : indexes) {
+            if (index.where != null && names(index.where, name)) {
+                throw new UnsupportedOperationException("Column " + name + " of table " + table + " is named in the"
+                        + " condition of partial index " + index.name + ", which a SQLite table rebuild cannot"
+                        + " rewrite; drop the index first");
+            }
+        }
     }
 
     // Constraint names and function names are skipped, so a column called "length" can still be renamed.
     private void refuseIfNames(String expression, String name) {
+        if (names(expression, name)) {
+            throw new UnsupportedOperationException("Column " + name + " of table " + table + " is named in a"
+                    + " check or generated column, which a SQLite table rebuild cannot rewrite; drop or change"
+                    + " that first");
+        }
+    }
+
+    private boolean names(String expression, String name) {
         List<SQLiteSqlTokens.Token> tokens = SQLiteSqlTokens.tokenize(expression);
         for (int i = 0; i < tokens.size(); i++) {
             SQLiteSqlTokens.Token token = tokens.get(i);
@@ -542,11 +548,10 @@ final class SQLiteTableState {
                     ? token.text.substring(token.text.lastIndexOf('.') + 1) : token.text;
             if ((token.kind == SQLiteSqlTokens.Kind.WORD || token.kind == SQLiteSqlTokens.Kind.NAME)
                     && text.equalsIgnoreCase(name)) {
-                throw new UnsupportedOperationException("Column " + name + " of table " + table + " is named in a"
-                        + " check or generated column, which a SQLite table rebuild cannot rewrite; drop or change"
-                        + " that first");
+                return true;
             }
         }
+        return false;
     }
 
     void dropColumn(String name) {
@@ -619,11 +624,11 @@ final class SQLiteTableState {
         throw new IllegalArgumentException("Table " + table + " has no foreign key on " + columnsOfKey);
     }
 
-    void addIndex(String name, List<String> columnsOfIndex, boolean isUnique) {
-        for (String column : columnsOfIndex) {
+    void addIndex(Index index) {
+        for (String column : index.columns) {
             require(column);
         }
-        indexes.add(new Index(name, new ArrayList<>(columnsOfIndex), isUnique));
+        indexes.add(index);
     }
 
     void dropIndex(String name) {

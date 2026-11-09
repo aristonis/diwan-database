@@ -187,6 +187,21 @@ class SQLiteSchemaListingTest {
     }
 
     @Test
+    void dropAllTablesDropsATableThatReferencesItself() {
+        schema.create("nodes", t -> {
+            t.id();
+            t.foreignId("parent_id").nullable().constrained("nodes").restrictOnDelete();
+        });
+        db.insert("insert into nodes (parent_id) values (null)");
+        db.insert("insert into nodes (parent_id) values (1)");
+
+        schema.dropAllTables();
+
+        assertTrue(schema.getTables().isEmpty());
+        assertEquals(1, pragma("foreign_keys"));
+    }
+
+    @Test
     void dropAllTablesDropsAVirtualTableWithItsShadowTables() {
         db.statement("create virtual table docs using fts5(body)");
         db.statement("insert into docs (body) values ('hello')");

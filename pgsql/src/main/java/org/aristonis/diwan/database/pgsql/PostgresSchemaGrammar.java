@@ -1,7 +1,6 @@
 package org.aristonis.diwan.database.pgsql;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +17,7 @@ import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.TableInfo;
 import org.aristonis.diwan.database.schema.ViewInfo;
+import org.aristonis.diwan.database.schema.grammar.IndexSql;
 import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
@@ -216,10 +216,18 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code alter table <table> add constraint <name> unique (<columns>)}
+     * @return {@code alter table <table> add constraint <name> unique (<columns>)}; with a
+     *     condition, an order or a collation, which a constraint cannot hold,
+     *     {@code create unique index <name> on <table> (<columns>) where ...}
      */
     @Override
     protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
+        if (command.get(Command.WHERE).isPresent() || command.get(Command.ORDERS).isPresent()
+                || command.get(Command.COLLATIONS).isPresent()) {
+            return "create unique index " + wrap(command.string(Command.INDEX)) + " on "
+                    + wrapTable(blueprint.table()) + " (" + IndexSql.parts(this, command) + ")"
+                    + IndexSql.where(this, command);
+        }
         return "alter table " + wrapTable(blueprint.table()) + " add constraint " + wrap(command.string(Command.INDEX))
                 + " unique (" + columnize(command.strings(Command.COLUMNS)) + ")";
     }
@@ -227,26 +235,47 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create index <name> on <table> (<columns>)}
+     * @return {@code create index <name> on <table> (<columns>)}, with the order, collation and
+     *     {@code where} the index carries
      */
     @Override
     protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
         return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table()) + " ("
-                + columnize(command.strings(Command.COLUMNS)) + ")";
+                + IndexSql.parts(this, command) + ")" + IndexSql.where(this, command);
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return {@code drop index <name>} for a plain index; a unique index is a constraint, so
-     *     {@code alter table <table> drop constraint <name>}
+     * @return {@code drop index <name>} for a plain index; for a unique one a {@code do} block that
+     *     drops the constraint when the table has one of that name and the index otherwise, since a
+     *     unique index made with a condition is no constraint, and the choice is made when the
+     *     statement runs
      */
     @Override
     protected String compileDropIndex(Blueprint blueprint, Command command, Connection connection) {
+        String name = command.string(Command.INDEX);
         if (Command.DROP_UNIQUE.equals(command.name())) {
-            return dropConstraint(blueprint, command.string(Command.INDEX));
+            String body = "begin if exists (select 1 from pg_constraint where conname = " + quote(name)
+                    + " and conrelid = to_regclass(" + quote(wrapTable(blueprint.table())) + ")) then "
+                    + dropConstraint(blueprint, name) + "; else drop index " + wrap(name) + "; end if; end";
+            String tag = dollarTag(body);
+            return "do " + tag + " " + body + " " + tag;
         }
-        return "drop index " + wrap(command.string(Command.INDEX));
+        return "drop index " + wrap(name);
+    }
+
+    // A name may hold "$$", so the dollar quote takes a tag the body does not contain.
+    private static String dollarTag(String body) {
+        String tag = "$diwan$";
+        for (int i = 1; body.contains(tag); i++) {
+            tag = "$diwan" + i + "$";
+        }
+        return tag;
+    }
+
+    private static String quote(String text) {
+        return "'" + text.replace("'", "''") + "'";
     }
 
     /**
@@ -465,26 +494,13 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      * {@inheritDoc}
      *
      * @return the table's indexes from {@code pg_index}, the primary key and unique constraints
-     *     among them; key columns only (no {@code include} columns), an expression shown as its SQL
+     *     among them, with each column's order, a collation that differs from the column's own and
+     *     the {@code where} text; key columns only (no {@code include} columns), an expression
+     *     shown as its SQL
      */
     @Override
     public List<IndexInfo> indexes(Connection connection, String table) {
-        List<IndexInfo> found = new ArrayList<>();
-        for (Map<String, Object> row : connection.select("select ic.relname as name,"
-                + " string_agg(coalesce(a.attname, pg_get_indexdef(i.indexrelid, k.ord::int, true)), ','"
-                + " order by k.ord) as columns, i.indisunique as is_unique,"
-                + " i.indisprimary as is_primary from pg_index i"
-                + " join pg_class tc on tc.oid = i.indrelid"
-                + " join pg_class ic on ic.oid = i.indexrelid"
-                + " join lateral unnest(i.indkey) with ordinality as k(num, ord) on true"
-                + " left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.num and k.num <> 0"
-                + " where tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
-                + " and k.ord <= i.indnkeyatts"
-                + " group by ic.relname, i.indisunique, i.indisprimary order by ic.relname", table)) {
-            found.add(new IndexInfo(String.valueOf(row.get("name")), split(row.get("columns")),
-                    Boolean.TRUE.equals(row.get("is_unique")), Boolean.TRUE.equals(row.get("is_primary"))));
-        }
-        return Collections.unmodifiableList(found);
+        return PostgresIndexReader.read(connection, table);
     }
 
     /**
@@ -634,6 +650,16 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
+     * @return {@code true} or {@code false}
+     */
+    @Override
+    protected String booleanLiteral(boolean value) {
+        return value ? "true" : "false";
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @return booleans as {@code true} or {@code false}; everything else as the base writes it
      */
     @Override
@@ -695,10 +721,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     }
 
     private static List<String> split(Object joined) {
-        if (joined == null) {
-            return Collections.emptyList();
-        }
-        return Collections.unmodifiableList(new ArrayList<>(Arrays.asList(joined.toString().split(","))));
+        return PostgresIndexReader.split(joined, ",");
     }
 
     // pg_constraint stores actions as one letter.

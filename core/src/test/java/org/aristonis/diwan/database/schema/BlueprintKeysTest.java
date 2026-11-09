@@ -305,4 +305,95 @@ class BlueprintKeysTest {
 
         assertThrows(IllegalArgumentException.class, () -> table.prepare(10));
     }
+
+    @Test
+    void indexAndUniqueReturnADefinition() {
+        Blueprint table = altering();
+
+        assertTrue(table.index("a") instanceof IndexDefinition);
+        assertTrue(table.unique("b") instanceof IndexDefinition);
+        assertTrue(table.index(Arrays.asList("c"), "c_i") instanceof IndexDefinition);
+        assertTrue(table.unique(Arrays.asList("d"), "d_u") instanceof IndexDefinition);
+    }
+
+    @Test
+    void partialIndexPartsReachTheCommand() {
+        Blueprint table = altering();
+        table.unique("email", "name").where("deleted", false).whereNull("gone").desc("name").collate("email", "nocase");
+
+        table.prepare(63);
+
+        Command command = table.commands().get(0);
+        assertEquals("posts_email_name_unique", command.string(Command.INDEX));
+        assertEquals(2, ((List<?>) command.get(Command.WHERE).get()).size());
+        assertEquals("desc", ((java.util.Map<?, ?>) command.get(Command.ORDERS).get()).get("name"));
+        assertEquals("nocase", ((java.util.Map<?, ?>) command.get(Command.COLLATIONS).get()).get("email"));
+    }
+
+    @Test
+    void plainIndexHasNoPartAttributes() {
+        Blueprint table = altering();
+        table.index("a");
+
+        table.prepare(63);
+
+        Command command = table.commands().get(0);
+        assertFalse(command.has(Command.WHERE));
+        assertFalse(command.has(Command.ORDERS));
+        assertFalse(command.has(Command.COLLATIONS));
+    }
+
+    @Test
+    void whereRefusesATypeOutsideTheAllowedValues() {
+        IndexDefinition index = altering().index("a");
+
+        assertThrows(IllegalArgumentException.class, () -> index.where("a", java.time.LocalDate.of(2026, 1, 1)));
+    }
+
+    @Test
+    void whereRefusesNotFiniteNumbers() {
+        IndexDefinition index = altering().index("a");
+
+        assertThrows(IllegalArgumentException.class, () -> index.where("a", Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> index.where("a", Float.POSITIVE_INFINITY));
+    }
+
+    @Test
+    void whereWithNullMeansWhereNull() {
+        Blueprint table = altering();
+        table.index("a").where("b", null);
+
+        table.prepare(63);
+
+        assertEquals(1, ((List<?>) table.commands().get(0).get(Command.WHERE).get()).size());
+    }
+
+    @Test
+    void orderAndCollationNeedAnIndexedColumn() {
+        IndexDefinition index = altering().index("a");
+
+        assertThrows(IllegalArgumentException.class, () -> index.desc("other"));
+        assertThrows(IllegalArgumentException.class, () -> index.asc("other"));
+        assertThrows(IllegalArgumentException.class, () -> index.collate("other", "nocase"));
+    }
+
+    @Test
+    void orderAndCollationDoNotChangeTheDefaultName() {
+        Blueprint table = altering();
+        table.index("a", "b").desc("a").collate("b", "nocase");
+
+        table.prepare(63);
+
+        assertEquals("posts_a_b_index", table.commands().get(0).string(Command.INDEX));
+    }
+
+    @Test
+    void definitionRefusesChangesAfterTheBlueprintIsPrepared() {
+        Blueprint table = altering();
+        IndexDefinition index = table.index("a");
+        table.prepare(63);
+
+        assertThrows(IllegalStateException.class, () -> index.where("a", 1));
+        assertThrows(IllegalStateException.class, () -> index.desc("a"));
+    }
 }

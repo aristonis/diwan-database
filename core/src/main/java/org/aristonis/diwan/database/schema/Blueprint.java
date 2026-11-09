@@ -149,8 +149,9 @@ public final class Blueprint extends BlueprintHelpers {
                 if (command.has(Command.INDEX)) {
                     return command;
                 }
-                return named(command.name(), command.strings(Command.COLUMNS),
+                Command settled = named(command.name(), command.strings(Command.COLUMNS),
                         (String) command.get(REQUESTED).orElse(null), indexes, maxIdentifierLength);
+                return withIndexParts(settled, command.get(DEFINITION).orElse(null));
             case Command.FOREIGN:
                 ForeignKeyDefinition key = command.foreignKey();
                 key.freeze(defaultName("foreign", key.columns()), prefix);
@@ -163,6 +164,28 @@ public final class Blueprint extends BlueprintHelpers {
             default:
                 return command;
         }
+    }
+
+    // Freezes the definition and copies its non-empty parts onto the compiled command.
+    private static Command withIndexParts(Command settled, Object definitionValue) {
+        if (!(definitionValue instanceof IndexDefinition)) {
+            return settled;
+        }
+        IndexDefinition definition = (IndexDefinition) definitionValue;
+        definition.freeze();
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.INDEX, settled.string(Command.INDEX));
+        attributes.put(Command.COLUMNS, settled.strings(Command.COLUMNS));
+        if (!definition.conditions().isEmpty()) {
+            attributes.put(Command.WHERE, definition.conditions());
+        }
+        if (!definition.orders().isEmpty()) {
+            attributes.put(Command.ORDERS, definition.orders());
+        }
+        if (!definition.collations().isEmpty()) {
+            attributes.put(Command.COLLATIONS, definition.collations());
+        }
+        return new Command(settled.name(), attributes);
     }
 
     Command named(String type, List<String> columns, String requested, Set<String> indexes,
