@@ -38,6 +38,27 @@ connection.transaction(c -> db.on(c).table("accounts")   // inside a transaction
         .where("id", 1).lockForUpdate().get());
 ```
 
+Kotlin:
+
+```kotlin
+private val SORTABLE = setOf("created_at", "total", "id")
+
+val column = if (requested in SORTABLE) requested else "id"
+val page = query.table("orders")
+    .where("status", "open")
+    .orderBy(column).orderBy("id")
+    .paginate(20, 1)
+
+query.table("orders").orderBy("id").cursor().use { rows ->
+    for (row in rows) {
+        export(row)
+    }
+}
+
+connection.transaction { c -> db.on(c).table("accounts")   // inside a transaction, call db.on(c)
+    .where("id", 1).lockForUpdate().get() }
+```
+
 ## Pitfalls
 
 - Close every `QueryCursor` in try-with-resources. An unclosed cursor keeps its pooled connection.

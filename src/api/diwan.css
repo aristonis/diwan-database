@@ -1,0 +1,11 @@
+/* Small theme for the API site; follows the system light or dark setting. */
+:root { --d-bg: #ffffff; --d-fg: #1f2933; --d-accent: #0b6e99; --d-bar: #eef2f5; }
+@media (prefers-color-scheme: dark) {
+  :root { --d-bg: #14181c; --d-fg: #e4e8ec; --d-accent: #6cc4e8; --d-bar: #1d2328; }
+  body, .flex-box, .flex-content, .details, table, th, td, pre, code, .summary-table > div,
+  .caption, .inherited-list h3, .type-signature, .member-signature { background-color: var(--d-bg) !important; color: var(--d-fg) !important; }
+}
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--d-fg); background: var(--d-bg); }
+a:link, a:visited { color: var(--d-accent); }
+#diwan-version-bar { background: var(--d-bar); color: var(--d-fg); padding: 4px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+#diwan-version-bar select { font: inherit; }

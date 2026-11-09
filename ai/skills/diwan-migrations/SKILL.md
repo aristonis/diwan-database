@@ -43,6 +43,31 @@ Migrator migrator = manager.migrator("main")
 migrator.run();
 ```
 
+Kotlin:
+
+```kotlin
+class CreateUsersTable : Migration() {
+    override fun name(): String = "2026_10_31_000000_create_users_table"
+
+    override fun checksum(): Optional<String> = Optional.of("1") // fixed, never changed
+
+    override fun up(schema: Schema) {
+        schema.create("users") { table ->
+            table.id()
+            table.string("email").unique()
+            table.timestamps()
+        }
+    }
+
+    override fun down(schema: Schema) { schema.drop("users") }
+}
+
+val migrator = manager.migrator("main")
+    .add(CreateUsersTable())
+    .build()
+migrator.run()
+```
+
 ## Seeders
 
 Extend `Seeder` and override `protected void run(SeedContext context)`. Inside, use

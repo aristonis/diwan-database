@@ -35,6 +35,24 @@ Object orderId = db.transaction(tx -> {
 }, 3);                                    // retries up to 3 times on a deadlock
 ```
 
+Kotlin:
+
+```kotlin
+val manager = DatabaseManager.builder()
+    .config(DatabaseConfig.from(source))      // driver, host, database per connection
+    .connector(SQLiteConnector())
+    .build()
+val db = manager.connection()
+val query = manager.query()
+
+val orderId = db.transaction({ tx ->
+    val order = Order.query.on(tx).create(mapOf("total" to 1200))      // a model call
+    query.on(tx).table("stock").where("sku", "A1").decrement("qty", 1)  // a builder call
+    tx.afterCommit { mailer.sendReceipt(order.key) }
+    order.key
+}, 3)                                    // retries up to 3 times on a deadlock
+```
+
 ## Pitfalls
 
 - Strict transactions are on. Calling `db` instead of `tx` inside the callback throws

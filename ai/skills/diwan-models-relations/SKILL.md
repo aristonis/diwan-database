@@ -34,6 +34,27 @@ ModelQuery<Post> posts = Post.query.on(manager.query());
 ModelCollection<Post> list = posts.with("author").get();
 ```
 
+Kotlin:
+
+```kotlin
+class Post : Model() {
+    override fun fillable(): List<String> = listOf("title", "user_id")
+    override fun table(): String = "posts"
+
+    override fun relations(): RelationMap<*> {
+        return RelationMap.of(Post::class.java).add("author", Post::author)
+    }
+    fun author(): BelongsTo<User> = belongsTo(User::class.java, "user_id")
+
+    companion object {
+        val query: ModelQuery<Post> = ModelQuery.of(Post::class.java, ::Post)
+    }
+}
+
+val posts = Post.query.on(manager.query())
+val list = posts.with("author").get()
+```
+
 Keep a model package-private behind a repository that returns an immutable record:
 
 ```java
@@ -45,6 +66,24 @@ final class UnitRow extends Model {
 public Optional<Unit> find(long id) {
     return UnitRow.query.on(db).find(id)
             .map(r -> new Unit(r.getLong("id"), r.getString("name")));
+}
+```
+
+Kotlin:
+
+```kotlin
+class UnitRow : Model() {
+    // Tables is the app's own naming helper
+    override fun table(): String = Tables.name("units")
+
+    companion object {
+        val query: ModelQuery<UnitRow> = ModelQuery.of(UnitRow::class.java, ::UnitRow)
+    }
+}
+
+fun find(id: Long): Optional<UnitInfo> {
+    return UnitRow.query.on(db).find(id)
+        .map { r -> UnitInfo(r.getLong("id"), r.getString("name")) }
 }
 ```
 
