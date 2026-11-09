@@ -73,6 +73,13 @@ val orderId = db.transaction({ tx ->
 - Errors are unchecked and the message hides binding values. Do not log bindings with personal data.
 - Branch on `((DriverException) e.getCause()).error().code()`, such as `DWN-CST-0001` for a unique
   violation. Never branch on vendor codes or message text.
+- `error().table()` is an `Optional` naming the table of the failure when the driver can tell. On SQLite it is empty for a foreign key or check failure.
+
+  Kotlin:
+
+  ```kotlin
+  val table = (e.cause as DriverException).error().table().orElse("unknown")
+  ```
 
 ## Testing
 

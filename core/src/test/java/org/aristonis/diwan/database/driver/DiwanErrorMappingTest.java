@@ -84,6 +84,26 @@ class DiwanErrorMappingTest {
     }
 
     @Test
+    void tableIsExposedSurvivesSerializationAndTakesPartInEquality() throws Exception {
+        Set<DriverFailureKind> kinds = EnumSet.of(DriverFailureKind.UNIQUE_VIOLATION);
+        DiwanError withTable = DiwanError.of(kinds, "k", "users", Arrays.asList("a"));
+        DiwanError otherTable = DiwanError.of(kinds, "k", "posts", Arrays.asList("a"));
+        DiwanError withoutTable = DiwanError.of(kinds, "k", Arrays.asList("a"));
+
+        assertEquals("users", withTable.table().orElseThrow());
+        assertFalse(withoutTable.table().isPresent());
+        assertFalse(withTable.equals(otherTable));
+        assertFalse(withTable.hashCode() == otherTable.hashCode());
+        assertFalse(withTable.equals(withoutTable));
+        assertEquals(withTable, roundTrip(new DriverException("m", null, 0, null, null, kinds, "k", "users",
+                Arrays.asList("a"))).error());
+        DiwanError copy = roundTrip(new DriverException("m", null, 0, null, null, kinds, "k",
+                Arrays.asList("a"))).error();
+        assertFalse(copy.table().isPresent());
+        assertEquals(withoutTable, copy);
+    }
+
+    @Test
     void aDriverExceptionCarriesTheErrorAndSurvivesSerialization() throws Exception {
         DriverException failure = new DriverException("m", "23505", 0, null, null,
                 EnumSet.of(DriverFailureKind.UNIQUE_VIOLATION), "users_email_unique", Arrays.asList("email"));

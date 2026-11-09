@@ -691,12 +691,14 @@ final class JdbcSession implements DriverSession {
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
         String codeName = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
                 ? DriverFailureMessages.sqliteCodeName(failure.vendorCode()).orElse(null) : null;
-        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null), failure.error().columns());
+        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null),
+                failure.error().table().orElse(null), failure.error().columns());
         String message = DriverFailureMessages.message(kinds, failure.sqlState().orElse(null),
                 failure.vendorCode(), codeName, error);
         return new DriverException(message, failure.sqlState().orElse(null), failure.vendorCode(),
                 failure.databaseMessage().orElse(null), failure.getCause(), kinds,
-                failure.error().key().orElse(null), failure.error().columns());
+                failure.error().key().orElse(null), failure.error().table().orElse(null),
+                failure.error().columns());
     }
 
     private DriverException failure(SQLException e) {

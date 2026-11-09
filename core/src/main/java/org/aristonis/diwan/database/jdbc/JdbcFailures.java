@@ -135,9 +135,10 @@ final class JdbcFailures {
             kinds.add(DriverFailureKind.CONNECTION_LOST);
         }
         ConstraintDetails details = details(family, kinds, first);
-        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.columns());
+        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.table().orElse(null),
+                details.columns());
         return new DriverException(failureMessage(family, kinds, state, vendorCode, error), state, vendorCode,
-                databaseMessage, failure, kinds, error.key().orElse(null), error.columns());
+                databaseMessage, failure, kinds, error.key().orElse(null), error.table().orElse(null), error.columns());
     }
 
     /** Reads the constraint name and columns from the first SQL exception, for constraint failures only. */

@@ -3,8 +3,10 @@ package org.aristonis.diwan.database.driver;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.aristonis.diwan.database.Internal;
@@ -33,14 +35,16 @@ public final class ConstraintDetails {
 
     private final String key;
     private final List<String> columns;
+    private final String table;
 
-    private ConstraintDetails(String key, List<String> columns) {
+    private ConstraintDetails(String key, List<String> columns, String table) {
         this.key = key;
         this.columns = columns;
+        this.table = table;
     }
 
     private static ConstraintDetails none() {
-        return new ConstraintDetails(null, Collections.<String>emptyList());
+        return new ConstraintDetails(null, Collections.<String>emptyList(), null);
     }
 
     /**
@@ -50,6 +54,15 @@ public final class ConstraintDetails {
      */
     public Optional<String> key() {
         return Optional.ofNullable(key);
+    }
+
+    /**
+     * Returns the table name.
+     *
+     * @return the name, or an empty optional when there is none or SQLite named several tables
+     */
+    public Optional<String> table() {
+        return Optional.ofNullable(table);
     }
 
     /**
@@ -79,12 +92,13 @@ public final class ConstraintDetails {
                 return none();
             }
             String key = clean(call(server, "getConstraint"));
+            String table = clean(call(server, "getTable"));
             if (isUnique) {
-                return new ConstraintDetails(key, Collections.<String>emptyList());
+                return new ConstraintDetails(key, Collections.<String>emptyList(), table);
             }
             String column = clean(call(server, "getColumn"));
             return new ConstraintDetails(key,
-                    column == null ? Collections.<String>emptyList() : Collections.singletonList(column));
+                    column == null ? Collections.<String>emptyList() : Collections.singletonList(column), table);
         } catch (RuntimeException | LinkageError e) {
             return none();
         }
@@ -103,7 +117,8 @@ public final class ConstraintDetails {
     /**
      * Reads the details from SQLite error text.
      *
-     * <p>{@code UNIQUE} and {@code NOT NULL} failures give the columns after the table dot, a
+     * <p>{@code UNIQUE} and {@code NOT NULL} failures give the columns after the table dot and the
+     * table before it when all parts name the same one, a
      * {@code CHECK} failure gives the constraint name as the key, a foreign key failure gives
      * nothing.
      *
@@ -116,13 +131,26 @@ public final class ConstraintDetails {
         }
         Matcher columns = SQLITE_COLUMNS.matcher(message);
         if (columns.find()) {
-            return new ConstraintDetails(null, columnNames(columns.group(1)));
+            return new ConstraintDetails(null, columnNames(columns.group(1)), singleTable(columns.group(1)));
         }
         Matcher check = SQLITE_CHECK.matcher(message);
         if (check.find()) {
-            return new ConstraintDetails(clean(check.group(1)), Collections.<String>emptyList());
+            return new ConstraintDetails(clean(check.group(1)), Collections.<String>emptyList(), null);
         }
         return none();
+    }
+
+    private static String singleTable(String list) {
+        Set<String> tables = new LinkedHashSet<>();
+        for (String part : list.split(",")) {
+            String trimmed = part.trim();
+            int dot = trimmed.indexOf('.');
+            String name = dot < 0 ? null : clean(trimmed.substring(0, dot));
+            if (name != null) {
+                tables.add(name);
+            }
+        }
+        return tables.size() == 1 ? tables.iterator().next() : null;
     }
 
     private static List<String> columnNames(String list) {

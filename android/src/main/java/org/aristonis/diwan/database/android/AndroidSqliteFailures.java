@@ -60,9 +60,10 @@ final class AndroidSqliteFailures {
         }
         String codeName = DriverFailureMessages.sqliteCodeName(code).orElse(null);
         ConstraintDetails details = ConstraintDetails.sqlite(text);
-        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.columns());
+        DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.table().orElse(null),
+                details.columns());
         return new DriverException(DriverFailureMessages.message(kinds, null, code, codeName, error), null, code,
-                failure.getMessage(), failure, kinds, error.key().orElse(null), error.columns());
+                failure.getMessage(), failure, kinds, error.key().orElse(null), error.table().orElse(null), error.columns());
     }
 
     static boolean isSqliteFailure(RuntimeException failure) {
