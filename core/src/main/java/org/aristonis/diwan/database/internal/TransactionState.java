@@ -25,6 +25,9 @@ public final class TransactionState {
             + " rollback to a savepoint means the database may have dropped it; let the failure reach the outermost"
             + " transaction so it rolls back";
 
+    static final String ABORTED_MESSAGE = "The transaction was aborted by a failed statement; roll back (or roll back"
+            + " to the savepoint) first";
+
     private static final String SAVEPOINT_PREFIX = "diwan_";
 
     private final DriverSession session;
@@ -33,6 +36,7 @@ public final class TransactionState {
     private volatile int depth = 1;
     private volatile boolean rollbackOnly;
     private volatile Throwable concurrencyFailure;
+    private volatile Abort abort = Abort.NONE;
     private volatile boolean commitAttempted;
     private volatile boolean rolledBack;
     private final TransactionCallbacks callbacks = new TransactionCallbacks();
@@ -134,6 +138,44 @@ public final class TransactionState {
     /** Tells whether a concurrency failure on this transaction's own session makes a retry worthwhile. */
     boolean hasOwnConcurrencyFailure() {
         return concurrencyFailure != null;
+    }
+
+    /** Returns the lowest level a failed statement aborted, or {@code 0} when none did. */
+    int abortedLevel() {
+        return abort.level;
+    }
+
+    /** Returns the first failure that aborted the transaction, or {@code null} when none did. */
+    Throwable abortFailure() {
+        return abort.failure;
+    }
+
+    /** Records an abort at {@code level}, keeping the lowest level and the first failure. */
+    synchronized void markAborted(int level, Throwable failure) {
+        Abort current = abort;
+        abort = new Abort(current.level == 0 || level < current.level ? level : current.level,
+                current.failure == null ? failure : current.failure);
+    }
+
+    /** Clears the abort when it was recorded at {@code level} or deeper, as a rollback to that level undoes it. */
+    synchronized void clearAbortedFrom(int level) {
+        if (abort.level >= level) {
+            abort = Abort.NONE;
+        }
+    }
+
+    /** The abort level and its first failure, replaced as one unit so a reader sees a consistent pair. */
+    private static final class Abort {
+
+        static final Abort NONE = new Abort(0, null);
+
+        final int level;
+        final Throwable failure;
+
+        Abort(int level, Throwable failure) {
+            this.level = level;
+            this.failure = failure;
+        }
     }
 
     /** Records that the commit was sent: from here on the outcome may be unknown, so no retry. */

@@ -19,5 +19,14 @@ public enum DriverCapability {
      * rows in batches only with auto-commit off. A session that reports it opens a transaction of
      * its own for a cursor read outside any transaction, and ends it when the cursor closes.
      */
-    STREAMS_IN_TRANSACTION
+    STREAMS_IN_TRANSACTION,
+
+    /**
+     * Indicates a statement that fails inside a transaction aborts the whole transaction: the
+     * database refuses every further statement until the transaction is rolled back, or rolled back
+     * to a savepoint taken before the failure, as PostgreSQL does. A connection that sees it
+     * refuses further statements and the commit on its own, with a clear error, instead of sending
+     * them. It is declared per database family, so a PostgreSQL-compatible engine inherits it.
+     */
+    ERROR_ABORTS_TRANSACTION
 }

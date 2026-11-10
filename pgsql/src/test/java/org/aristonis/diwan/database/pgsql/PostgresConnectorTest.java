@@ -5,7 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Map;
+import javax.sql.DataSource;
+import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.DatabaseConfig;
 import org.aristonis.diwan.database.manager.DatabaseManager;
@@ -115,6 +120,93 @@ class PostgresConnectorTest {
 
             assertTrue(manager.schema().hasTable("users"));
         }
+    }
+
+    private static Connection live(String database, String... options) {
+        PGSimpleDataSource server = PostgresServer.dataSource(database);
+        ConnectionConfig.Builder builder = pg().host(server.getServerNames()[0]).port(server.getPortNumbers()[0])
+                .database(database).username("postgres");
+        for (int i = 0; i < options.length; i += 2) {
+            builder.option(options[i], options[i + 1]);
+        }
+        return new PostgresConnector().connect(builder.build(), null);
+    }
+
+    @Test
+    void theTimezoneOptionSetsTheSessionTimeZone() {
+        Connection db = live(PostgresServer.newDatabaseName(), "timezone", "UTC");
+
+        assertEquals("UTC", db.scalar("show timezone").get());
+    }
+
+    @Test
+    void theTimezoneOptionDoesNotChangeTheUrl() {
+        String url = PostgresConnector.jdbcUrl(pg().host("h").database("d").option("timezone", "+03:00").build());
+
+        assertEquals("jdbc:postgresql://h:5432/d", url);
+    }
+
+    @Test
+    void aSuppliedDataSourceGetsTheTimezoneToo() {
+        PGSimpleDataSource source = PostgresServer.dataSource(PostgresServer.newDatabaseName());
+        ConnectionConfig config = pg().option("timezone", "Asia/Tokyo").build();
+
+        Connection db = new PostgresConnector().connect(config, source);
+
+        assertEquals("Asia/Tokyo", db.scalar("show timezone").get());
+    }
+
+    @Test
+    void theTimezoneSurvivesARollbackOnAConnectionThatComesWithAutoCommitOff() throws SQLException {
+        PGSimpleDataSource server = PostgresServer.dataSource(PostgresServer.newDatabaseName());
+        DataSource manualCommit = new PGSimpleDataSource() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public java.sql.Connection getConnection() throws SQLException {
+                java.sql.Connection connection = server.getConnection();
+                connection.setAutoCommit(false);
+                return connection;
+            }
+        };
+
+        try (java.sql.Connection connection = new SessionTimeZoneDataSource(manualCommit, "Asia/Tokyo")
+                .getConnection()) {
+            assertFalse(connection.getAutoCommit());
+            connection.rollback();
+            try (Statement statement = connection.createStatement();
+                    ResultSet zone = statement.executeQuery("show timezone")) {
+                assertTrue(zone.next());
+                assertEquals("Asia/Tokyo", zone.getString(1));
+            }
+        }
+    }
+
+    @Test
+    void noTimezoneOptionLeavesTheUrlUntouched() {
+        assertEquals("jdbc:postgresql://h:5432/d",
+                PostgresConnector.jdbcUrl(pg().host("h").database("d").build()));
+    }
+
+    @Test
+    void anInvalidTimezoneIsRefusedNamingTheOptionWithoutEchoingIt() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> new PostgresConnector()
+                .connect(pg().host("h").database("d").option("timezone", "UTC'; drop table x").build(), null));
+
+        assertTrue(error.getMessage().contains("timezone"));
+        assertFalse(error.getMessage().contains("drop table"));
+    }
+
+    @Test
+    void timezoneAndSearchPathBothApply() {
+        String database = PostgresServer.newDatabaseName();
+        Connection setup = Connection.builder().name("setup").dataSource(PostgresServer.dataSource(database)).build();
+        setup.statement("create schema tenant_1");
+
+        Connection db = live(database, "timezone", "UTC", "search_path", "tenant_1");
+
+        assertEquals("UTC", db.scalar("show timezone").get());
+        assertEquals("tenant_1", db.scalar("select current_schema()").get());
     }
 
     private static Migration users() {

@@ -84,6 +84,7 @@ final class JdbcFailures {
         int vendorCode = 0;
         String databaseMessage = null;
         boolean isConnectionFailure = false;
+        boolean hasServerError = false;
         SQLException first = null;
         Set<DriverFailureKind> kinds = EnumSet.noneOf(DriverFailureKind.class);
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -95,6 +96,7 @@ final class JdbcFailures {
             if (first == null) {
                 first = sql;
             }
+            hasServerError |= ConstraintDetails.hasServerError(sql);
             String s = sql.getSQLState();
             int code = sql.getErrorCode();
             if (state == null && s != null) {
@@ -140,7 +142,8 @@ final class JdbcFailures {
         DiwanError error = DiwanError.of(kinds, details.key().orElse(null), details.table().orElse(null),
                 details.columns());
         return new DriverException(failureMessage(family, kinds, state, vendorCode, error), state, vendorCode,
-                databaseMessage, failure, kinds, error.key().orElse(null), error.table().orElse(null), error.columns());
+                databaseMessage, failure, kinds, error.key().orElse(null), error.table().orElse(null), error.columns(),
+                family != DatabaseFamily.POSTGRESQL || hasServerError);
     }
 
     /** Reads the constraint name and columns from the first SQL exception, for constraint failures only. */

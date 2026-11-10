@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.exception;
 
+import org.aristonis.diwan.database.Internal;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -51,6 +52,11 @@ public final class DriverException extends DatabaseException {
      * then derives it from the kinds.
      */
     private final DiwanError error;
+    /**
+     * Whether the driver raised this failure on the client side, before or without a server
+     * answer. Stored inverted so that a stream written before it existed reads as from the server.
+     */
+    private final boolean isClientSide;
 
     /**
      * Creates a driver failure.
@@ -121,6 +127,30 @@ public final class DriverException extends DatabaseException {
      */
     public DriverException(String message, String sqlState, int vendorCode, String databaseMessage,
             Throwable cause, Set<DriverFailureKind> kinds, String key, String table, List<String> columns) {
+        this(message, sqlState, vendorCode, databaseMessage, cause, kinds, key, table, columns, true);
+    }
+
+    /**
+     * Creates a driver failure and tells whether the database server raised it.
+     *
+     * @param message the detail message, may be {@code null}; must not contain the database text
+     * @param sqlState the SQL state the database reported, or {@code null} when it gave none
+     * @param vendorCode the vendor-specific error code, {@code 0} when there is none
+     * @param databaseMessage the database's own error text, or {@code null} when there is none
+     * @param cause the underlying failure, or {@code null} when there is none
+     * @param kinds the kinds the driver assigns to this failure, never {@code null}, may be empty;
+     *     the set is copied and later changes to it have no effect
+     * @param key the constraint or index name, or {@code null} when there is none
+     * @param table the table name, or {@code null} when there is none
+     * @param columns the column names, never {@code null}, may be empty; the list is copied
+     * @param isFromServer {@code false} when the driver raised the failure itself without a server
+     *     answer, so the server transaction is not aborted by it
+     * @throws NullPointerException if {@code kinds}, {@code columns} or any element of them is {@code null}
+     */
+    @Internal
+    public DriverException(String message, String sqlState, int vendorCode, String databaseMessage,
+            Throwable cause, Set<DriverFailureKind> kinds, String key, String table, List<String> columns,
+            boolean isFromServer) {
         super(message, cause);
         Objects.requireNonNull(kinds, "kinds");
         // EnumSet.copyOf(Collection) throws on an empty set that is not an EnumSet.
@@ -133,6 +163,7 @@ public final class DriverException extends DatabaseException {
         this.databaseMessage = databaseMessage;
         this.kinds = copy;
         this.error = DiwanError.of(copy, key, table, columns);
+        this.isClientSide = !isFromServer;
     }
 
     /**
@@ -163,6 +194,16 @@ public final class DriverException extends DatabaseException {
      */
     public Optional<String> databaseMessage() {
         return Optional.ofNullable(databaseMessage);
+    }
+
+    /**
+     * Tells whether the database server raised this failure, as opposed to the driver on the client side.
+     *
+     * @return {@code false} only when the driver marked the failure as raised without a server answer
+     */
+    @Internal
+    public boolean isFromServer() {
+        return !isClientSide;
     }
 
     /**

@@ -14,6 +14,7 @@ import java.util.OptionalInt;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.aristonis.diwan.database.exception.DriverException;
+import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.LockWaitGuard;
 import org.aristonis.diwan.database.driver.RowCursor;
@@ -60,6 +61,22 @@ class TransactionalConnection extends AbstractConnection {
         ensureOpen();
         if (state.isRollbackOnly()) {
             throw rollbackOnlyFailure();
+        }
+        if (state.abortedLevel() > 0) {
+            throw abortedFailure();
+        }
+    }
+
+    /** Builds the aborted-transaction refusal, caused by the first failure that aborted it. */
+    private IllegalStateException abortedFailure() {
+        return new IllegalStateException(TransactionState.ABORTED_MESSAGE, state.abortFailure());
+    }
+
+    // Refuses to end a level that a failed statement aborted, before COMMIT or RELEASE is sent.
+    private void refuseAbortedUpTo(int level) {
+        int aborted = state.abortedLevel();
+        if (aborted >= 1 && aborted <= level) {
+            throw abortedFailure();
         }
     }
 
@@ -154,6 +171,10 @@ class TransactionalConnection extends AbstractConnection {
         if (failure.isConcurrencyFailure()) {
             state.recordConcurrencyFailure(error);
         }
+        if (failure.sqlState().isPresent() && failure.isFromServer()
+                && getDriverInfo().supports(DriverCapability.ERROR_ABORTS_TRANSACTION)) {
+            state.markAborted(state.depth(), error);
+        }
         return error;
     }
 
@@ -166,6 +187,7 @@ class TransactionalConnection extends AbstractConnection {
         if (state.isRollbackOnly()) {
             throw rollbackOnlyFailure();
         }
+        refuseAbortedUpTo(1);
         state.cursorGuard().check();
         fire(TransactionPhase.COMMITTING, 1);
         state.markCommitAttempted();
@@ -210,6 +232,7 @@ class TransactionalConnection extends AbstractConnection {
 
     /** Ends the savepoint of {@code level} successfully; its after-commit callbacks move up a level. */
     final void commitLevel(String name, int level) {
+        refuseAbortedUpTo(level);
         fire(TransactionPhase.COMMITTING, level);
         releaseSavepoint(name);
         state.callbacks().releaseLevel(level);
@@ -222,6 +245,7 @@ class TransactionalConnection extends AbstractConnection {
     final Throwable rollbackLevelTo(String name, int level) {
         Throwable failure = sendRollbackTo(name);
         if (failure == null) {
+            state.clearAbortedFrom(level);
             try {
                 fire(TransactionPhase.ROLLED_BACK, level);
             } catch (Throwable listenerFailure) {

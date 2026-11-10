@@ -10,7 +10,6 @@ import java.math.BigInteger;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -516,9 +515,6 @@ final class AndroidSqliteSession implements DriverSession {
         }
         if (value instanceof Instant) {
             return OffsetDateTime.ofInstant((Instant) value, ZoneOffset.UTC).toString();
-        }
-        if (value instanceof TemporalAccessor) {
-            return value.toString();
         }
         throw new IllegalArgumentException("Unsupported binding type " + value.getClass().getName());
     }

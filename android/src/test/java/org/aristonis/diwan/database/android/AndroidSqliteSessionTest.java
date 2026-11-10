@@ -73,6 +73,22 @@ public class AndroidSqliteSessionTest {
     }
 
     @Test
+    public void aDecimalWithAnExponentIsStoredInPlainForm() {
+        db.insert("insert into v (t) values (?)", new BigDecimal("1E+3"));
+
+        assertEquals("1000", db.select("select t from v").get(0).get("t"));
+    }
+
+    @Test
+    public void aNonFiniteDoubleIsRefusedBeforeAnySqlRuns() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> db.insert("insert into v (r) values (?)", Double.NaN));
+
+        assertFalse(error.getMessage().contains("NaN"));
+        assertTrue(db.select("select r from v").isEmpty());
+    }
+
+    @Test
     public void anUnsupportedBindingTypeIsRefused() {
         assertThrows(IllegalArgumentException.class, () -> db.insert("insert into v (t) values (?)", new Object()));
     }

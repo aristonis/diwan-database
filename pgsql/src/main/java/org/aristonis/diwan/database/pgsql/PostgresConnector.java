@@ -30,6 +30,14 @@ import org.aristonis.diwan.database.schema.Schema;
  * {@code lock_timeout} of every session through the {@code options} parameter of the URL; a value the
  * URL already has in {@code options} is kept and the setting is added after it.
  *
+ * <p>The optional {@code timezone} option, an IANA name such as {@code UTC} or an offset such as
+ * {@code +03:00}, runs {@code SET TIME ZONE} on every connection handed out (one statement per
+ * checkout), as Laravel does after connecting, whether the data source is built from the settings or
+ * supplied. It is off by default.
+ * Only letters, digits and {@code / _ + - :} are accepted. A pool that resets sessions
+ * ({@code DISCARD ALL} or {@code RESET ALL}) undoes it, so with such a pool set the zone in the pool's
+ * init SQL or on the server instead.
+ *
  * <p>The migration lock is a {@link PostgresMigrationLock} over the connection's data source.
  *
  * <p>Instances hold no state and are safe to share across threads.
@@ -43,6 +51,8 @@ public final class PostgresConnector implements Connector {
     public static final int DEFAULT_PORT = 5432;
 
     private static final Pattern OPTIONS_PARAMETER = Pattern.compile("[?&]options=");
+    private static final String TIMEZONE_OPTION = "timezone";
+    private static final Pattern TIME_ZONE_VALUE = Pattern.compile("[A-Za-z0-9/_+:-]+");
     private static final String URL_PREFIX = "jdbc:postgresql://";
 
     /**
@@ -60,7 +70,7 @@ public final class PostgresConnector implements Connector {
      * {@inheritDoc}
      *
      * @throws DatabaseConfigException if neither {@code url} nor {@code host} and
-     *     {@code database} are set
+     *     {@code database} are set, or the {@code timezone} option holds a disallowed character
      */
     @Override
     public Connection connect(ConnectionConfig config, DataSource dataSource) {
@@ -90,11 +100,11 @@ public final class PostgresConnector implements Connector {
     }
 
     private static DataSource sourceOf(ConnectionConfig config, DataSource dataSource) {
-        if (dataSource != null) {
-            return dataSource;
-        }
-        return new DriverManagerDataSource(jdbcUrl(config), config.username().orElse(null),
-                config.password().orElse(null));
+        String zone = timeZoneOf(config);
+        DataSource source = dataSource != null ? dataSource
+                : new DriverManagerDataSource(jdbcUrl(config), config.username().orElse(null),
+                        config.password().orElse(null));
+        return zone == null ? source : new SessionTimeZoneDataSource(source, zone);
     }
 
     // Package-private so tests can check the URL without a server.
@@ -114,7 +124,25 @@ public final class PostgresConnector implements Connector {
             return url;
         }
         long millis = LockWaitOption.parseMillis(config.name(), LockWaitOption.KEY, raw);
-        String setting = "-c lock_timeout=" + millis;
+        return withServerSetting(url, "-c lock_timeout=" + millis);
+    }
+
+    // The validated time zone to set on each connection handed out, or null when the option is off.
+    private static String timeZoneOf(ConnectionConfig config) {
+        String raw = config.options().get(TIMEZONE_OPTION);
+        if (raw == null || raw.trim().isEmpty()) {
+            return null;
+        }
+        String zone = raw.trim();
+        if (!TIME_ZONE_VALUE.matcher(zone).matches()) {
+            throw new DatabaseConfigException("Connection [" + config.name() + "] option " + TIMEZONE_OPTION
+                    + " may hold only letters, digits and / _ + - :", config.name(), TIMEZONE_OPTION);
+        }
+        return zone;
+    }
+
+    // Adds one "-c name=value" setting to the options parameter, after any value the URL already has.
+    private static String withServerSetting(String url, String setting) {
         int start = optionsValueStart(url);
         if (start < 0) {
             return url + (url.indexOf('?') >= 0 ? "&" : "?") + "options=" + encode(setting);

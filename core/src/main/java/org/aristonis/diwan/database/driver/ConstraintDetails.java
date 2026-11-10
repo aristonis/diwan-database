@@ -27,6 +27,8 @@ import org.aristonis.diwan.database.Internal;
 @Internal
 public final class ConstraintDetails {
 
+    private static final String SERVER_ERROR_METHOD = "getServerErrorMessage";
+
     private static final int MAX_NAME_LENGTH = 128;
     private static final Pattern SQLITE_COLUMNS = Pattern.compile(
             "(?:UNIQUE|NOT NULL) constraint failed: ([^()]*?)(?: \\(code .*)?\\)?\\s*$");
@@ -87,7 +89,7 @@ public final class ConstraintDetails {
             if (sqlException == null) {
                 return none();
             }
-            Object server = call(sqlException, "getServerErrorMessage");
+            Object server = call(sqlException, SERVER_ERROR_METHOD);
             if (server == null) {
                 return none();
             }
@@ -164,6 +166,18 @@ public final class ConstraintDetails {
             }
         }
         return Collections.unmodifiableList(names);
+    }
+
+    /**
+     * Tells whether a PostgreSQL driver exception carries the server's own error message, which only
+     * an error the server sent does; a failure the driver raised on the client side has none.
+     *
+     * @param sqlException the SQL exception from the PostgreSQL driver, may be {@code null}
+     * @return {@code true} if the exception has a server error message; {@code false} when it has
+     *     none, when {@code sqlException} is {@code null} or when reflection fails
+     */
+    public static boolean hasServerError(Throwable sqlException) {
+        return sqlException != null && call(sqlException, SERVER_ERROR_METHOD) != null;
     }
 
     private static Object call(Object target, String method) {

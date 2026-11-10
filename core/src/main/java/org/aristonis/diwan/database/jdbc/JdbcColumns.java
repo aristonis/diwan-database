@@ -27,10 +27,12 @@ final class JdbcColumns {
 
     private final String[] labels;
     private final Class<?>[] wanted;
+    private final boolean[] isPostgresNumeric;
 
-    private JdbcColumns(String[] labels, Class<?>[] wanted) {
+    private JdbcColumns(String[] labels, Class<?>[] wanted, boolean[] isPostgresNumeric) {
         this.labels = labels;
         this.wanted = wanted;
+        this.isPostgresNumeric = isPostgresNumeric;
     }
 
     /**
@@ -55,16 +57,41 @@ final class JdbcColumns {
                 wanted[i] = temporalType(metaData.getColumnType(i + 1), metaData.getColumnTypeName(i + 1));
             }
         }
-        return new JdbcColumns(labels, wanted);
+        boolean[] numeric = new boolean[columnCount];
+        if (DatabaseFamily.of(productName) == DatabaseFamily.POSTGRESQL) {
+            for (int i = 0; i < columnCount; i++) {
+                numeric[i] = "numeric".equalsIgnoreCase(metaData.getColumnTypeName(i + 1));
+            }
+        }
+        return new JdbcColumns(labels, wanted, numeric);
     }
 
     /** Reads the current row into a new mutable map, columns in select order. */
     Map<String, Object> read(ResultSet resultSet) throws SQLException {
         Map<String, Object> row = new LinkedHashMap<>();
         for (int i = 0; i < labels.length; i++) {
-            row.put(labels[i], JdbcValues.read(readValue(resultSet, i + 1, wanted[i])));
+            Object value = readValue(resultSet, i + 1, wanted[i]);
+            if (isPostgresNumeric[i] && isNonFinite(value)) {
+                throw nonFiniteNumeric(labels[i]);
+            }
+            row.put(labels[i], JdbcValues.read(value));
         }
         return row;
+    }
+
+    // PostgreSQL's numeric holds NaN and, from 14, Infinity; the driver hands them back as a Double
+    // or as their text, and neither fits the BigDecimal a numeric column otherwise reads as.
+    private static boolean isNonFinite(Object value) {
+        if (value instanceof Double) {
+            return !Double.isFinite((Double) value);
+        }
+        return "NaN".equals(value) || "Infinity".equals(value) || "-Infinity".equals(value);
+    }
+
+    private static SQLException nonFiniteNumeric(String label) {
+        // Client-side, so no SQLState: the server did not fail and the transaction stays usable. The
+        // label is statement text; the value is left out of the message.
+        return new SQLException("numeric value in column '" + label + "' cannot be represented");
     }
 
     // java.time getters avoid Timestamp.toString(), which shifts dates before 1582 and times in a

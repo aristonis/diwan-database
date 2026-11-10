@@ -13,12 +13,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `IndexInfo.orders()`, `IndexInfo.collations()` and `IndexInfo.where()`.
 - `DiwanError.table()`, the table a failure concerns, where the driver can name it.
 - Schema inspection: `Schema.getColumns` (with `ColumnInfo` and `ColumnGeneration`), `getColumnListing`, `hasColumns`, `getIndexListing` and four `hasIndex` overloads with the `IndexType` filter (`PRIMARY`, `UNIQUE`), on SQLite, PostgreSQL and Android.
+- `OffsetTime` as a binding on every driver (SQLite and Android store it as UTC text, `HH:mm:ss+00:00`) and as a cursor value, so cursor pagination works on a PostgreSQL `timetz` column.
+- `DriverCapability.ERROR_ABORTS_TRANSACTION`, declared by the PostgreSQL driver for a driver whose failed statement aborts the transaction.
+- PostgreSQL `timezone` connection option (for example `UTC`), off by default: sets the session time zone. Use it, or a `timestamptz` column, when `Instant` values go into plain `timestamp` columns.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.
+- PostgreSQL: after a failed statement, the next statement, commit or savepoint release in the same transaction is refused with a clear `IllegalStateException` ("The transaction was aborted by a failed statement; roll back (or roll back to the savepoint) first", the first failure as cause) instead of server error 25P02. Rolling back to a savepoint clears it.
 
 ### Fixed
 - Android: a commit that fails on a deferred foreign key now rolls back instead of leaving the transaction open.
+- PostgreSQL: reading `NaN` or `Infinity` from a `numeric` column now fails with an error that names the column and never shows the value; `float` columns still return `NaN`.
 
 ### Internal
 - Large classes split by responsibility (schema grammars, JDBC session, SQLite table state); public API unchanged. New `codeSize` task lists main files over 500 code lines.
