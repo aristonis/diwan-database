@@ -486,6 +486,87 @@ public final class Schema {
     }
 
     /**
+     * Creates an empty database on the server this schema is connected to.
+     *
+     * <p>No encoding clause is sent: the new database takes the server's default.
+     *
+     * @param name the database name, never {@code null} or blank
+     * @throws IllegalArgumentException if {@code name} is {@code null} or blank
+     * @throws UnsupportedOperationException if the grammar does not support the command; in pretend
+     *     mode this includes SQLite, which has no statement to log
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
+     */
+    public void createDatabase(String name) {
+        createDatabase(name, null, null);
+    }
+
+    /**
+     * Creates a database as a copy of another.
+     *
+     * <p>On SQLite the name is a file path and the template is a file that is copied, never its
+     * lock file.
+     *
+     * @param name the database name, never {@code null} or blank
+     * @param template the database to copy, or {@code null} for an empty one; never blank
+     * @throws IllegalArgumentException if {@code name} is {@code null} or blank, or {@code template}
+     *     is blank
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
+     */
+    public void createDatabase(String name, String template) {
+        createDatabase(name, template, null);
+    }
+
+    /**
+     * Creates a database as a copy of another, with a copy strategy.
+     *
+     * <p>Under {@link #pretend(Consumer)} the statement is recorded, not run.
+     *
+     * @param name the database name, never {@code null} or blank
+     * @param template the database to copy, or {@code null} for an empty one; never blank
+     * @param strategy how to copy the template, or {@code null} for the server's default
+     * @throws IllegalArgumentException if {@code name} is {@code null} or blank, or {@code template}
+     *     is blank
+     * @throws UnsupportedOperationException if the grammar does not support the command, or the
+     *     server is too old for {@code strategy}
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
+     */
+    public void createDatabase(String name, String template, CopyStrategy strategy) {
+        SchemaDatabases.create(connection, reader, grammar, name, template, strategy);
+    }
+
+    /**
+     * Drops a database if it exists.
+     *
+     * @param name the database name, never {@code null} or blank
+     * @return {@code true} if the database existed; {@code false} in pretend mode
+     * @throws IllegalArgumentException if {@code name} is {@code null} or blank
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
+     */
+    public boolean dropDatabaseIfExists(String name) {
+        return dropDatabaseIfExists(name, false);
+    }
+
+    /**
+     * Drops a database if it exists, closing the sessions that use it when asked.
+     *
+     * <p>Another process may drop the database between the existence check and the drop, so
+     * {@code true} is not proof that this call dropped it. SQLite ignores {@code force}.
+     *
+     * @param name the database name, never {@code null} or blank
+     * @param force {@code true} to close the sessions that use the database first
+     * @return {@code true} if the database existed; {@code false} in pretend mode
+     * @throws IllegalArgumentException if {@code name} is {@code null} or blank
+     * @throws UnsupportedOperationException if the grammar does not support the command, or the
+     *     server is too old for {@code force}
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
+     */
+    public boolean dropDatabaseIfExists(String name, boolean force) {
+        return SchemaDatabases.dropIfExists(connection, reader, grammar, name, force);
+    }
+
+    /**
      * Tells whether a table exists.
      *
      * @param table the table name without prefix, never {@code null}

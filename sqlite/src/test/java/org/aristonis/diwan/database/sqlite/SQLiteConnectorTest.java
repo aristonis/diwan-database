@@ -129,6 +129,7 @@ class SQLiteConnectorTest {
         assertTrue(SQLiteConnector.isMemoryUrl("jdbc:sqlite:file::memory:"));
         assertTrue(SQLiteConnector.isMemoryUrl("jdbc:sqlite:file:x?mode=memory&cache=shared"));
         assertFalse(SQLiteConnector.isMemoryUrl("jdbc:sqlite:/tmp/x.db"));
+        assertFalse(SQLiteConnector.isMemoryUrl("jdbc:sqlite:/tmp/a_mode=memory/x.db"));
         assertFalse(SQLiteConnector.isMemoryUrl("jdbc:postgresql://h/db"));
     }
 

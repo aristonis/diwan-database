@@ -19,6 +19,7 @@ import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
+import org.aristonis.diwan.database.schema.CopyStrategy;
 import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
@@ -742,5 +743,32 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
             }
         }
         return false;
+    }
+
+    /**
+     * Creates the database file, empty or copied from the template file; the strategy is ignored.
+     *
+     * @param connection unused: a SQLite database is a file, so no statement runs
+     * @param name the path of the new file
+     * @param template the path of the file to copy, or {@code null} for an empty database
+     * @param strategy ignored
+     * @throws IllegalArgumentException if the name is an in-memory spelling or the template is missing
+     */
+    @Override
+    public void createDatabase(Connection connection, String name, String template, CopyStrategy strategy) {
+        SQLiteDatabaseFiles.create(name, template);
+    }
+
+    /**
+     * Deletes the database file and its {@code -wal}, {@code -shm} and {@code -journal} files.
+     *
+     * @param connection unused: a SQLite database is a file, so no statement runs
+     * @param name the path of the file
+     * @param force ignored, as SQLite has no sessions to end
+     * @return {@code true} if the file existed
+     */
+    @Override
+    public boolean dropDatabaseIfExists(Connection connection, String name, boolean force) {
+        return SQLiteDatabaseFiles.dropIfExists(name);
     }
 }

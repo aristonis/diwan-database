@@ -26,6 +26,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Blueprint.comment(text)`, a table comment on PostgreSQL. SQLite skips it without an error.
 - `Blueprint.foreignIdFor(ForeignKeySource)` and `foreignIdFor(ForeignKeySource, column)`, which add the column for another table's key, typed by the key kind; `constrained()` then references the key's table and column.
 - `ForeignKeySource`, the interface that describes another table's key, with `KeyKind` (`INTEGER`, `UUID`, `ULID`), and `ModelKeys.of(...)` in the eloquent module, which builds one from a model.
+- `Schema.createDatabase(name)`, `createDatabase(name, template)` and `createDatabase(name, template, CopyStrategy)`, and `dropDatabaseIfExists(name)` and `dropDatabaseIfExists(name, force)`, on PostgreSQL and SQLite. `CopyStrategy` (`FILE_COPY`, `WAL_LOG`) picks how PostgreSQL 15 and later copy a template; `force` needs PostgreSQL 13 and later. On SQLite a name is a file path, and the template is a file that is copied.
+- `RefreshDatabase.template(DataSource, Function<String, DatabaseManager>, Function<Connection, Schema>, List<Migration>)`, template mode: each test gets its own copy of a migrated template, so it may commit and run in parallel. The options `strategy(CopyStrategy)` and `dropStaleTemplates()` (PostgreSQL) and `directory(Path)` (SQLite, required there) tune it. PostgreSQL and SQLite file databases are supported; in-memory SQLite and Android are not yet.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.

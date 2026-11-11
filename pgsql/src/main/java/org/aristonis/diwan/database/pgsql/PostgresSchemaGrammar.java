@@ -9,6 +9,7 @@ import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnType;
+import org.aristonis.diwan.database.schema.CopyStrategy;
 import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
@@ -726,5 +727,43 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private static StringBuilder separate(StringBuilder sql) {
         return sql.length() > 0 ? sql.append(", ") : sql;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Sends no encoding clause; the database takes its template's encoding.
+     */
+    @Override
+    public String compileCreateDatabase(Connection connection, String name, String template, CopyStrategy strategy) {
+        return databaseCommands().compileCreate(connection, name, template, strategy);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Adds {@code with (force)} on PostgreSQL 13 or later and refuses it before.
+     */
+    @Override
+    public String compileDropDatabaseIfExists(Connection connection, String name, boolean force) {
+        return databaseCommands().compileDropIfExists(connection, name, force);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public SchemaQuery compileDatabaseExists(String name) {
+        return PostgresDatabaseCommands.compileExists(name);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean supportsCopyStrategy(Connection connection) {
+        return PostgresDatabaseCommands.supportsCopyStrategy(connection);
+    }
+
+    // Built on use, not in a field: a method reference to wrap taken in the constructor lets this
+    // escape before a subclass is initialised.
+    private PostgresDatabaseCommands databaseCommands() {
+        return new PostgresDatabaseCommands(this::wrap);
     }
 }

@@ -73,7 +73,6 @@ public final class SQLiteConnector implements Connector {
     private static final Logger LOGGER = Logger.getLogger(SQLiteConnector.class.getName());
     private static final String URL_PREFIX = "jdbc:sqlite:";
     private static final String FILE_SCHEME = "file:";
-    private static final String MEMORY = ":memory:";
     private static final String FOREIGN_KEYS = "foreign_keys";
     private static final String BUSY_TIMEOUT = "busy_timeout";
     private static final String TRANSACTION_MODE = "transaction_mode";
@@ -263,9 +262,8 @@ public final class SQLiteConnector implements Connector {
         if (target == null) {
             return false;
         }
-        String lower = target.toLowerCase(Locale.ROOT);
-        return lower.isEmpty() || MEMORY.equals(lower) || "file::memory:".equals(lower)
-                || url.toLowerCase(Locale.ROOT).contains("mode=memory");
+        // The target is the part before the query; the query can carry mode=memory of a file: URI.
+        return SQLiteNames.isMemoryTarget(target) || SQLiteNames.isMemoryTarget(url.substring(URL_PREFIX.length()));
     }
 
     // The part of a jdbc:sqlite: URL between the prefix and the query, in its original case; null for another URL.

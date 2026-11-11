@@ -74,6 +74,8 @@ val perJdk = testedOn.map { version ->
         description = "Runs the tests on JDK $version."
         group = "verification"
         useJUnitPlatform()
+        // Command-line -Ddiwan.* switches (for example -Ddiwan.benchmark=true) reach the forked test JVM.
+        providers.systemPropertiesPrefixedBy("diwan.").get().forEach { (key, value) -> systemProperty(key, value) }
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = files(tasks.jar) + sourceSets.test.get().output +
             configurations.testRuntimeClasspath.get()
