@@ -4,10 +4,13 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Statement;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
+import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.migrations.MigrationLock;
 
 /**
@@ -38,6 +41,9 @@ public final class PostgresMigrationLock implements MigrationLock {
     public static final long DEFAULT_WAIT_SECONDS = 60;
 
     private static final long POLL_MILLIS = 200;
+    private static final int MAX_CAUSE_DEPTH = 16;
+    private static final String POOL_HINT =
+            "The migration lock holds one session of this data source; if this is a pool, it may need at least two";
 
     private final DataSource dataSource;
     private final long key;
@@ -162,6 +168,37 @@ public final class PostgresMigrationLock implements MigrationLock {
         if (problem != null) {
             throw new IllegalStateException(problem, cause);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>When this lock holds its session and the failure, or one of its causes, is a lost
+     * connection or a refusal of the pool to give out a connection, the likely reason is a pool of
+     * one session, which the lock takes for itself; a suppressed {@link IllegalStateException} says
+     * so.
+     */
+    @Override
+    public synchronized void explain(RuntimeException failure) {
+        if (held == null) {
+            return;
+        }
+        Throwable cause = failure;
+        for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; depth++) {
+            if (isConnectionTrouble(cause)) {
+                failure.addSuppressed(new IllegalStateException(POOL_HINT));
+                return;
+            }
+            cause = cause.getCause();
+        }
+    }
+
+    private static boolean isConnectionTrouble(Throwable cause) {
+        if (cause instanceof SQLTransientConnectionException) {
+            return true;
+        }
+        return cause instanceof DriverException
+                && ((DriverException) cause).kinds().contains(DriverFailureKind.CONNECTION_LOST);
     }
 
     // Migrations are not bounded by a configured lock_wait: the session waits for no lock timeout.

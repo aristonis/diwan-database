@@ -7,6 +7,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
+### Added
+- Partial indexes: `where`, `whereNull` and `whereNotNull` on the `IndexDefinition` that `index` and `unique` return.
+- Index order and collation: `asc`, `desc` and `collate` on `IndexDefinition`.
+- `IndexInfo.orders()`, `IndexInfo.collations()` and `IndexInfo.where()`.
+- `DiwanError.table()`, the table a failure concerns, where the driver can name it.
+- Schema inspection: `Schema.getColumns` (with `ColumnInfo` and `ColumnGeneration`), `getColumnListing`, `hasColumns`, `getIndexListing` and four `hasIndex` overloads with the `IndexType` filter (`PRIMARY`, `UNIQUE`), on SQLite, PostgreSQL and Android.
+- `OffsetTime` as a binding on every driver (SQLite and Android store it as UTC text, `HH:mm:ss+00:00`) and as a cursor value, so cursor pagination works on a PostgreSQL `timetz` column.
+- `DriverCapability.ERROR_ABORTS_TRANSACTION`, declared by the PostgreSQL driver for a driver whose failed statement aborts the transaction.
+- PostgreSQL `timezone` connection option (for example `UTC`), off by default: sets the session time zone. Use it, or a `timestamptz` column, when `Instant` values go into plain `timestamp` columns.
+- `FileMigrationLock`, a `MigrationLock` that locks a `<database>.migrate.lock` file beside a file database.
+- SQLite and Android connectors lock file databases during migrations, so two processes do not migrate one file at once. The `lock_wait` option sets the wait, 60 seconds by default; in-memory databases have no lock.
+- `MigrationLock.explain(RuntimeException)`, a default method a lock uses to add a note to a failed run.
+- `QueryFactory.restartIdentities(tables)`, which sets the identity and `serial` counters of PostgreSQL tables to the value after the highest committed id, or to the start value of an empty table. SQLite and Android do nothing. Needs PostgreSQL 10 or later.
+- `RefreshDatabase.rollback(...).restartingIdentities()`, which restarts those counters before each test, so rollback-mode tests get the same ids on every run. Refused with parallel tests and in truncate mode.
+- `Blueprint.temporary()`, which makes `schema.create` write `create temporary table` on SQLite and PostgreSQL. A temporary table lives on one connection; on SQLite a change that needs a table rebuild is refused with `IllegalStateException`; plain additions work.
+- `Blueprint.rawIndex(expression, name)`, an index over a raw SQL expression such as `lower(email)`, which returns an `IndexDefinition` so `where` can make it partial. The expression is written as given, so it must never come from user input. SQLite table rebuilds keep the index.
+- `Blueprint.comment(text)`, a table comment on PostgreSQL. SQLite skips it without an error.
+- `Blueprint.foreignIdFor(ForeignKeySource)` and `foreignIdFor(ForeignKeySource, column)`, which add the column for another table's key, typed by the key kind; `constrained()` then references the key's table and column.
+- `ForeignKeySource`, the interface that describes another table's key, with `KeyKind` (`INTEGER`, `UUID`, `ULID`), and `ModelKeys.of(...)` in the eloquent module, which builds one from a model.
+- `Schema.createDatabase(name)`, `createDatabase(name, template)` and `createDatabase(name, template, CopyStrategy)`, and `dropDatabaseIfExists(name)` and `dropDatabaseIfExists(name, force)`, on PostgreSQL and SQLite. `CopyStrategy` (`FILE_COPY`, `WAL_LOG`) picks how PostgreSQL 15 and later copy a template; `force` needs PostgreSQL 13 and later. On SQLite a name is a file path, and the template is a file that is copied.
+- `RefreshDatabase.template(DataSource, Function<String, DatabaseManager>, Function<Connection, Schema>, List<Migration>)`, template mode: each test gets its own copy of a migrated template, so it may commit and run in parallel. The options `strategy(CopyStrategy)` and `dropStaleTemplates()` (PostgreSQL) and `directory(Path)` (SQLite, required there) tune it. PostgreSQL and SQLite file databases are supported; in-memory SQLite and Android are not yet.
+
+### Changed
+- `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.
+- PostgreSQL: after a failed statement, the next statement, commit or savepoint release in the same transaction is refused with a clear `IllegalStateException` ("The transaction was aborted by a failed statement; roll back (or roll back to the savepoint) first", the first failure as cause) instead of server error 25P02. Rolling back to a savepoint clears it.
+- PostgreSQL: when a pool is too small for the migration lock and the migrator, a failed run says the pool needs two sessions, in a suppressed note on the error.
+
+### Fixed
+- Android: a commit that fails on a deferred foreign key now rolls back instead of leaving the transaction open.
+- PostgreSQL: reading `NaN` or `Infinity` from a `numeric` column now fails with an error that names the column and never shows the value; `float` columns still return `NaN`.
+
+### Internal
+- Large classes split by responsibility (schema grammars, JDBC session, SQLite table state); public API unchanged. New `codeSize` task lists main files over 500 code lines.
+
 ## [0.3.1] - 2026-11-09
 
 ### Fixed
@@ -309,7 +345,8 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
-[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aristonis/diwan-database/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/aristonis/diwan-database/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aristonis/diwan-database/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aristonis/diwan-database/compare/v0.1.0...v0.2.0

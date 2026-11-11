@@ -18,6 +18,10 @@ class ConstraintDetailsTest {
         public String getColumn() {
             return "email";
         }
+
+        public String getTable() {
+            return "users";
+        }
     }
 
     /** Stands in for the PostgreSQL driver's exception. */
@@ -93,6 +97,23 @@ class ConstraintDetailsTest {
 
         assertEquals("users_email_unique", details.key().orElseThrow());
         assertEquals(Arrays.asList("email"), details.columns());
+    }
+
+    @Test
+    void postgresReadsTheTableOnBothPaths() {
+        assertEquals("users", ConstraintDetails.postgres(new FakeSqlException()).table().orElseThrow());
+        assertEquals("users", ConstraintDetails.postgres(new FakeSqlException(), true).table().orElseThrow());
+    }
+
+    @Test
+    void sqliteTableIsReadOnlyWhenOneTableIsNamed() {
+        assertEquals("users", ConstraintDetails.sqlite("UNIQUE constraint failed: users.email").table().orElseThrow());
+        assertEquals("users",
+                ConstraintDetails.sqlite("UNIQUE constraint failed: users.a, users.b").table().orElseThrow());
+        assertFalse(ConstraintDetails.sqlite("UNIQUE constraint failed: users.a, other.b").table().isPresent());
+        assertFalse(ConstraintDetails.sqlite("FOREIGN KEY constraint failed").table().isPresent());
+        assertFalse(ConstraintDetails.sqlite("CHECK constraint failed: x").table().isPresent());
+        assertFalse(ConstraintDetails.sqlite(null).table().isPresent());
     }
 
     @Test

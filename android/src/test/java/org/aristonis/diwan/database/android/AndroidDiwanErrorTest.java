@@ -39,6 +39,7 @@ public class AndroidDiwanErrorTest {
         assertEquals("DWN-CST-0001", error.code());
         assertFalse(error.key().isPresent());
         assertEquals(Arrays.asList("email"), error.columns());
+        assertEquals("u", error.table().orElseThrow());
         assertFalse(failure.getMessage().contains("secret@example.com"));
         database.close();
     }

@@ -1,16 +1,20 @@
 package org.aristonis.diwan.database.testing;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import javax.sql.DataSource;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionScope;
+import org.aristonis.diwan.database.manager.DatabaseManager;
 import org.aristonis.diwan.database.migrations.DatabaseMigrationRepository;
 import org.aristonis.diwan.database.migrations.Migration;
 import org.aristonis.diwan.database.migrations.Migrator;
 import org.aristonis.diwan.database.query.QueryFactory;
+import org.aristonis.diwan.database.schema.CopyStrategy;
 import org.aristonis.diwan.database.schema.Schema;
 import org.aristonis.diwan.database.schema.TableInfo;
 import org.junit.jupiter.api.extension.AfterEachCallback;
@@ -34,7 +38,7 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  * every class of the run. The migration list is compared by migration class and name, so editing the
  * body of a migration within one run is not noticed.
  *
- * <p>Two modes decide how a test's data is removed:
+ * <p>Three modes decide how a test's data is removed:
  * <ul>
  *   <li>{@link #rollback} opens a transaction before each test and rolls it back after. Calls the
  *       test makes through the root connection from its own thread run inside that transaction,
@@ -43,6 +47,13 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  *       nothing commits. Work done on other threads, such as threads or executors the test starts, or
  *       a test under {@code @Timeout(threadMode = SEPARATE_THREAD)}, is not part of the transaction
  *       and commits for real. Tests may run in parallel, one transaction per test thread.
+ *       Sequences are not rolled back, so on PostgreSQL the ids a test gets depend on the tests
+ *       that ran before it. {@link #restartingIdentities()} sets them back before each test, to the
+ *       value after the highest committed id: rows a migration or a seeder committed are kept, so
+ *       the first new row gets the id after them, and the same ids every time. It needs
+ *       PostgreSQL 10 or later, does nothing on SQLite, whose rollback already restores its
+ *       counters, and refuses parallel tests, which share the sequences; Gradle forks that use
+ *       one database are not detected, so give each fork its own database.
  *   <li>{@link #truncate} lets the test commit for real and empties every table except the
  *       migrations table after it, in one {@link QueryFactory#truncate(List)} call, so identities
  *       restart. Slower, but afterCommit callbacks run and other threads see the data. Internal
@@ -52,6 +63,16 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  *       must not run in parallel in this mode: it fails with an {@link IllegalStateException}
  *       under {@link ExecutionMode#CONCURRENT}; use rollback mode, or
  *       {@code @Execution(ExecutionMode.SAME_THREAD)}.
+ *   <li>{@link #template(DataSource, Function, Function, List)} gives every test its own database,
+ *       a copy of a template that holds the migrated schema. The migrations run once per migration list, into a template database that
+ *       later runs reuse; each test copies it, and the copy is dropped after the test. The test
+ *       may commit, use other threads and run in parallel, and sequences start over. It needs
+ *       PostgreSQL, where the role can create databases, or SQLite with {@link #directory(Path)};
+ *       an in-memory SQLite database is refused. The extension holds one connection on the root data
+ *       source for the whole run, so give it a plain driver data source or a pool in session mode.
+ *       {@link #strategy(CopyStrategy)}, {@link #directory(Path)} and
+ *       {@link #dropStaleTemplates()} tune it. The parameters below come from the test's own
+ *       database.
  * </ul>
  *
  * <p>Register it in a field of the test class, static or not:
@@ -82,10 +103,10 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 public final class RefreshDatabase
         implements BeforeAllCallback, BeforeEachCallback, AfterEachCallback, ParameterResolver {
 
-    private static final Namespace NAMESPACE = Namespace.create(RefreshDatabase.class);
+    static final Namespace NAMESPACE = Namespace.create(RefreshDatabase.class);
 
     /** Serialises the check-then-migrate step, so two classes running in parallel migrate once. */
-    private static final Object MIGRATION_LOCK = new Object();
+    static final Object MIGRATION_LOCK = new Object();
 
     private static final String SCOPE = "scope";
     private static final String READY = "ready";
@@ -94,21 +115,26 @@ public final class RefreshDatabase
 
     private enum Mode {
         ROLLBACK,
-        TRUNCATE
+        TRUNCATE,
+        TEMPLATE
     }
 
     private final Mode mode;
+    private final boolean isRestartingIdentities;
     private final Supplier<QueryFactory> db;
     private final Function<Connection, Schema> schema;
     private final List<Migration> migrations;
+    private final TemplateSettings template;
 
     /** Per-instance state of one test: the open scope, and whether its set-up finished. */
     private final Namespace own = Namespace.create(RefreshDatabase.class, this);
 
-    private RefreshDatabase(Mode mode, Supplier<QueryFactory> db, Function<Connection, Schema> schema,
-            List<Migration> migrations) {
+    private RefreshDatabase(Mode mode, boolean isRestartingIdentities, Supplier<QueryFactory> db,
+            Function<Connection, Schema> schema, List<Migration> migrations, TemplateSettings template) {
         this.mode = mode;
-        this.db = Objects.requireNonNull(db, "db");
+        this.isRestartingIdentities = isRestartingIdentities;
+        this.template = template;
+        this.db = mode == Mode.TEMPLATE ? db : Objects.requireNonNull(db, "db");
         this.schema = Objects.requireNonNull(schema, "schema");
         this.migrations = new ArrayList<>(Objects.requireNonNull(migrations, "migrations"));
         for (Migration migration : this.migrations) {
@@ -129,7 +155,7 @@ public final class RefreshDatabase
      */
     public static RefreshDatabase rollback(Supplier<QueryFactory> db, Function<Connection, Schema> schema,
             List<Migration> migrations) {
-        return new RefreshDatabase(Mode.ROLLBACK, db, schema, migrations);
+        return new RefreshDatabase(Mode.ROLLBACK, false, db, schema, migrations, null);
     }
 
     /**
@@ -145,29 +171,161 @@ public final class RefreshDatabase
      */
     public static RefreshDatabase truncate(Supplier<QueryFactory> db, Function<Connection, Schema> schema,
             List<Migration> migrations) {
-        return new RefreshDatabase(Mode.TRUNCATE, db, schema, migrations);
+        return new RefreshDatabase(Mode.TRUNCATE, false, db, schema, migrations, null);
+    }
+
+    /**
+     * Creates an extension that gives every test its own copy of a migrated template database.
+     *
+     * <p>The template is named after the migration list, class, name and checksum of each
+     * migration in order, so a run with the same list reuses the template an earlier run built, and
+     * a changed list builds a new one; older templates stay unless {@link #dropStaleTemplates()} is
+     * set. Runs that start together, in this or in other JVMs, build it once. Copies and build
+     * databases that a run which died left behind are removed at the start of the next run.
+     *
+     * @param root the data source of the server that holds the databases, never {@code null}; the
+     *     extension takes one connection from it and holds it until the run ends
+     * @param perDatabase opens a manager on the database of the given name, never {@code null}; the
+     *     extension closes it after each test and after migrating the template. On SQLite the name is
+     *     the path of the file to open. It must not keep a session open on the template
+     * @param schema builds the schema builder for a connection, never {@code null}
+     * @param migrations the migrations that build the test schema, never {@code null}, without
+     *     {@code null} elements; copied
+     * @return the extension, never {@code null}
+     * @throws NullPointerException if an argument or an element is {@code null}
+     */
+    public static RefreshDatabase template(DataSource root, Function<String, DatabaseManager> perDatabase,
+            Function<Connection, Schema> schema, List<Migration> migrations) {
+        TemplateSettings settings = TemplateSettings.of(root, perDatabase, schema, migrations);
+        return new RefreshDatabase(Mode.TEMPLATE, false, null, schema, migrations, settings);
+    }
+
+    /**
+     * Returns an extension like this one that sends a copy strategy when it creates each copy.
+     *
+     * <p>Without it, PostgreSQL 15 or later gets {@code FILE_COPY} and older servers get none. An
+     * explicit strategy on a server older than 15 fails with an
+     * {@link UnsupportedOperationException} when the first copy is made.
+     *
+     * @param strategy the strategy, never {@code null}
+     * @return a new extension with the option set; this one is not changed, never {@code null}
+     * @throws NullPointerException if {@code strategy} is {@code null}
+     * @throws IllegalStateException if this extension is not in template mode
+     */
+    public RefreshDatabase strategy(CopyStrategy strategy) {
+        Objects.requireNonNull(strategy, "strategy");
+        return withTemplate("strategy", template == null ? null : template.withStrategy(strategy));
+    }
+
+    /**
+     * Returns an extension like this one that keeps its SQLite template and copies as files in a
+     * directory.
+     *
+     * @param directory the directory of the template and the copies, never {@code null}; the name
+     *     {@code perDatabase} receives is the path of a file in it
+     * @return a new extension with the option set; this one is not changed, never {@code null}
+     * @throws NullPointerException if {@code directory} is {@code null}
+     * @throws IllegalStateException if this extension is not in template mode
+     */
+    public RefreshDatabase directory(Path directory) {
+        Objects.requireNonNull(directory, "directory");
+        return withTemplate("directory", template == null ? null : template.withDirectory(directory));
+    }
+
+    /**
+     * Returns an extension like this one that also drops the templates of other migration lists at
+     * the start of a run.
+     *
+     * <p>Without it older templates stay on the server or in the directory. On PostgreSQL a template
+     * that another live run is copying from cannot be dropped; the refusal is logged and the run goes
+     * on. On SQLite the other templates' files are deleted with their side and lock files, except a
+     * template whose build lock another holder has.
+     *
+     * @return a new extension with the option set; this one is not changed, never {@code null}
+     * @throws IllegalStateException if this extension is not in template mode
+     */
+    public RefreshDatabase dropStaleTemplates() {
+        return withTemplate("dropStaleTemplates", template == null ? null : template.withDroppingStale());
+    }
+
+    /** Swaps the engine-specific copies of template mode; tests run the extension with a fake engine. */
+    RefreshDatabase withCopies(TemplateCopies.Factory copies) {
+        return withTemplate("withCopies", template == null ? null : template.withCopies(copies));
+    }
+
+    private RefreshDatabase withTemplate(String option, TemplateSettings changed) {
+        if (mode != Mode.TEMPLATE) {
+            throw new IllegalStateException(option + "() applies to template mode");
+        }
+        return new RefreshDatabase(mode, false, db, schema, migrations, changed);
+    }
+
+    /**
+     * Returns an extension like this one that also sets the identity and serial counters back
+     * before each test, so the test sees the ids it would see on a freshly migrated database.
+     *
+     * <p>Only rollback mode needs it: a rollback leaves the PostgreSQL sequences where the test
+     * moved them, while truncate mode restarts them already. Before each test, after the migrations
+     * ran and before the test's transaction opens, the counters of the tables the extension owns
+     * are set to the value after the highest committed id, or to the start value of an empty
+     * table; see {@link QueryFactory#restartIdentities(List)}. The table list is read once per run,
+     * right after the migrations, so a table a test creates later is not restarted. This needs
+     * PostgreSQL 10 or later and does nothing on SQLite. Tests must not run in parallel with this
+     * option: they share the sequences, and the extension fails with an
+     * {@link IllegalStateException} under {@link ExecutionMode#CONCURRENT}. The check sees one
+     * JVM, so Gradle forks that use one database are not caught.
+     *
+     * @return a new extension with the option on; this one is not changed, never {@code null}
+     * @throws IllegalStateException if this extension is in truncate mode, which restarts identities
+     *     already, or in template mode, where every test starts on a fresh copy
+     */
+    public RefreshDatabase restartingIdentities() {
+        if (mode == Mode.TRUNCATE) {
+            throw new IllegalStateException("Truncate mode already restarts identities");
+        }
+        if (mode == Mode.TEMPLATE) {
+            throw new IllegalStateException("Template mode starts every test on a fresh copy");
+        }
+        return new RefreshDatabase(mode, true, db, schema, migrations, null);
     }
 
     @Override
     public void beforeAll(ExtensionContext context) {
-        refuseParallelTruncate(context);
+        if (mode == Mode.TEMPLATE) {
+            TemplateDatabases.beforeAll(context, template);
+            return;
+        }
+        refuseParallel(context);
         migrateOnce(context);
     }
 
     @Override
     public void beforeEach(ExtensionContext context) {
-        refuseParallelTruncate(context);
+        if (mode == Mode.TEMPLATE) {
+            TemplateDatabases.beforeEach(context, context.getStore(own), template);
+            return;
+        }
+        refuseParallel(context);
         // A non-static registration never gets beforeAll; the check is cheap once migrated.
         migrateOnce(context);
         ExtensionContext.Store store = context.getStore(own);
         if (mode == Mode.ROLLBACK) {
-            store.put(SCOPE, db.get().connection().beginJoinedTransaction());
+            QueryFactory factory = db.get();
+            if (isRestartingIdentities) {
+                // Before the transaction opens, so a failure leaves no scope behind.
+                factory.restartIdentities(ownTables(context, factory.connection()));
+            }
+            store.put(SCOPE, factory.connection().beginJoinedTransaction());
         }
         store.put(READY, Boolean.TRUE);
     }
 
     @Override
     public void afterEach(ExtensionContext context) {
+        if (mode == Mode.TEMPLATE) {
+            TemplateDatabases.afterEach(context.getStore(own));
+            return;
+        }
         ExtensionContext.Store store = context.getStore(own);
         boolean isReady = store.remove(READY, Boolean.class) != null;
         if (mode == Mode.ROLLBACK) {
@@ -182,13 +340,20 @@ public final class RefreshDatabase
             return;
         }
         QueryFactory factory = db.get();
-        factory.truncate(tablesToEmpty(context, factory.connection()));
+        factory.truncate(ownTables(context, factory.connection()));
     }
 
-    private void refuseParallelTruncate(ExtensionContext context) {
-        if (mode == Mode.TRUNCATE && isRunningInParallel(context)) {
+    private void refuseParallel(ExtensionContext context) {
+        if (!isRunningInParallel(context)) {
+            return;
+        }
+        if (mode == Mode.TRUNCATE) {
             throw new IllegalStateException("Truncate mode cannot run tests in parallel: one test would empty the"
                     + " tables under another. Use rollback mode, or @Execution(ExecutionMode.SAME_THREAD)");
+        }
+        if (isRestartingIdentities) {
+            throw new IllegalStateException("restartingIdentities() cannot run tests in parallel: tests share the"
+                    + " sequences. Use @Execution(ExecutionMode.SAME_THREAD)");
         }
     }
 
@@ -201,7 +366,7 @@ public final class RefreshDatabase
     @Override
     public Object resolveParameter(ParameterContext parameter, ExtensionContext context) {
         Class<?> type = parameter.getParameter().getType();
-        QueryFactory factory = db.get();
+        QueryFactory factory = mode == Mode.TEMPLATE ? TemplateDatabases.queryOf(context.getStore(own)) : db.get();
         if (type == DatabaseAssertions.class) {
             return DatabaseAssertions.of(factory);
         }
@@ -222,7 +387,7 @@ public final class RefreshDatabase
         return isEnabled && context.getExecutionMode() == ExecutionMode.CONCURRENT;
     }
 
-    private List<String> tablesToEmpty(ExtensionContext context, Connection connection) {
+    private List<String> ownTables(ExtensionContext context, Connection connection) {
         // get and put under a lock, not getOrComputeIfAbsent: that is deprecated in JUnit 6 and its
         // replacement is missing from the JUnit 5.10 this module supports.
         ExtensionContext.Store store = context.getRoot().getStore(NAMESPACE);
@@ -268,7 +433,7 @@ public final class RefreshDatabase
 
     private void migrateOnce(ExtensionContext context) {
         Connection connection = db.get().connection();
-        String signature = signature();
+        String signature = TemplateName.signature(migrations);
         RunKey key = new RunKey(connection, MIGRATED);
         ExtensionContext.Store store = context.getRoot().getStore(NAMESPACE);
         synchronized (MIGRATION_LOCK) {
@@ -281,39 +446,14 @@ public final class RefreshDatabase
                         + " this run with a different migration list; migrating again would drop the tables of the"
                         + " classes that ran before. Use one migration list per database in a run");
             }
-            Migrator.builder(schema.apply(connection)).migrations(migrations).build().fresh();
+            migrate(schema, migrations, connection);
             store.put(key, signature);
         }
     }
 
-    private String signature() {
-        StringBuilder signature = new StringBuilder();
-        for (Migration migration : migrations) {
-            signature.append(migration.getClass().getName()).append('#').append(migration.name()).append(';');
-        }
-        return signature.toString();
-    }
-
-    /** A root-store key: one connection instance, by identity, and what is recorded for it. */
-    private static final class RunKey {
-        private final Connection connection;
-        private final String kind;
-
-        RunKey(Connection connection, String kind) {
-            this.connection = connection;
-            this.kind = kind;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof RunKey && ((RunKey) other).connection == connection
-                    && ((RunKey) other).kind.equals(kind);
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(connection) * 31 + kind.hashCode();
-        }
+    /** Runs every migration from scratch on the database behind a connection. */
+    static void migrate(Function<Connection, Schema> schema, List<Migration> migrations, Connection connection) {
+        Migrator.builder(schema.apply(connection)).migrations(migrations).build().fresh();
     }
 
     /** The tables to empty, kept in the root store. */

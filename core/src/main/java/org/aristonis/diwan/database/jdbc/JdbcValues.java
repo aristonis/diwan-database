@@ -61,7 +61,8 @@ final class JdbcValues {
         }
     }
 
-    // Android lacks the java.time getters of java.sql types, so convert through their JDBC escape text.
+    // The fallback for drivers without typed getters (Android lacks the java.time getters of java.sql
+    // types): convert through their JDBC escape text. JdbcColumns reads typed values where it can.
     private static Object readTemporal(Object value) {
         if (value instanceof Timestamp) {
             return LocalDateTime.parse(value.toString().replace(' ', 'T'));

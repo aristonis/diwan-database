@@ -43,6 +43,7 @@ abstract class BlueprintState {
 
     // Holds a requested index name until the blueprint is checked; never reaches a grammar.
     static final String REQUESTED = "requestedName";
+    static final String DEFINITION = "indexDefinition";
 
     final String table;
     final String prefix;
@@ -50,6 +51,7 @@ abstract class BlueprintState {
     final List<ColumnDefinition> columns = new ArrayList<>();
     final List<Command> commands = new ArrayList<>();
     boolean isPrepared;
+    boolean isTemporary;
 
     /** The blueprint itself, typed as the public class. */
     abstract Blueprint self();
@@ -76,6 +78,15 @@ abstract class BlueprintState {
      */
     public boolean isCreating() {
         return isCreating;
+    }
+
+    /**
+     * Tells whether the table is created as a temporary table.
+     *
+     * @return {@code true} once {@link Blueprint#temporary()} was called
+     */
+    public boolean isTemporary() {
+        return isTemporary;
     }
 
     /**

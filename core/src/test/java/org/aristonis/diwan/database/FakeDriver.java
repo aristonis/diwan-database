@@ -34,6 +34,8 @@ final class FakeDriver implements Driver {
     private DriverException beginFailure;
     private RuntimeException closeFailure;
     private DriverException rollbackFailure;
+    private DriverException savepointFailure;
+    private String savepointFailureName;
     private Error rollbackError;
     private int concurrencyFailuresLeft;
     private String concurrencyFailureSql;
@@ -112,6 +114,19 @@ final class FakeDriver implements Driver {
 
     FakeDriver failsToClose(RuntimeException failure) {
         closeFailure = failure;
+        return this;
+    }
+
+    /** Behaves like PostgreSQL: a failed statement aborts the transaction until a rollback. */
+    FakeDriver abortsTransactionsOnError() {
+        capabilities.add(DriverCapability.ERROR_ABORTS_TRANSACTION);
+        return this;
+    }
+
+    /** Makes the savepoint of the given name fail to start. */
+    FakeDriver failsToSavepoint(String name, DriverException failure) {
+        savepointFailureName = name;
+        savepointFailure = failure;
         return this;
     }
 
@@ -294,6 +309,10 @@ final class FakeDriver implements Driver {
 
         @Override
         public void savepoint(String name) {
+            if (savepointFailure != null && name.equals(savepointFailureName)) {
+                calls.add("savepoint-failed " + name);
+                throw savepointFailure;
+            }
             if (!savepoints.add(name)) {
                 throw new AssertionError("savepoint name reused in one session: " + name);
             }

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -22,7 +23,7 @@ public final class Bindings {
     private static final Set<Class<?>> SUPPORTED_TYPES = Collections.unmodifiableSet(new HashSet<Class<?>>(
             Arrays.<Class<?>>asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class,
                     Double.class, BigDecimal.class, BigInteger.class, String.class, byte[].class, LocalDate.class,
-                    LocalTime.class, LocalDateTime.class, OffsetDateTime.class, Instant.class)));
+                    LocalTime.class, LocalDateTime.class, OffsetDateTime.class, OffsetTime.class, Instant.class)));
 
     private Bindings() {
     }

@@ -460,20 +460,7 @@ public final class Migrator {
     }
 
     private <T> T locked(Supplier<T> work) {
-        lock.acquire();
-        T results;
-        try {
-            results = work.get();
-        } catch (RuntimeException | Error failure) {
-            try {
-                lock.release();
-            } catch (RuntimeException releaseFailure) {
-                failure.addSuppressed(releaseFailure);
-            }
-            throw failure;
-        }
-        lock.release();
-        return results;
+        return LockedCall.run(lock, work);
     }
 
     private List<MigrationResult> rollBack(List<MigrationEntry> entries) {

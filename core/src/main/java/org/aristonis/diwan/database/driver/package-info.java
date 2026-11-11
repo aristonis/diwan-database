@@ -19,7 +19,8 @@
  * {@link java.lang.Float}, {@link java.lang.Double}, {@link java.math.BigDecimal},
  * {@link java.math.BigInteger}, {@link java.lang.String}, {@code byte[]},
  * {@link java.time.LocalDate}, {@link java.time.LocalTime}, {@link java.time.LocalDateTime},
- * {@link java.time.OffsetDateTime} and {@link java.time.Instant} as a binding. The bindings list is
+ * {@link java.time.OffsetDateTime}, {@link java.time.OffsetTime} and {@link java.time.Instant} as a
+ * binding. The bindings list is
  * read-only to the driver, and the driver must not keep a reference to it after the call returns.
  *
  * <p>Returned values: a driver may return {@code null} for SQL {@code NULL} and otherwise only a

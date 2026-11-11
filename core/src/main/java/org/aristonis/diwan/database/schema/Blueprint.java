@@ -16,6 +16,8 @@ import java.util.Locale;
 
 import java.util.Map;
 
+import java.util.Objects;
+
 import java.util.Set;
 
 /**
@@ -36,6 +38,85 @@ public final class Blueprint extends BlueprintHelpers {
     @Override
     Blueprint self() {
         return this;
+    }
+
+    /**
+     * Makes the table a temporary table, which the database drops when the connection closes.
+     *
+     * @apiNote A temporary table lives on one connection: use it inside a transaction, or on a
+     *     database that keeps a single connection.
+     * @throws IllegalStateException if the blueprint changes an existing table, or can no longer
+     *     be changed
+     */
+    public void temporary() {
+        ensureOpen();
+        if (!isCreating) {
+            throw new IllegalStateException("temporary() applies only to Schema.create; table " + table
+                    + " already exists");
+        }
+        isTemporary = true;
+    }
+
+    /**
+     * Sets the comment of the table, on create or on change.
+     *
+     * @apiNote A grammar without table comments, such as SQLite's, writes nothing.
+     * @param text the comment, never {@code null}; empty removes the comment where the database
+     *     supports one
+     * @throws NullPointerException if {@code text} is {@code null}
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public void comment(String text) {
+        ensureOpen();
+        commands.add(new Command(Command.TABLE_COMMENT, single(Command.COMMENT, Objects.requireNonNull(text, "text"))));
+    }
+
+    /**
+     * Adds the foreign column for a key, named by the source's {@link ForeignKeySource#foreignKey()}.
+     *
+     * @param source the key the column points at, never {@code null}
+     * @return the column definition; {@link ForeignIdColumnDefinition#constrained()} adds the key
+     *     to the source's table, never {@code null}
+     * @throws NullPointerException if {@code source} or one of its values is {@code null}
+     * @throws IllegalArgumentException if a name is empty or has a control character
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ForeignIdColumnDefinition foreignIdFor(ForeignKeySource source) {
+        return foreignIdFor(source, null);
+    }
+
+    /**
+     * Adds the foreign column for a key, as {@link #foreignIdFor(ForeignKeySource)} does, under a
+     * chosen name. The column is an unsigned big integer, a UUID or a 26-character column by the
+     * source's {@link ForeignKeySource#keyKind()}; no foreign key is added until
+     * {@link ForeignIdColumnDefinition#constrained()} is called.
+     *
+     * @param source the key the column points at, never {@code null}
+     * @param column the column name; {@code null} means the source's foreign key name
+     * @return the column definition, never {@code null}
+     * @throws NullPointerException if {@code source} or one of its values is {@code null}
+     * @throws IllegalArgumentException if a name is empty or has a control character
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public ForeignIdColumnDefinition foreignIdFor(ForeignKeySource source, String column) {
+        Objects.requireNonNull(source, "source");
+        String name = column != null ? column : Objects.requireNonNull(source.foreignKey(), "foreignKey");
+        String sourceTable = Objects.requireNonNull(source.table(), "table");
+        String sourceKey = Objects.requireNonNull(source.keyName(), "keyName");
+        ForeignIdColumnDefinition definition;
+        switch (Objects.requireNonNull(source.keyKind(), "keyKind")) {
+            case INTEGER:
+                definition = foreignId(name);
+                break;
+            case ULID:
+                definition = foreignUlid(name);
+                break;
+            default:
+                definition = foreignUuid(name);
+                break;
+        }
+        definition.referencesModel(sourceTable, sourceKey);
+        return definition;
     }
 
     /**
@@ -149,8 +230,9 @@ public final class Blueprint extends BlueprintHelpers {
                 if (command.has(Command.INDEX)) {
                     return command;
                 }
-                return named(command.name(), command.strings(Command.COLUMNS),
+                Command settled = named(command.name(), command.strings(Command.COLUMNS),
                         (String) command.get(REQUESTED).orElse(null), indexes, maxIdentifierLength);
+                return withIndexParts(settled, command);
             case Command.FOREIGN:
                 ForeignKeyDefinition key = command.foreignKey();
                 key.freeze(defaultName("foreign", key.columns()), prefix);
@@ -163,6 +245,32 @@ public final class Blueprint extends BlueprintHelpers {
             default:
                 return command;
         }
+    }
+
+    // Freezes the definition and copies its non-empty parts, and the raw flag, onto the compiled command.
+    private static Command withIndexParts(Command settled, Command original) {
+        Object definitionValue = original.get(DEFINITION).orElse(null);
+        if (!(definitionValue instanceof IndexDefinition)) {
+            return settled;
+        }
+        IndexDefinition definition = (IndexDefinition) definitionValue;
+        definition.freeze();
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.INDEX, settled.string(Command.INDEX));
+        attributes.put(Command.COLUMNS, settled.strings(Command.COLUMNS));
+        if (original.has(Command.RAW)) {
+            attributes.put(Command.RAW, Boolean.TRUE);
+        }
+        if (!definition.conditions().isEmpty()) {
+            attributes.put(Command.WHERE, definition.conditions());
+        }
+        if (!definition.orders().isEmpty()) {
+            attributes.put(Command.ORDERS, definition.orders());
+        }
+        if (!definition.collations().isEmpty()) {
+            attributes.put(Command.COLLATIONS, definition.collations());
+        }
+        return new Command(settled.name(), attributes);
     }
 
     Command named(String type, List<String> columns, String requested, Set<String> indexes,

@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,8 +27,8 @@ import java.util.regex.Pattern;
  * with the name and a string value percent-encoded so neither can carry a tab or a line break. Type
  * letters: {@code s} string, {@code i} long, {@code n} decimal, {@code d} double, {@code b} boolean,
  * {@code z} null, {@code t} instant, {@code l} local date-time, {@code o} offset date-time,
- * {@code u} UUID, {@code a} local date (ISO {@code yyyy-MM-dd}) and {@code c} local time (ISO
- * {@code HH:mm[:ss[.n]]}). No JSON library is needed, and every malformed token fails the same way.
+ * {@code w} offset time (ISO {@code HH:mm[:ss[.n]]+hh:mm}), {@code u} UUID,
+ * {@code a} local date (ISO {@code yyyy-MM-dd}) and {@code c} local time (ISO {@code HH:mm[:ss[.n]]}). No JSON library is needed, and every malformed token fails the same way.
  */
 final class CursorTokens {
 
@@ -150,6 +151,8 @@ final class CursorTokens {
                     return LocalDateTime.parse(text);
                 case 'o':
                     return OffsetDateTime.parse(text);
+                case 'w':
+                    return OffsetTime.parse(text);
                 case 'u':
                     return uuid(text);
                 case 'a':
@@ -238,6 +241,9 @@ final class CursorTokens {
         }
         if (value instanceof OffsetDateTime) {
             return 'o';
+        }
+        if (value instanceof OffsetTime) {
+            return 'w';
         }
         if (value instanceof LocalDate) {
             return 'a';

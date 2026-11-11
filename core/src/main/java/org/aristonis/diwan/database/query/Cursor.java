@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,10 +21,11 @@ import java.util.UUID;
  * <p>A cursor travels to a client and back as the text {@link #encode()} returns, which
  * {@link #decode(String)} reads. Supported values are {@code null}, {@link String},
  * {@link Long}, {@link BigDecimal}, {@link Double}, {@link Boolean}, {@link Instant},
- * {@link LocalDateTime}, {@link OffsetDateTime}, {@link UUID}, {@link LocalDate} and
- * {@link LocalTime}. An {@link Integer}, {@link Short} or {@link Byte} is kept as a {@code Long}, a
- * {@link Float} as a {@code Double}, a {@link java.sql.Timestamp} as an {@code Instant}, a
- * {@link java.sql.Date} as a {@code LocalDate} and a {@link java.sql.Time} as a {@code LocalTime}.
+ * {@link LocalDateTime}, {@link OffsetDateTime}, {@link UUID}, {@link LocalDate},
+ * {@link LocalTime} and {@link OffsetTime}. An {@link Integer}, {@link Short} or {@link Byte} is kept
+ * as a {@code Long}, a {@link Float} as a {@code Double}, a {@link java.sql.Timestamp} as an
+ * {@code Instant}, a {@link java.sql.Date} as a {@code LocalDate} and a {@link java.sql.Time} as a
+ * {@code LocalTime}.
  *
  * <p>The token is not signed or encrypted: a client can read it and forge another one. A forged
  * token can only move the page position, since every value is bound as a parameter and the column

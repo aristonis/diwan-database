@@ -7,11 +7,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
+import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
 import org.aristonis.diwan.database.schema.grammar.Command;
+import org.aristonis.diwan.database.schema.grammar.IndexSql;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
 import org.aristonis.diwan.database.schema.ForeignKeyDefinition;
 import org.aristonis.diwan.database.exception.ForeignKeysOffRequiredException;
@@ -27,6 +30,7 @@ import org.aristonis.diwan.database.exception.ForeignKeysOffRequiredException;
  */
 final class SQLiteTableRebuild {
 
+    private static final String WHERE = " where ";
     private static final String TEMP_PREFIX = "__temp__";
 
     private final SQLiteSchemaGrammar grammar;
@@ -88,8 +92,7 @@ final class SQLiteTableRebuild {
                 break;
             case Command.PLAIN_INDEX:
             case Command.UNIQUE:
-                state.addIndex(command.string(Command.INDEX), command.strings(Command.COLUMNS),
-                        Command.UNIQUE.equals(command.name()));
+                state.addIndex(indexOf(command));
                 inPlace(grammar.compileOne(blueprint, command, connection));
                 break;
             case Command.DROP_INDEX:
@@ -147,6 +150,10 @@ final class SQLiteTableRebuild {
 
     private void renameIndex(String from, String to) {
         SQLiteTableState.Index index = state.requireIndex(from);
+        if (index.rawSql != null) {
+            throw new UnsupportedOperationException("Index " + from + " is on an expression; drop it and add it"
+                    + " again with rawIndex to rename it");
+        }
         index.name = to;
         inPlace(Arrays.asList("drop index " + grammar.quote(from), createIndex(index)));
     }
@@ -288,9 +295,49 @@ final class SQLiteTableRebuild {
         return sql;
     }
 
+    private SQLiteTableState.Index indexOf(Command command) {
+        if (command.has(Command.RAW)) {
+            return new SQLiteTableState.Index(command.string(Command.INDEX),
+                    grammar.compileOne(blueprint, command, connection).get(0));
+        }
+        List<String> columns = new ArrayList<>(command.strings(Command.COLUMNS));
+        Map<String, String> orders = namesOf(command, Command.ORDERS);
+        Map<String, String> collations = namesOf(command, Command.COLLATIONS);
+        List<String> orderList = new ArrayList<>();
+        List<String> collationList = new ArrayList<>();
+        for (String column : columns) {
+            orderList.add("desc".equals(orders.get(column)) ? "desc" : "asc");
+            String collation = collations.get(column);
+            collationList.add(collation == null ? "" : grammar.collationName(Collation.of(collation)));
+        }
+        String where = IndexSql.where(grammar, command);
+        return new SQLiteTableState.Index(command.string(Command.INDEX), columns,
+                Command.UNIQUE.equals(command.name()), orderList, collationList,
+                where.isEmpty() ? null : where.substring(WHERE.length()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> namesOf(Command command, String key) {
+        Object value = command.get(key).orElse(null);
+        return value instanceof Map ? (Map<String, String>) value : Collections.emptyMap();
+    }
+
     private String createIndex(SQLiteTableState.Index index) {
+        if (index.rawSql != null) {
+            return index.rawSql;
+        }
+        StringBuilder parts = new StringBuilder();
+        for (int i = 0; i < index.columns.size(); i++) {
+            separate(parts).append(grammar.quote(index.columns.get(i)));
+            if (!index.collations.get(i).isEmpty()) {
+                parts.append(" collate ").append(grammar.quote(index.collations.get(i)));
+            }
+            if ("desc".equals(index.orders.get(i))) {
+                parts.append(" desc");
+            }
+        }
         return "create " + (index.isUnique ? "unique " : "") + "index " + grammar.quote(index.name) + " on " + table()
-                + " (" + columnize(index.columns) + ")";
+                + " (" + parts + ")" + (index.where == null ? "" : WHERE + index.where);
     }
 
     private String columnize(List<String> names) {

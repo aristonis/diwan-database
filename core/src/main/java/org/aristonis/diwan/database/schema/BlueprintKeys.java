@@ -45,12 +45,13 @@ abstract class BlueprintKeys extends BlueprintState {
      * Adds an index over columns, named {@code <table>_<columns>_index}.
      *
      * @param columns the columns in index order, at least one, never {@code null}
+     * @return the index definition, for a partial index, column order or collation
      * @throws NullPointerException if {@code columns} or a name is {@code null}
      * @throws IllegalArgumentException if no column is given, or a name is invalid or repeated
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
-    public void index(String... columns) {
-        index(list(columns), null);
+    public IndexDefinition index(String... columns) {
+        return index(list(columns), null);
     }
 
     /**
@@ -58,24 +59,26 @@ abstract class BlueprintKeys extends BlueprintState {
      *
      * @param columns the columns in index order, at least one, never {@code null}
      * @param name the index name, or {@code null} for Laravel's default
+     * @return the index definition, for a partial index, column order or collation
      * @throws NullPointerException if {@code columns} or a column name is {@code null}
      * @throws IllegalArgumentException if no column is given, or a name is invalid or repeated
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
-    public void index(List<String> columns, String name) {
-        indexCommand(Command.PLAIN_INDEX, columns, name);
+    public IndexDefinition index(List<String> columns, String name) {
+        return indexCommand(Command.PLAIN_INDEX, columns, name);
     }
 
     /**
      * Adds a unique index over columns, named {@code <table>_<columns>_unique}.
      *
      * @param columns the columns in index order, at least one, never {@code null}
+     * @return the index definition, for a partial index, column order or collation
      * @throws NullPointerException if {@code columns} or a name is {@code null}
      * @throws IllegalArgumentException if no column is given, or a name is invalid or repeated
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
-    public void unique(String... columns) {
-        unique(list(columns), null);
+    public IndexDefinition unique(String... columns) {
+        return unique(list(columns), null);
     }
 
     /**
@@ -83,12 +86,13 @@ abstract class BlueprintKeys extends BlueprintState {
      *
      * @param columns the columns in index order, at least one, never {@code null}
      * @param name the index name, or {@code null} for Laravel's default
+     * @return the index definition, for a partial index, column order or collation
      * @throws NullPointerException if {@code columns} or a column name is {@code null}
      * @throws IllegalArgumentException if no column is given, or a name is invalid or repeated
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
-    public void unique(List<String> columns, String name) {
-        indexCommand(Command.UNIQUE, columns, name);
+    public IndexDefinition unique(List<String> columns, String name) {
+        return indexCommand(Command.UNIQUE, columns, name);
     }
 
     /**
@@ -369,14 +373,55 @@ abstract class BlueprintKeys extends BlueprintState {
         return name.toString().toLowerCase(Locale.ROOT).replace('-', '_').replace('.', '_');
     }
 
-    void indexCommand(String type, List<String> columns, String name) {
+    /**
+     * Adds an index over a raw SQL expression, such as {@code lower(email)}, named by the caller.
+     *
+     * <p>The expression is written into the statement exactly as given, without quoting. Never
+     * build it from user input: it is an SQL injection point.
+     *
+     * @apiNote Put the order and collation inside the expression; {@code desc} and {@code collate}
+     *     on the returned definition are refused. A {@code where} condition makes a partial
+     *     expression index. SQLite refuses to rename a raw index; drop it and add it again.
+     * @param expression the SQL expression, never {@code null} or blank
+     * @param name the index name, never {@code null} or blank
+     * @return the index definition, for a partial index
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if the expression or the name is blank, or the name is
+     *     invalid, repeated or too long
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public IndexDefinition rawIndex(String expression, String name) {
+        ensureOpen();
+        Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(name, "name");
+        if (expression.trim().isEmpty()) {
+            throw new IllegalArgumentException("rawIndex needs an expression");
+        }
+        if (name.trim().isEmpty()) {
+            throw new IllegalArgumentException("rawIndex needs an index name");
+        }
+        IndexDefinition definition = IndexDefinition.raw(expression);
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.COLUMNS, definition.columns());
+        attributes.put(DEFINITION, definition);
+        attributes.put(REQUESTED, SchemaNames.check("index", name));
+        attributes.put(Command.RAW, Boolean.TRUE);
+        commands.add(new Command(Command.PLAIN_INDEX, attributes));
+        return definition;
+    }
+
+    IndexDefinition indexCommand(String type, List<String> columns, String name) {
         ensureOpen();
         Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put(Command.COLUMNS, ForeignKeyDefinition.checkColumns(Objects.requireNonNull(columns, "columns")));
+        List<String> checked = ForeignKeyDefinition.checkColumns(Objects.requireNonNull(columns, "columns"));
+        IndexDefinition definition = new IndexDefinition(checked);
+        attributes.put(Command.COLUMNS, checked);
+        attributes.put(DEFINITION, definition);
         if (name != null) {
             attributes.put(REQUESTED, SchemaNames.check("index", name));
         }
         commands.add(new Command(type, attributes));
+        return definition;
     }
 
     void dropByName(String type, String name) {

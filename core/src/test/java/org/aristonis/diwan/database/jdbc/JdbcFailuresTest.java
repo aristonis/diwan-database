@@ -185,4 +185,49 @@ class JdbcFailuresTest {
         assertEquals(java.util.Arrays.asList("a"), notNull.error().columns());
         assertTrue(notNull.getMessage().endsWith(" [DWN-CST-0004 not null violation (a)]"));
     }
+
+    @Test
+    void mapsPostgresAdminShutdownAndCrashShutdownToConnectionLost() {
+        assertTrue(translate("57P02", 0, "PostgreSQL").kinds().contains(DriverFailureKind.CONNECTION_LOST));
+        assertTrue(translate("57P03", 0, "PostgreSQL").kinds().contains(DriverFailureKind.CONNECTION_LOST));
+    }
+
+    /** Stands in for the PostgreSQL driver's exception, which exposes the server's error message by name. */
+    public static final class ServerSideException extends SQLException {
+
+        private static final long serialVersionUID = 1L;
+
+        private final transient Object serverMessage;
+
+        ServerSideException(String state, Object serverMessage) {
+            super("raw text", state);
+            this.serverMessage = serverMessage;
+        }
+
+        /** Returns the server error message, or {@code null} for a failure the driver raised itself. */
+        public Object getServerErrorMessage() {
+            return serverMessage;
+        }
+    }
+
+    @Test
+    void aPostgresFailureWithoutAServerMessageIsNotFromTheServer() {
+        DriverException failure = JdbcFailures.translate(new ServerSideException("22P02", null), "PostgreSQL");
+
+        assertFalse(failure.isFromServer());
+    }
+
+    @Test
+    void aPostgresFailureWithAServerMessageIsFromTheServer() {
+        DriverException failure = JdbcFailures.translate(new ServerSideException("23505", new Object()),
+                "PostgreSQL");
+
+        assertTrue(failure.isFromServer());
+    }
+
+    @Test
+    void failuresOfOtherDatabasesAreAlwaysFromTheServer() {
+        assertTrue(translate("23505", 0, "SQLite").isFromServer());
+        assertTrue(translate("23505", 0, "MySQL").isFromServer());
+    }
 }

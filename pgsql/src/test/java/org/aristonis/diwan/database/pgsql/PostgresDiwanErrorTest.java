@@ -34,6 +34,7 @@ class PostgresDiwanErrorTest {
         assertEquals("DWN-CST-0001", error.code());
         assertEquals("users_email_unique", error.key().orElseThrow());
         assertTrue(error.columns().isEmpty());
+        assertEquals("users", error.table().orElseThrow());
         assertTrue(failure.getMessage().endsWith("[DWN-CST-0001 unique violation: users_email_unique]"));
     }
 
@@ -53,6 +54,23 @@ class PostgresDiwanErrorTest {
     }
 
     @Test
+    void foreignKeyOnParentDeleteNamesTheChildTable() {
+        Connection db = PostgresServer.newDatabase();
+        db.statement("create table parents (id int primary key)");
+        db.statement("create table kids (parent_id int, constraint kids_parent_fk foreign key (parent_id)"
+                + " references parents (id))");
+        db.insert("insert into parents (id) values (1)");
+        db.insert("insert into kids (parent_id) values (1)");
+
+        QueryException failure = assertThrows(QueryException.class,
+                () -> db.delete("delete from parents where id = ?", 1));
+
+        DiwanError error = errorOf(failure);
+        assertEquals("DWN-CST-0002", error.code());
+        assertEquals("kids", error.table().orElseThrow());
+    }
+
+    @Test
     void check() {
         Connection db = PostgresServer.newDatabase();
         db.statement("create table items (qty int, constraint qty_positive check (qty > 0))");
@@ -63,6 +81,7 @@ class PostgresDiwanErrorTest {
         DiwanError error = errorOf(failure);
         assertEquals("DWN-CST-0003", error.code());
         assertEquals("qty_positive", error.key().orElseThrow());
+        assertEquals("items", error.table().orElseThrow());
     }
 
     @Test
@@ -76,6 +95,7 @@ class PostgresDiwanErrorTest {
         DiwanError error = errorOf(failure);
         assertEquals("DWN-CST-0004", error.code());
         assertEquals(Arrays.asList("name"), error.columns());
+        assertEquals("people", error.table().orElseThrow());
     }
 
     @Test

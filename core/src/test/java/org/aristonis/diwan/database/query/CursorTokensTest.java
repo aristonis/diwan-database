@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -183,6 +184,34 @@ class CursorTokensTest {
         char last = token.charAt(token.length() - 1);
         char changed = alphabet.charAt(alphabet.indexOf(last) ^ 1);
         return token.substring(0, token.length() - 1) + changed;
+    }
+
+    @Test
+    void anOffsetTimeRoundTripsAndANullStillDecodesBesideIt() {
+        OffsetTime time = OffsetTime.of(23, 59, 59, 999_999_000, ZoneOffset.ofHoursMinutes(-3, -30));
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("gap", null);
+        parameters.put("at", time);
+        Cursor cursor = new Cursor(parameters, true);
+
+        Cursor decoded = Cursor.decode(cursor.encode());
+
+        assertEquals(time, decoded.parameter("at"));
+        assertEquals(null, decoded.parameter("gap"));
+        assertEquals(cursor, decoded);
+    }
+
+    @Test
+    void anOldTokenWithANullStillDecodesBesideANewOffsetTimeValue() {
+        Cursor decoded = Cursor.decode(token("d=next\nold\tz\t\nat\tw\t10:15:30+02:00"));
+
+        assertEquals(null, decoded.parameter("old"));
+        assertEquals(OffsetTime.of(10, 15, 30, 0, ZoneOffset.ofHours(2)), decoded.parameter("at"));
+    }
+
+    @Test
+    void aMalformedOffsetTimeIsRefused() {
+        assertThrows(IllegalArgumentException.class, () -> Cursor.decode(token("d=next\nat\tw\t10:15:30")));
     }
 
     @Test

@@ -1,15 +1,15 @@
 package org.aristonis.diwan.database.pgsql;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.Collation;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
+import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnType;
+import org.aristonis.diwan.database.schema.CopyStrategy;
 import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
@@ -18,6 +18,7 @@ import org.aristonis.diwan.database.schema.ForeignKeyInfo;
 import org.aristonis.diwan.database.schema.IndexInfo;
 import org.aristonis.diwan.database.schema.TableInfo;
 import org.aristonis.diwan.database.schema.ViewInfo;
+import org.aristonis.diwan.database.schema.grammar.IndexSql;
 import org.aristonis.diwan.database.schema.grammar.SchemaGrammar;
 import org.aristonis.diwan.database.schema.grammar.SchemaQuery;
 
@@ -32,8 +33,9 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
 
     private static final int MAX_IDENTIFIER_LENGTH = 63;
     private static final int VIRTUAL_COLUMNS_SINCE = 18;
-    private static final String SPATIAL_REF_SYS = "spatial_ref_sys";
     private static final String CURRENT_YEAR = "EXTRACT(YEAR FROM CURRENT_DATE)";
+
+    private final PostgresSchemaInspection inspection = new PostgresSchemaInspection();
 
     /** Creates the grammar. */
     public PostgresSchemaGrammar() {
@@ -54,7 +56,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
         }
         for (ColumnDefinition column : blueprint.columns()) {
             if (column.virtualAs().isPresent()) {
-                String version = String.valueOf(connection.scalar("show server_version").orElse("0"));
+                String version = PostgresVersion.of(connection);
                 if (!DatabaseVersion.atLeast(version, VIRTUAL_COLUMNS_SINCE)) {
                     throw new UnsupportedOperationException("Virtual generated columns need PostgreSQL 18 or later;"
                             + " this database runs " + version + "; use storedAs");
@@ -91,10 +93,14 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     private void addComment(List<String> statements, Blueprint blueprint, ColumnDefinition column) {
         if (column.comment().isPresent()) {
             // An empty comment removes it, as PostgreSQL treats '' and null alike here.
-            String text = column.comment().get();
             statements.add("comment on column " + wrapTable(blueprint.table()) + "." + wrap(column.name()) + " is "
-                    + (text.isEmpty() ? "null" : literal(text)));
+                    + commentValue(column.comment().get()));
         }
+    }
+
+    // The value of a comment statement: null for an empty text, else the quoted literal.
+    private String commentValue(String text) {
+        return text.isEmpty() ? "null" : literal(text);
     }
 
     /**
@@ -130,7 +136,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create table <table> (<columns>, <checks>)}
+     * @return {@code create [temporary] table <table> (<columns>, <checks>)}
      */
     @Override
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
@@ -143,7 +149,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 separate(sql).append(tableCheck(check));
             }
         }
-        return "create table " + wrapTable(blueprint.table()) + " (" + sql + ")";
+        return createTable(blueprint) + " (" + sql + ")";
     }
 
     /**
@@ -216,10 +222,18 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code alter table <table> add constraint <name> unique (<columns>)}
+     * @return {@code alter table <table> add constraint <name> unique (<columns>)}; with a
+     *     condition, an order or a collation, which a constraint cannot hold,
+     *     {@code create unique index <name> on <table> (<columns>) where ...}
      */
     @Override
     protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
+        if (command.get(Command.WHERE).isPresent() || command.get(Command.ORDERS).isPresent()
+                || command.get(Command.COLLATIONS).isPresent()) {
+            return "create unique index " + wrap(command.string(Command.INDEX)) + " on "
+                    + wrapTable(blueprint.table()) + " (" + IndexSql.parts(this, command) + ")"
+                    + IndexSql.where(this, command);
+        }
         return "alter table " + wrapTable(blueprint.table()) + " add constraint " + wrap(command.string(Command.INDEX))
                 + " unique (" + columnize(command.strings(Command.COLUMNS)) + ")";
     }
@@ -227,26 +241,47 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create index <name> on <table> (<columns>)}
+     * @return {@code create index <name> on <table> (<columns>)}, with the order, collation and
+     *     {@code where} the index carries
      */
     @Override
     protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
         return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table()) + " ("
-                + columnize(command.strings(Command.COLUMNS)) + ")";
+                + IndexSql.parts(this, command) + ")" + IndexSql.where(this, command);
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return {@code drop index <name>} for a plain index; a unique index is a constraint, so
-     *     {@code alter table <table> drop constraint <name>}
+     * @return {@code drop index <name>} for a plain index; for a unique one a {@code do} block that
+     *     drops the constraint when the table has one of that name and the index otherwise, since a
+     *     unique index made with a condition is no constraint, and the choice is made when the
+     *     statement runs
      */
     @Override
     protected String compileDropIndex(Blueprint blueprint, Command command, Connection connection) {
+        String name = command.string(Command.INDEX);
         if (Command.DROP_UNIQUE.equals(command.name())) {
-            return dropConstraint(blueprint, command.string(Command.INDEX));
+            String body = "begin if exists (select 1 from pg_constraint where conname = " + quote(name)
+                    + " and conrelid = to_regclass(" + quote(wrapTable(blueprint.table())) + ")) then "
+                    + dropConstraint(blueprint, name) + "; else drop index " + wrap(name) + "; end if; end";
+            String tag = dollarTag(body);
+            return "do " + tag + " " + body + " " + tag;
         }
-        return "drop index " + wrap(command.string(Command.INDEX));
+        return "drop index " + wrap(name);
+    }
+
+    // A name may hold "$$", so the dollar quote takes a tag the body does not contain.
+    private static String dollarTag(String body) {
+        String tag = "$diwan$";
+        for (int i = 1; body.contains(tag); i++) {
+            tag = "$diwan" + i + "$";
+        }
+        return tag;
+    }
+
+    private static String quote(String text) {
+        return "'" + text.replace("'", "''") + "'";
     }
 
     /**
@@ -271,7 +306,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     protected List<String> compileDropPrimary(Blueprint blueprint, Command command, Connection connection) {
         Object name = connection.scalar("select c.conname from pg_constraint c join pg_class t on t.oid = c.conrelid"
-                + " where c.contype = 'p' and t.relname = ? and t.relnamespace = (select oid from pg_namespace where nspname = current_schema())",
+                + " where c.contype = 'p' and " + PostgresSchemaInspection.relationInCurrentSchema("t"),
                 blueprint.table()).orElse(blueprint.table() + "_pkey");
         return Collections.singletonList(dropConstraint(blueprint, name.toString()));
     }
@@ -372,8 +407,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTableExists(Connection connection, String table) {
-        return new SchemaQuery("select count(*) from pg_class where relname = ? and relkind in ('r', 'p')"
-                + " and relnamespace = (select oid from pg_namespace where nspname = current_schema())", Collections.singletonList(table));
+        return inspection.compileTableExists(connection, table);
     }
 
     /**
@@ -384,10 +418,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTables(Connection connection) {
-        return new SchemaQuery("select c.relname as name, n.nspname as schema from pg_class c"
-                + " join pg_namespace n on n.oid = c.relnamespace where c.relkind in ('r', 'p')"
-                + " and n.nspname = any(current_schemas(false)) order by n.nspname, c.relname",
-                Collections.emptyList());
+        return inspection.compileTables(connection);
     }
 
     /**
@@ -397,9 +428,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileViews(Connection connection) {
-        return new SchemaQuery("select viewname as name, schemaname as schema from pg_views"
-                + " where schemaname = any(current_schemas(false)) order by schemaname, viewname",
-                Collections.emptyList());
+        return inspection.compileViews(connection);
     }
 
     /**
@@ -425,7 +454,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public boolean isInternalTable(TableInfo table) {
-        return SPATIAL_REF_SYS.equals(table.name());
+        return inspection.isInternalTable(table);
     }
 
     /**
@@ -456,35 +485,33 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
-        return new SchemaQuery("select a.attname from pg_attribute a join pg_class c on c.oid = a.attrelid"
-                + " where c.relname = ? and c.relnamespace = (select oid from pg_namespace where nspname = current_schema()) and a.attnum > 0"
-                + " and not a.attisdropped order by a.attnum", Collections.singletonList(table));
+        return inspection.compileColumnNames(connection, table);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the table's or view's columns from {@code pg_attribute} in the current schema, dropped
+     *     columns left out; {@code typeName} is the type's {@code typname} and {@code type} its
+     *     {@code format_type} text; the generation and identity details need PostgreSQL 12 and 10
+     *     and are left out on older servers
+     */
+    @Override
+    public List<ColumnInfo> columns(Connection connection, String table) {
+        return inspection.columns(connection, table);
     }
 
     /**
      * {@inheritDoc}
      *
      * @return the table's indexes from {@code pg_index}, the primary key and unique constraints
-     *     among them; key columns only (no {@code include} columns), an expression shown as its SQL
+     *     among them, with each column's order, a collation that differs from the column's own and
+     *     the {@code where} text; key columns only (no {@code include} columns), an expression
+     *     shown as its SQL
      */
     @Override
     public List<IndexInfo> indexes(Connection connection, String table) {
-        List<IndexInfo> found = new ArrayList<>();
-        for (Map<String, Object> row : connection.select("select ic.relname as name,"
-                + " string_agg(coalesce(a.attname, pg_get_indexdef(i.indexrelid, k.ord::int, true)), ','"
-                + " order by k.ord) as columns, i.indisunique as is_unique,"
-                + " i.indisprimary as is_primary from pg_index i"
-                + " join pg_class tc on tc.oid = i.indrelid"
-                + " join pg_class ic on ic.oid = i.indexrelid"
-                + " join lateral unnest(i.indkey) with ordinality as k(num, ord) on true"
-                + " left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.num and k.num <> 0"
-                + " where tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
-                + " and k.ord <= i.indnkeyatts"
-                + " group by ic.relname, i.indisunique, i.indisprimary order by ic.relname", table)) {
-            found.add(new IndexInfo(String.valueOf(row.get("name")), split(row.get("columns")),
-                    Boolean.TRUE.equals(row.get("is_unique")), Boolean.TRUE.equals(row.get("is_primary"))));
-        }
-        return Collections.unmodifiableList(found);
+        return inspection.indexes(connection, table);
     }
 
     /**
@@ -494,22 +521,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<ForeignKeyInfo> foreignKeys(Connection connection, String table) {
-        List<ForeignKeyInfo> found = new ArrayList<>();
-        for (Map<String, Object> row : connection.select("select"
-                + " (select string_agg(a.attname, ',' order by k.ord) from unnest(c.conkey) with ordinality"
-                + " as k(num, ord) join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.num) as columns,"
-                + " ft.relname as foreign_table,"
-                + " (select string_agg(a.attname, ',' order by k.ord) from unnest(c.confkey) with ordinality"
-                + " as k(num, ord) join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.num)"
-                + " as foreign_columns, c.confupdtype as on_update, c.confdeltype as on_delete"
-                + " from pg_constraint c join pg_class tc on tc.oid = c.conrelid"
-                + " join pg_class ft on ft.oid = c.confrelid"
-                + " where c.contype = 'f' and tc.relname = ? and tc.relnamespace = (select oid from pg_namespace where nspname = current_schema())"
-                + " order by c.conname", table)) {
-            found.add(new ForeignKeyInfo(split(row.get("columns")), String.valueOf(row.get("foreign_table")),
-                    split(row.get("foreign_columns")), action(row.get("on_update")), action(row.get("on_delete"))));
-        }
-        return Collections.unmodifiableList(found);
+        return inspection.foreignKeys(connection, table);
     }
 
     /**
@@ -634,6 +646,29 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
+     * @return {@code comment on table <table> is <text>}, with {@code null} for an empty text, which
+     *     removes the comment
+     */
+    @Override
+    protected List<String> compileTableComment(Blueprint blueprint, Command command, Connection connection) {
+        String text = command.string(Command.COMMENT);
+        return Collections.singletonList("comment on table " + wrapTable(blueprint.table()) + " is "
+                + commentValue(text));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code true} or {@code false}
+     */
+    @Override
+    protected String booleanLiteral(boolean value) {
+        return value ? "true" : "false";
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @return booleans as {@code true} or {@code false}; everything else as the base writes it
      */
     @Override
@@ -694,26 +729,41 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
         return sql.length() > 0 ? sql.append(", ") : sql;
     }
 
-    private static List<String> split(Object joined) {
-        if (joined == null) {
-            return Collections.emptyList();
-        }
-        return Collections.unmodifiableList(new ArrayList<>(Arrays.asList(joined.toString().split(","))));
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Sends no encoding clause; the database takes its template's encoding.
+     */
+    @Override
+    public String compileCreateDatabase(Connection connection, String name, String template, CopyStrategy strategy) {
+        return databaseCommands().compileCreate(connection, name, template, strategy);
     }
 
-    // pg_constraint stores actions as one letter.
-    private static String action(Object code) {
-        switch (String.valueOf(code)) {
-            case "c":
-                return "cascade";
-            case "n":
-                return "set null";
-            case "d":
-                return "set default";
-            case "r":
-                return "restrict";
-            default:
-                return "no action";
-        }
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Adds {@code with (force)} on PostgreSQL 13 or later and refuses it before.
+     */
+    @Override
+    public String compileDropDatabaseIfExists(Connection connection, String name, boolean force) {
+        return databaseCommands().compileDropIfExists(connection, name, force);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public SchemaQuery compileDatabaseExists(String name) {
+        return PostgresDatabaseCommands.compileExists(name);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean supportsCopyStrategy(Connection connection) {
+        return PostgresDatabaseCommands.supportsCopyStrategy(connection);
+    }
+
+    // Built on use, not in a field: a method reference to wrap taken in the constructor lets this
+    // escape before a subclass is initialised.
+    private PostgresDatabaseCommands databaseCommands() {
+        return new PostgresDatabaseCommands(this::wrap);
     }
 }

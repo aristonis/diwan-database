@@ -1,22 +1,17 @@
 package org.aristonis.diwan.database.schema.grammar;
 
-import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
-import org.aristonis.diwan.database.schema.Blueprint;
-import org.aristonis.diwan.database.schema.Collation;
-import org.aristonis.diwan.database.schema.ColumnDefinition;
-import org.aristonis.diwan.database.Expression;
-import org.aristonis.diwan.database.schema.ForeignKeyInfo;
-import org.aristonis.diwan.database.schema.IndexInfo;
-import org.aristonis.diwan.database.schema.TableInfo;
-import org.aristonis.diwan.database.schema.ViewInfo;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
-import org.aristonis.diwan.database.query.Identifiers;
+import org.aristonis.diwan.database.exception.ForeignKeyCheckException;
+import org.aristonis.diwan.database.schema.Blueprint;
+import org.aristonis.diwan.database.schema.ColumnDefinition;
+import org.aristonis.diwan.database.schema.CopyStrategy;
+import org.aristonis.diwan.database.schema.TableInfo;
+import org.aristonis.diwan.database.schema.ViewInfo;
 
 /**
  * Turns a {@link Blueprint} into SQL for one database.
@@ -31,10 +26,7 @@ import org.aristonis.diwan.database.query.Identifiers;
  *     {@link #wrapTable(String)} and {@link #literal(Object)}; override them, not the callers, to
  *     change quoting.
  */
-public abstract class SchemaGrammar {
-
-    /** Longest identifier PostgreSQL keeps whole; a safe default for most databases. */
-    private static final int DEFAULT_MAX_IDENTIFIER_LENGTH = 63;
+public abstract class SchemaGrammar extends InspectionGrammar {
 
     /** Creates a grammar. */
     protected SchemaGrammar() {
@@ -112,6 +104,8 @@ public abstract class SchemaGrammar {
                 return compileCheck(blueprint, command, connection);
             case Command.DROP_CHECK:
                 return compileDropCheck(blueprint, command, connection);
+            case Command.TABLE_COMMENT:
+                return compileTableComment(blueprint, command, connection);
             default:
                 throw unsupported("The command " + command.name());
         }
@@ -130,6 +124,35 @@ public abstract class SchemaGrammar {
      */
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
         throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Writes the start of a create statement, {@code create table "t"} or, for a temporary table,
+     * {@code create temporary table "t"}.
+     *
+     * @implSpec Writes {@code create temporary table} when {@link Blueprint#isTemporary()} is
+     *     {@code true}, else {@code create table}, followed by the wrapped table name.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @return the statement start without a trailing space, never {@code null}
+     */
+    protected String createTable(Blueprint blueprint) {
+        return (blueprint.isTemporary() ? "create temporary table " : "create table ")
+                + wrapTable(blueprint.table());
+    }
+
+    /**
+     * Compiles {@link Command#TABLE_COMMENT}.
+     *
+     * @implSpec The base writes no statement, as a grammar without table comments skips the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}; empty in the base
+     */
+    protected List<String> compileTableComment(Blueprint blueprint, Command command, Connection connection) {
+        return Collections.emptyList();
     }
 
     /**
@@ -191,126 +214,6 @@ public abstract class SchemaGrammar {
     }
 
     /**
-     * Compiles {@link Command#UNIQUE}.
-     *
-     * @implSpec The base returns {@code create unique index <index> on <table> (<columns>)}.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statement, never {@code null}
-     */
-    protected String compileUnique(Blueprint blueprint, Command command, Connection connection) {
-        return "create unique index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
-    }
-
-    /**
-     * Compiles {@link Command#PLAIN_INDEX}.
-     *
-     * @implSpec The base returns {@code create index <index> on <table> (<columns>)}.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statement, never {@code null}
-     */
-    protected String compileIndex(Blueprint blueprint, Command command, Connection connection) {
-        return "create index " + wrap(command.string(Command.INDEX)) + " on " + wrapTable(blueprint.table())
-                + " (" + columnize(command.strings(Command.COLUMNS)) + ")";
-    }
-
-    /**
-     * Compiles {@link Command#DROP_INDEX} and {@link Command#DROP_UNIQUE}.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statement, never {@code null}
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected String compileDropIndex(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#PRIMARY}: the primary key.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compilePrimary(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#FOREIGN}: a foreign key.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileForeign(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#DROP_PRIMARY}: dropping the primary key.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileDropPrimary(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#DROP_FOREIGN}: dropping a foreign key.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileDropForeign(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#RENAME_INDEX}: renaming an index.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileRenameIndex(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
      * Compiles {@link Command#DROP_COLUMN}: dropping columns.
      *
      * @implSpec The base refuses the command.
@@ -341,37 +244,7 @@ public abstract class SchemaGrammar {
     }
 
     /**
-     * Compiles {@link Command#CHECK}: adding a named table check.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileCheck(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Compiles {@link Command#DROP_CHECK}: dropping a named table check.
-     *
-     * @implSpec The base refuses the command.
-     *
-     * @param blueprint the blueprint, never {@code null}
-     * @param command the command, never {@code null}
-     * @param connection the connection, never {@code null}
-     * @return the statements, never {@code null}, may be empty
-     * @throws UnsupportedOperationException if the grammar does not support the command
-     */
-    protected List<String> compileDropCheck(Blueprint blueprint, Command command, Connection connection) {
-        throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Tells whether {@link #modifiers(Blueprint, ColumnDefinition)} writes column checks and
+     * Tells whether {@code modifiers} writes column checks and
      * generated expressions.
      *
      * @implSpec The base returns {@code false}, so a grammar that has not learned them refuses such
@@ -414,34 +287,6 @@ public abstract class SchemaGrammar {
      */
     protected List<String> compileRenameColumn(Blueprint blueprint, Command command, Connection connection) {
         throw unsupported("The command " + command.name());
-    }
-
-    /**
-     * Lists the indexes of a table, the primary key included.
-     *
-     * @implSpec The base refuses the listing.
-     *
-     * @param connection the connection to read with, never {@code null}
-     * @param table the full table name, prefix included, never {@code null}
-     * @return the indexes, unmodifiable, never {@code null}
-     * @throws UnsupportedOperationException if the grammar does not support the listing
-     */
-    public List<IndexInfo> indexes(Connection connection, String table) {
-        throw unsupported("Listing indexes");
-    }
-
-    /**
-     * Lists the foreign keys of a table.
-     *
-     * @implSpec The base refuses the listing.
-     *
-     * @param connection the connection to read with, never {@code null}
-     * @param table the full table name, prefix included, never {@code null}
-     * @return the foreign keys, unmodifiable, never {@code null}
-     * @throws UnsupportedOperationException if the grammar does not support the listing
-     */
-    public List<ForeignKeyInfo> foreignKeys(Connection connection, String table) {
-        throw unsupported("Listing foreign keys");
     }
 
     /**
@@ -507,77 +352,6 @@ public abstract class SchemaGrammar {
     }
 
     /**
-     * Returns a query that counts the tables with a name.
-     *
-     * @implSpec The base refuses the check.
-     *
-     * @param connection the connection, never {@code null}; lets a grammar bind the current schema
-     *     or database as well
-     * @param table the full table name, prefix included, never {@code null}
-     * @return the query, never {@code null}; its single value is the count
-     * @throws UnsupportedOperationException if the grammar does not support the check
-     */
-    public SchemaQuery compileTableExists(Connection connection, String table) {
-        throw unsupported("Checking for a table");
-    }
-
-    /**
-     * Returns a query whose first column lists the column names of a table.
-     *
-     * @implSpec The base refuses the listing.
-     *
-     * @param connection the connection, never {@code null}; lets a grammar bind the current schema
-     *     or database as well
-     * @param table the full table name, prefix included, never {@code null}
-     * @return the query, never {@code null}
-     * @throws UnsupportedOperationException if the grammar does not support the listing
-     */
-    public SchemaQuery compileColumnNames(Connection connection, String table) {
-        throw unsupported("Listing columns");
-    }
-
-    /**
-     * Returns a query that lists the user tables, one row each with the columns {@code name} and
-     * {@code schema}.
-     *
-     * @implSpec The base refuses the listing.
-     *
-     * @param connection the connection, never {@code null}; lets a grammar choose by database version
-     * @return the query, never {@code null}; ordered by schema, then name
-     * @throws UnsupportedOperationException if the grammar does not support the listing
-     */
-    public SchemaQuery compileTables(Connection connection) {
-        throw unsupported("Listing tables");
-    }
-
-    /**
-     * Returns a query that lists the views, one row each with the columns {@code name} and
-     * {@code schema}.
-     *
-     * @implSpec The base refuses the listing.
-     *
-     * @param connection the connection, never {@code null}; lets a grammar choose by database version
-     * @return the query, never {@code null}; ordered by schema, then name
-     * @throws UnsupportedOperationException if the grammar does not support the listing
-     */
-    public SchemaQuery compileViews(Connection connection) {
-        throw unsupported("Listing views");
-    }
-
-    /**
-     * Tells whether a listed table belongs to the database engine or an extension, so that dropping
-     * or emptying every table must leave it alone.
-     *
-     * @implSpec The base returns {@code false}.
-     *
-     * @param table the table as {@link #compileTables} lists it, never {@code null}
-     * @return {@code true} if the table is internal
-     */
-    public boolean isInternalTable(TableInfo table) {
-        return false;
-    }
-
-    /**
      * Orders the tables so that dropping them one after the other respects foreign keys.
      *
      * @implSpec The base returns the tables unchanged: a grammar whose drop is one statement, or
@@ -622,162 +396,105 @@ public abstract class SchemaGrammar {
     }
 
     /**
-     * Returns Laravel's short name of the database this grammar writes for, such as
-     * {@code "sqlite"} or {@code "pgsql"}, so a migration can branch on it.
+     * Returns the statement that creates a database.
      *
-     * @implSpec The base refuses; every grammar that ships with the library overrides it.
+     * @implSpec The base refuses the command.
      *
-     * @return the name, never {@code null}
-     * @throws UnsupportedOperationException if the grammar does not name its database
+     * @param connection the connection the SQL will run on, never {@code null}; a grammar may read
+     *     the server version through it
+     * @param name the database name, never {@code null}
+     * @param template the database to copy, or {@code null} for an empty one
+     * @param strategy how to copy the template, or {@code null} for the server's default
+     * @return the statement, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the command, or the
+     *     server is too old for the strategy
      */
-    public String driverName() {
-        throw unsupported("Naming the database");
+    public String compileCreateDatabase(Connection connection, String name, String template,
+            CopyStrategy strategy) {
+        throw unsupported("Creating a database");
     }
 
     /**
-     * Returns the longest identifier the database keeps whole.
+     * Returns the statement that drops a database if it exists.
      *
-     * @implSpec The base returns 63, PostgreSQL's limit.
+     * @implSpec The base refuses the command.
      *
-     * @return the length in characters
+     * @param connection the connection the SQL will run on, never {@code null}; a grammar may read
+     *     the server version through it
+     * @param name the database name, never {@code null}
+     * @param force {@code true} to close the sessions that use the database first
+     * @return the statement, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the command, or the
+     *     server is too old for {@code force}
      */
-    public int maxIdentifierLength() {
-        return DEFAULT_MAX_IDENTIFIER_LENGTH;
+    public String compileDropDatabaseIfExists(Connection connection, String name, boolean force) {
+        throw unsupported("Dropping a database");
     }
 
     /**
-     * Returns the SQL for a column: its quoted name, type and modifiers.
+     * Returns the query that tells whether a database exists.
      *
-     * @param blueprint the blueprint, never {@code null}
-     * @param column the column, never {@code null}
-     * @return the column SQL, never {@code null}
-     * @throws UnsupportedOperationException if the column type is not supported
+     * <p>The query returns at least one row when the database exists and none when it does not.
+     *
+     * @implSpec The base refuses the query.
+     *
+     * @param name the database name, never {@code null}
+     * @return the query, never {@code null}
+     * @throws UnsupportedOperationException if the grammar does not support the query
      */
-    protected String column(Blueprint blueprint, ColumnDefinition column) {
-        return wrap(column.name()) + " " + type(column) + modifiers(blueprint, column);
+    public SchemaQuery compileDatabaseExists(String name) {
+        throw unsupported("Checking that a database exists");
     }
 
     /**
-     * Returns the SQL type of a column.
+     * Tells whether the server accepts a {@link CopyStrategy} when it copies a template.
      *
-     * @implSpec The base refuses every type.
+     * @implSpec The base returns {@code false}.
      *
-     * @param column the column, never {@code null}
-     * @return the type, never {@code null}
-     * @throws UnsupportedOperationException if the type is not supported
+     * @param connection the connection to the server, never {@code null}
+     * @return {@code true} if {@link #compileCreateDatabase} accepts a strategy
      */
-    protected String type(ColumnDefinition column) {
-        throw unsupported("The column type " + column.type());
+    public boolean supportsCopyStrategy(Connection connection) {
+        return false;
     }
 
     /**
-     * Returns the SQL after a column's type: nullability, default and the like.
+     * Creates a database.
      *
-     * @implSpec The base returns an empty string.
+     * @implSpec Runs the statement of {@link #compileCreateDatabase} on {@code connection}. A
+     *     grammar whose database has no such statement overrides this method instead.
      *
-     * @param blueprint the blueprint, never {@code null}
-     * @param column the column, never {@code null}
-     * @return the modifiers with a leading space each, never {@code null}, may be empty
+     * @param connection the connection to run on, never {@code null}
+     * @param name the database name, never {@code null}
+     * @param template the database to copy, or {@code null} for an empty one
+     * @param strategy how to copy the template, or {@code null} for the server's default
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     * @throws org.aristonis.diwan.database.exception.QueryException if the statement fails
      */
-    protected String modifiers(Blueprint blueprint, ColumnDefinition column) {
-        return "";
+    public void createDatabase(Connection connection, String name, String template,
+            CopyStrategy strategy) {
+        connection.statement(compileCreateDatabase(connection, name, template, strategy));
     }
 
     /**
-     * Returns the database's name for a collation.
+     * Drops a database if it exists and tells whether it did.
      *
-     * @implSpec The base returns the name of a named collation and refuses a portable one. A
-     *     grammar overrides it to map each portable collation it supports.
+     * @implSpec Runs the query of {@link #compileDatabaseExists}, then the statement of
+     *     {@link #compileDropDatabaseIfExists}, and returns the answer of the query. Another
+     *     process may drop the database between the two, so a {@code true} answer is not proof
+     *     that this call dropped it.
      *
-     * @param collation the collation, never {@code null}
-     * @return the database's collation name, never {@code null}
-     * @throws UnsupportedOperationException if the grammar has no name for a portable collation
+     * @param connection the connection to run on, never {@code null}
+     * @param name the database name, never {@code null}
+     * @param force {@code true} to close the sessions that use the database first
+     * @return {@code true} if the database existed
+     * @throws UnsupportedOperationException if the grammar does not support the command
+     * @throws org.aristonis.diwan.database.exception.QueryException if a statement fails
      */
-    protected String collationName(Collation collation) {
-        if (collation.isPortable()) {
-            throw new UnsupportedOperationException(getClass().getSimpleName()
-                    + " has no name for the portable collation " + collation.name());
-        }
-        return collation.name();
-    }
-
-    /**
-     * Quotes an identifier.
-     *
-     * @implSpec The base uses double quotes and doubles any double quote inside the name, so the
-     *     name cannot end the identifier.
-     *
-     * @param name the identifier, never {@code null}
-     * @return the quoted identifier, never {@code null}
-     */
-    protected String wrap(String name) {
-        return Identifiers.quote(name, '"');
-    }
-
-    /**
-     * Quotes a table name.
-     *
-     * @implSpec The base calls {@link #wrap(String)}.
-     *
-     * @param table the table name with its prefix, never {@code null}
-     * @return the quoted name, never {@code null}
-     */
-    protected String wrapTable(String table) {
-        return wrap(table);
-    }
-
-    /**
-     * Writes a default value as SQL.
-     *
-     * @implSpec Text is put in single quotes with any single quote doubled; {@code true} and
-     *     {@code false} become {@code '1'} and {@code '0'}, as in Laravel; numbers are quoted in
-     *     their plain decimal form; an {@link Expression} is written as given. A backslash is
-     *     not escaped, because SQLite and PostgreSQL (with standard strings) read it as an
-     *     ordinary character.
-     *
-     * @param value the value, never {@code null}, of a type {@link ColumnDefinition#defaultValue(Object)}
-     *     keeps
-     * @return the SQL literal, never {@code null}
-     * @throws IllegalArgumentException if text holds a NUL character
-     */
-    protected String literal(Object value) {
-        if (value instanceof Expression) {
-            return ((Expression) value).sql();
-        }
-        if (value instanceof Boolean) {
-            return ((Boolean) value) ? "'1'" : "'0'";
-        }
-        String text = value instanceof BigDecimal ? ((BigDecimal) value).toPlainString() : value.toString();
-        if (text.indexOf('\0') >= 0) {
-            throw new IllegalArgumentException("Strings with NUL characters cannot be escaped");
-        }
-        return "'" + text.replace("'", "''") + "'";
-    }
-
-    /**
-     * Quotes and joins column names.
-     *
-     * @param columns the names, never {@code null}
-     * @return the names, quoted and separated by {@code ", "}
-     */
-    protected String columnize(List<String> columns) {
-        StringBuilder sql = new StringBuilder();
-        for (String name : columns) {
-            if (sql.length() > 0) {
-                sql.append(", ");
-            }
-            sql.append(wrap(name));
-        }
-        return sql.toString();
-    }
-
-    /**
-     * Builds the error for something this grammar does not support.
-     *
-     * @param what what is not supported, starting with a capital letter
-     * @return the exception, never {@code null}
-     */
-    protected UnsupportedOperationException unsupported(String what) {
-        return new UnsupportedOperationException(what + " is not supported by " + getClass().getSimpleName());
+    public boolean dropDatabaseIfExists(Connection connection, String name, boolean force) {
+        SchemaQuery query = compileDatabaseExists(name);
+        boolean isPresent = !connection.select(query.sql(), query.bindings()).isEmpty();
+        connection.statement(compileDropDatabaseIfExists(connection, name, force));
+        return isPresent;
     }
 }

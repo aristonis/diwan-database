@@ -10,16 +10,21 @@ import java.math.BigInteger;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
+import org.aristonis.diwan.database.driver.DriverFailureKind;
+import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.aristonis.diwan.database.driver.DriverSession;
 import org.aristonis.diwan.database.driver.LockWaitGuard;
 import org.aristonis.diwan.database.driver.RowCursor;
@@ -43,6 +48,12 @@ import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
 final class AndroidSqliteSession implements DriverSession {
 
     private static final int SQLITE_EXACT_DIGITS = 15;
+
+    private static final int SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+
+    // Columns of PRAGMA foreign_key_check: table, rowid, parent, fkid.
+    private static final int FK_CHECK_TABLE = 0;
+    private static final int FK_CHECK_PARENT = 2;
 
     private static final Pattern SAVEPOINT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,29}");
 
@@ -279,11 +290,37 @@ final class AndroidSqliteSession implements DriverSession {
         owner = Thread.currentThread();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Android reports a deferred foreign key violation only after the commit has gone
+     *     through, when it can no longer be rolled back. So before the commit this reads
+     *     {@code PRAGMA defer_foreign_keys}; when it is on, {@code PRAGMA foreign_key_check} (the
+     *     statement form, since the table-valued function needs a newer SQLite than API 28) runs,
+     *     and a violation ends the transaction without marking it successful, so Android rolls it
+     *     back, and fails with a foreign key {@link DriverException} naming the child table. The
+     *     check runs only when {@code defer_foreign_keys} is on, so a key declared
+     *     {@code DEFERRABLE INITIALLY DEFERRED} in raw DDL is not checked. {@code foreign_key_check}
+     *     scans every foreign key of the database, not only the tables this transaction wrote, so
+     *     an orphan row left from before the transaction also fails it; with {@code foreign_keys}
+     *     off nothing is checked. If
+     *     the pragma itself fails, that failure is thrown and the transaction stays open for the
+     *     caller's rollback.
+     */
     @Override
     public void commit() {
         ensureOpen();
         requireBegun();
         requireOwner();
+        DriverException violation = deferredViolation();
+        if (violation != null) {
+            try {
+                end();
+            } catch (RuntimeException e) {
+                violation.addSuppressed(e);
+            }
+            throw violation;
+        }
         try {
             database.setTransactionSuccessful();
             database.endTransaction();
@@ -291,6 +328,44 @@ final class AndroidSqliteSession implements DriverSession {
             throw translate(e);
         }
         ended();
+    }
+
+    // Returns null when deferral is off or the check finds no orphan row.
+    private DriverException deferredViolation() {
+        try {
+            if (!isDeferralOn()) {
+                return null;
+            }
+            try (Cursor cursor = database.rawQuery("PRAGMA foreign_key_check", null)) {
+                if (!cursor.moveToFirst()) {
+                    return null;
+                }
+                return foreignKeyFailure(cursor.getString(FK_CHECK_TABLE), cursor.getString(FK_CHECK_PARENT));
+            }
+        } catch (RuntimeException e) {
+            throw translate(e);
+        }
+    }
+
+    // With foreign keys off SQLite enforces nothing at commit, so nothing is checked either.
+    private boolean isDeferralOn() {
+        return isPragmaOn("PRAGMA foreign_keys") && isPragmaOn("PRAGMA defer_foreign_keys");
+    }
+
+    private boolean isPragmaOn(String pragma) {
+        try (Cursor cursor = database.rawQuery(pragma, null)) {
+            return cursor.moveToFirst() && cursor.getLong(0) == 1L;
+        }
+    }
+
+    private static DriverException foreignKeyFailure(String table, String parent) {
+        Set<DriverFailureKind> kinds = EnumSet.of(DriverFailureKind.FOREIGN_KEY_VIOLATION);
+        DiwanError error = DiwanError.of(kinds, null, table, Collections.<String>emptyList());
+        String codeName = DriverFailureMessages.sqliteCodeName(SQLITE_CONSTRAINT_FOREIGNKEY).orElse(null);
+        return new DriverException(
+                DriverFailureMessages.message(kinds, null, SQLITE_CONSTRAINT_FOREIGNKEY, codeName, error), null,
+                SQLITE_CONSTRAINT_FOREIGNKEY, "FOREIGN KEY constraint failed (table " + table + ", parent " + parent
+                        + ")", null, kinds, null, table, Collections.<String>emptyList());
     }
 
     @Override
@@ -440,9 +515,6 @@ final class AndroidSqliteSession implements DriverSession {
         }
         if (value instanceof Instant) {
             return OffsetDateTime.ofInstant((Instant) value, ZoneOffset.UTC).toString();
-        }
-        if (value instanceof TemporalAccessor) {
-            return value.toString();
         }
         throw new IllegalArgumentException("Unsupported binding type " + value.getClass().getName());
     }

@@ -49,6 +49,7 @@ class DiwanErrorDbTest {
         assertEquals("DWN-CST-0001", error.code());
         assertFalse(error.key().isPresent());
         assertEquals(Arrays.asList("email"), error.columns());
+        assertEquals("users", error.table().orElseThrow());
         assertTrue(failure.getMessage().endsWith("[DWN-CST-0001 unique violation (email)]"));
     }
 
@@ -62,6 +63,7 @@ class DiwanErrorDbTest {
 
         DiwanError error = errorOf(failure);
         assertEquals("DWN-CST-0002", error.code());
+        assertFalse(error.table().isPresent());
         assertFalse(error.key().isPresent());
         assertTrue(error.columns().isEmpty());
     }
@@ -76,6 +78,7 @@ class DiwanErrorDbTest {
         DiwanError error = errorOf(failure);
         assertEquals("DWN-CST-0003", error.code());
         assertEquals("qty_positive", error.key().orElseThrow());
+        assertFalse(error.table().isPresent());
         assertTrue(failure.getMessage().endsWith("[DWN-CST-0003 check violation: qty_positive]"));
     }
 

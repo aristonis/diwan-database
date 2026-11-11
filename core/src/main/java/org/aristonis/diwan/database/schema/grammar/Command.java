@@ -58,6 +58,8 @@ public final class Command {
     public static final String CHECK = "check";
     /** Drops a named table check; attribute {@link #NAME}. */
     public static final String DROP_CHECK = "dropCheck";
+    /** Sets the comment of the table; attribute {@link #COMMENT}. */
+    public static final String TABLE_COMMENT = "tableComment";
 
     /** Attribute holding a {@link ColumnDefinition}. */
     public static final String COLUMN = "column";
@@ -73,8 +75,30 @@ public final class Command {
     public static final String NAME = "name";
     /** Attribute holding trusted SQL, a {@code String}. */
     public static final String SQL = "sql";
+    /**
+     * Attribute holding the {@code WHERE} conditions of a partial index, a {@code List<IndexCondition>};
+     * absent when the index is not partial.
+     */
+    public static final String WHERE = "where";
+    /**
+     * Attribute holding the sort order of index columns, a {@code Map<String, String>} from column
+     * name to {@code "asc"} or {@code "desc"}; absent when no order was set.
+     */
+    public static final String ORDERS = "orders";
+    /**
+     * Attribute holding the collation of index columns, a {@code Map<String, String>} from column
+     * name to collation name; absent when no collation was set.
+     */
+    public static final String COLLATIONS = "collations";
     /** Attribute holding a {@link ForeignKeyDefinition}. */
     public static final String FOREIGN_KEY = "foreignKey";
+    /** Attribute holding the comment text of {@link #TABLE_COMMENT}, a {@code String}. */
+    public static final String COMMENT = "comment";
+    /**
+     * Attribute marking an index whose {@link #COLUMNS} entry is a raw SQL expression that grammars
+     * write as it is; absent for an index on columns.
+     */
+    public static final String RAW = "raw";
 
     private final String name;
     private final Map<String, Object> attributes;

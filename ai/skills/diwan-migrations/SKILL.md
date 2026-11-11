@@ -87,6 +87,15 @@ default) or `manager.seed(DatabaseSeeder::new, SeedOptions.defaults().inTransact
 - `MigrationChecksumException` means a ran migration changed. Nothing ran. Restore the file and
   add a new migration; repair only as recovery.
 - `change()` replaces the whole column definition. Restate every modifier you keep.
+- `index(...)` and `unique(...)` return an `IndexDefinition`: chain `.where("outcome", "STARTED")`, `.whereNull(...)`, `.whereNotNull(...)`, `.desc(...)` or `.collate(...)` on it. Column-level `.index()` takes none of these.
+
+  Kotlin:
+
+  ```kotlin
+  schema.table("attempts") { table ->
+      table.index(listOf("id"), "attempts_started").where("outcome", "STARTED")
+  }
+  ```
 - The migrator refuses to run inside your own transaction.
 - On several processes, plug in a lock: `.lock(new PostgresMigrationLock(dataSource))`.
 - Rollback with a recorded migration missing from your list throws `MissingMigrationsException`.

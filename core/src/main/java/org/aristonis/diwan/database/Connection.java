@@ -20,7 +20,7 @@ import org.aristonis.diwan.database.query.QueryCursor;
  * {@code null}, {@link Boolean}, {@link Byte}, {@link Short}, {@link Integer}, {@link Long},
  * {@link Float}, {@link Double}, {@link java.math.BigDecimal}, {@link java.math.BigInteger},
  * {@link String}, {@code byte[]}, {@link java.time.LocalDate}, {@link java.time.LocalTime},
- * {@link java.time.LocalDateTime}, {@link java.time.OffsetDateTime} and {@link java.time.Instant}.
+ * {@link java.time.LocalDateTime}, {@link java.time.OffsetDateTime}, {@link java.time.OffsetTime} and {@link java.time.Instant}.
  *
  * <p>A connection obtained from {@link #builder()} holds no session between calls and is safe to
  * share between threads. A connection handed to a {@link TransactionCallback} or

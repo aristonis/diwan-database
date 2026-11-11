@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +60,7 @@ class JdbcSqliteStorageTest {
         assertEquals("2026-01-02 01:04:00+00:00",
                 stored(OffsetDateTime.of(2026, 1, 2, 3, 4, 0, 0, ZoneOffset.ofHours(2))).get("v"));
         assertEquals("2026-01-02 03:04:00+00:00", stored(Instant.parse("2026-01-02T03:04:00Z")).get("v"));
+        assertEquals("06:30:00+00:00", stored(OffsetTime.of(9, 30, 0, 0, ZoneOffset.ofHours(3))).get("v"));
         assertThrows(IllegalArgumentException.class, () -> stored(LocalDate.MAX));
         assertThrows(IllegalArgumentException.class, () -> stored(LocalDateTime.of(10000, 1, 1, 0, 0)));
     }

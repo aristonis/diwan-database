@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 
@@ -15,8 +16,8 @@ import java.time.ZonedDateTime;
  * text and the text sorts and compares as the values do.
  *
  * <p>Dates follow Laravel: {@code yyyy-MM-dd HH:mm:ss}, with a fraction only when there is one.
- * A moment ({@code Instant}, {@code OffsetDateTime}) is stored as its UTC time with an explicit
- * {@code +00:00}, so text order is time order and the value stays unambiguous when copied into a
+ * A moment ({@code Instant}, {@code OffsetDateTime}, {@code OffsetTime}) is stored as its UTC time
+ * with an explicit {@code +00:00}, so text order is time order and the value stays unambiguous when copied into a
  * zoned column elsewhere. Years outside 0000 to 9999 are refused, since their text would not sort.
  * Decimals are written in plain form, never with an exponent. Other values are returned as they
  * are.
@@ -51,6 +52,9 @@ public final class SQLiteText {
         if (value instanceof OffsetDateTime) {
             return toStorage(((OffsetDateTime) value).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime())
                     + "+00:00";
+        }
+        if (value instanceof OffsetTime) {
+            return time(((OffsetTime) value).withOffsetSameInstant(ZoneOffset.UTC).toLocalTime()) + "+00:00";
         }
         if (value instanceof ZonedDateTime) {
             return toStorage(((ZonedDateTime) value).toOffsetDateTime());

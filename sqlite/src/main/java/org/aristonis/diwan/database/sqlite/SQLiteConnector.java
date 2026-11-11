@@ -1,11 +1,15 @@
 package org.aristonis.diwan.database.sqlite;
 
 import org.aristonis.diwan.database.sqlite.SingleConnectionDataSource;
+import java.io.File;
+import java.net.URI;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
@@ -15,6 +19,8 @@ import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
 import org.aristonis.diwan.database.exception.DatabaseConfigException;
+import org.aristonis.diwan.database.migrations.FileMigrationLock;
+import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
 
@@ -50,6 +56,13 @@ import org.aristonis.diwan.database.schema.Schema;
  * A connection it hands out in manual-commit mode still commits through the driver's {@code commit()}, which
  * begins a new transaction in immediate mode.
  *
+ * <p>A migration run on a file database takes a {@link FileMigrationLock} on a {@code .migrate.lock}
+ * file beside the database file, so two processes do not migrate it at once. The file is the
+ * {@code database} setting, or else the target of the {@code url} setting; a {@code file:} target is
+ * read as a URI. The {@code lock_wait} option sets how long a run waits for the lock, 60 seconds when
+ * unset. An in-memory database has no lock. A supplied {@link DataSource} gets the lock only when
+ * the {@code database} or {@code url} setting names the file; without either there is no lock.
+ *
  * <p>Instances are safe to share across threads and across connection names.
  */
 public final class SQLiteConnector implements Connector {
@@ -59,7 +72,7 @@ public final class SQLiteConnector implements Connector {
 
     private static final Logger LOGGER = Logger.getLogger(SQLiteConnector.class.getName());
     private static final String URL_PREFIX = "jdbc:sqlite:";
-    private static final String MEMORY = ":memory:";
+    private static final String FILE_SCHEME = "file:";
     private static final String FOREIGN_KEYS = "foreign_keys";
     private static final String BUSY_TIMEOUT = "busy_timeout";
     private static final String TRANSACTION_MODE = "transaction_mode";
@@ -126,6 +139,54 @@ public final class SQLiteConnector implements Connector {
     @Override
     public void close(Connection connection) {
         closeQuietly(memorySources.remove(connection));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The lock is a {@link FileMigrationLock} on the database file; it is empty for an in-memory
+     * database and when no setting names the file.
+     *
+     * @throws DatabaseConfigException if {@code lock_wait} is not a positive duration
+     */
+    @Override
+    public Optional<MigrationLock> lock(ConnectionConfig config, DataSource dataSource) {
+        Optional<File> file = databaseFile(config);
+        if (!file.isPresent()) {
+            return Optional.empty();
+        }
+        String lockWait = config.options().get(LockWaitOption.KEY);
+        File database = file.get();
+        MigrationLock lock = lockWait == null
+                ? new FileMigrationLock(() -> database)
+                : new FileMigrationLock(() -> database,
+                        LockWaitOption.parseMillis(config.name(), LockWaitOption.KEY, lockWait),
+                        TimeUnit.MILLISECONDS);
+        return Optional.of(lock);
+    }
+
+    // Package-private so tests can check which file is locked.
+    static Optional<File> databaseFile(ConnectionConfig config) {
+        // The url wins over database, as in jdbcUrl, so the lock sits beside the file actually opened.
+        String database = config.database().orElse("").trim();
+        String url = config.url().orElse(database.isEmpty() ? null : URL_PREFIX + database);
+        if (url == null || isMemoryUrl(url)) {
+            return Optional.empty();
+        }
+        String target = urlTarget(url);
+        return target == null || target.isEmpty() ? Optional.empty() : Optional.of(fileOf(target));
+    }
+
+    // A file: target is a URI, so %20 and file:///path decode; anything the URI parser refuses is a plain path.
+    private static File fileOf(String target) {
+        if (!target.regionMatches(true, 0, FILE_SCHEME, 0, FILE_SCHEME.length())) {
+            return new File(target);
+        }
+        try {
+            return new File(new URI(target));
+        } catch (java.net.URISyntaxException | IllegalArgumentException e) {
+            return new File(target.substring(FILE_SCHEME.length()));
+        }
     }
 
     // Package-private so tests can check the URL without opening a database.
@@ -197,14 +258,21 @@ public final class SQLiteConnector implements Connector {
 
     // Package-private so tests can check which URLs get a single connection.
     static boolean isMemoryUrl(String url) {
-        String lower = url.toLowerCase(Locale.ROOT);
-        if (!lower.startsWith(URL_PREFIX)) {
+        String target = urlTarget(url);
+        if (target == null) {
             return false;
         }
-        int query = lower.indexOf('?');
-        String target = query < 0 ? lower.substring(URL_PREFIX.length()) : lower.substring(URL_PREFIX.length(), query);
-        return target.isEmpty() || MEMORY.equals(target) || "file::memory:".equals(target)
-                || lower.contains("mode=memory");
+        // The target is the part before the query; the query can carry mode=memory of a file: URI.
+        return SQLiteNames.isMemoryTarget(target) || SQLiteNames.isMemoryTarget(url.substring(URL_PREFIX.length()));
+    }
+
+    // The part of a jdbc:sqlite: URL between the prefix and the query, in its original case; null for another URL.
+    static String urlTarget(String url) {
+        if (!url.regionMatches(true, 0, URL_PREFIX, 0, URL_PREFIX.length())) {
+            return null;
+        }
+        int query = url.indexOf('?');
+        return query < 0 ? url.substring(URL_PREFIX.length()) : url.substring(URL_PREFIX.length(), query);
     }
 
     private static DataSource newDataSource(ConnectionConfig config, String url) {

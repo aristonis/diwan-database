@@ -161,6 +161,7 @@ public final class JdbcDriver implements Driver {
         }
         if (isPostgres) {
             result.add(DriverCapability.STREAMS_IN_TRANSACTION);
+            result.add(DriverCapability.ERROR_ABORTS_TRANSACTION);
         }
         return result;
     }

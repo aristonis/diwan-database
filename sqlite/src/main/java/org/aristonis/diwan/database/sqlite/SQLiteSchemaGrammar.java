@@ -16,8 +16,10 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.TransactionCallback;
 import org.aristonis.diwan.database.schema.Blueprint;
 import org.aristonis.diwan.database.schema.Collation;
+import org.aristonis.diwan.database.schema.ColumnInfo;
 import org.aristonis.diwan.database.schema.ColumnDefinition;
 import org.aristonis.diwan.database.schema.ColumnType;
+import org.aristonis.diwan.database.schema.CopyStrategy;
 import org.aristonis.diwan.database.schema.grammar.Command;
 import org.aristonis.diwan.database.schema.DatabaseVersion;
 import org.aristonis.diwan.database.schema.ForeignKeyAction;
@@ -53,14 +55,6 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     private static final int[] DROP_COLUMN_SINCE = {3, 35, 0};
     private static final int[] GENERATED_COLUMNS_SINCE = {3, 31, 0};
     private static final int[] TABLE_XINFO_SINCE = {3, 26, 0};
-    private static final int[] TABLE_LIST_SINCE = {3, 37, 0};
-    private static final String ANDROID_METADATA = "android_metadata";
-
-    // Names a virtual table v owns, from the suffixes of FTS3 to FTS5 and R-Tree; v is the alias of the
-    // virtual table in the sqlite_master form of compileTables.
-    private static final String SHADOW_NAMES = "(v.name || '_data', v.name || '_idx', v.name || '_content',"
-            + " v.name || '_docsize', v.name || '_config', v.name || '_segments', v.name || '_segdir',"
-            + " v.name || '_stat', v.name || '_node', v.name || '_rowid', v.name || '_parent')";
 
     private static final String[] KEY_CHANGES = {Command.CHANGE, Command.PRIMARY, Command.FOREIGN, Command.DROP_PRIMARY,
         Command.DROP_FOREIGN, Command.CHECK, Command.DROP_CHECK};
@@ -72,6 +66,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     private static final String CURRENT_YEAR = "(CAST(strftime('%Y', 'now') AS INTEGER))";
 
     private final String versionOverride;
+    private final SQLiteSchemaInspection inspection;
 
     /** Creates the grammar. */
     public SQLiteSchemaGrammar() {
@@ -81,6 +76,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /** Creates a grammar that acts as if the database had a given version, for tests. */
     SQLiteSchemaGrammar(String versionOverride) {
         this.versionOverride = versionOverride;
+        this.inspection = new SQLiteSchemaInspection(this::version);
     }
 
     /**
@@ -90,7 +86,8 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      *     existing table is compiled against the table's current shape, read through
      *     {@code connection}; when SQLite cannot make a change in place, the table is rebuilt: a new
      *     table, the rows copied, the old one dropped, the new one renamed, the indexes and the
-     *     auto-increment counter restored.
+     *     auto-increment counter restored. A temporary table can take plain additions, but a change that
+     *     needs a rebuild is refused.
      */
     @Override
     public List<String> compile(Blueprint blueprint, Connection connection) {
@@ -99,6 +96,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         if (blueprint.isCreating() || !hasAny(blueprint, STATEFUL) && !hasRebuildingAdd(blueprint)) {
             return super.compile(blueprint, connection);
         }
+        SQLiteColumnDefinitions.refuseTemporary(connection, blueprint.table());
         return new SQLiteTableRebuild(this, blueprint, connection).compile();
     }
 
@@ -136,7 +134,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create table <table> (<columns>)}
+     * @return {@code create [temporary] table <table> (<columns>)}
      */
     @Override
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
@@ -174,7 +172,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                 columns.append(", ").append(tableCheck(check.string(Command.NAME), check.string(Command.SQL)));
             }
         }
-        return "create table " + wrapTable(blueprint.table()) + " (" + columns + ")";
+        return createTable(blueprint) + " (" + columns + ")";
     }
 
     /**
@@ -237,29 +235,17 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<IndexInfo> indexes(Connection connection, String table) {
-        List<IndexInfo> found = new ArrayList<>();
-        List<String> key = new ArrayList<>();
-        for (Map<String, Object> row : connection.select(
-                "select name from pragma_table_info(?) where pk > 0 order by pk", table)) {
-            key.add(row.get("name").toString());
-        }
-        if (!key.isEmpty()) {
-            found.add(new IndexInfo("primary", key, true, true));
-        }
-        for (Map<String, Object> row : connection.select(
-                "select name, \"unique\", origin from pragma_index_list(?) order by seq", table)) {
-            if ("pk".equals(String.valueOf(row.get("origin")))) {
-                continue;
-            }
-            String name = row.get("name").toString();
-            List<String> columns = new ArrayList<>();
-            for (Map<String, Object> part : connection.select(
-                    "select name from pragma_index_info(?) order by seqno", name)) {
-                columns.add(String.valueOf(part.get("name")));
-            }
-            found.add(new IndexInfo(name, columns, SQLiteTableState.number(row.get("unique")) == 1, false));
-        }
-        return Collections.unmodifiableList(found);
+        return inspection.indexes(connection, table);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the columns of a table or view; the hidden columns of a virtual table are left out
+     */
+    @Override
+    public List<ColumnInfo> columns(Connection connection, String table) {
+        return inspection.columns(connection, table);
     }
 
     /**
@@ -269,34 +255,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public List<ForeignKeyInfo> foreignKeys(Connection connection, String table) {
-        List<ForeignKeyInfo> found = new ArrayList<>();
-        long current = -1;
-        List<String> from = new ArrayList<>();
-        List<String> to = new ArrayList<>();
-        Map<String, Object> head = null;
-        for (Map<String, Object> row : connection.select("select id, \"table\", \"from\", \"to\", on_update,"
-                + " on_delete from pragma_foreign_key_list(?) order by id, seq", table)) {
-            long id = SQLiteTableState.number(row.get("id"));
-            if (id != current && head != null) {
-                found.add(keyInfo(head, from, to));
-                from = new ArrayList<>();
-                to = new ArrayList<>();
-            }
-            current = id;
-            head = row;
-            from.add(String.valueOf(row.get("from")));
-            to.add(String.valueOf(row.get("to")));
-        }
-        if (head != null) {
-            found.add(keyInfo(head, from, to));
-        }
-        return Collections.unmodifiableList(found);
-    }
-
-    private static ForeignKeyInfo keyInfo(Map<String, Object> row, List<String> from, List<String> to) {
-        return new ForeignKeyInfo(from, String.valueOf(row.get("table")), to,
-                String.valueOf(row.get("on_update")).toLowerCase(Locale.ROOT),
-                String.valueOf(row.get("on_delete")).toLowerCase(Locale.ROOT));
+        return inspection.foreignKeys(connection, table);
     }
 
     /**
@@ -404,8 +363,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTableExists(Connection connection, String table) {
-        return new SchemaQuery("select count(*) from sqlite_master where type = 'table' and name = ?",
-                Collections.singletonList(table));
+        return inspection.compileTableExists(connection, table);
     }
 
     /**
@@ -415,7 +373,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileColumnNames(Connection connection, String table) {
-        return new SchemaQuery("select name from pragma_table_info(?)", Collections.singletonList(table));
+        return inspection.compileColumnNames(connection, table);
     }
 
     /**
@@ -429,15 +387,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileTables(Connection connection) {
-        if (DatabaseVersion.atLeast(version(connection), TABLE_LIST_SINCE)) {
-            return new SchemaQuery("select name, schema from pragma_table_list where schema = 'main'"
-                    + " and type in ('table', 'virtual') and name not like 'sqlite\\_%' escape '\\' and name <> 'android_metadata'"
-                    + " order by schema, name", Collections.emptyList());
-        }
-        return new SchemaQuery("select name, 'main' as schema from sqlite_master as t where type = 'table'"
-                + " and name not like 'sqlite\\_%' escape '\\' and name <> '" + ANDROID_METADATA + "'"
-                + " and not exists (select 1 from sqlite_master as v where v.sql like 'create virtual table%'"
-                + " and t.name in " + SHADOW_NAMES + ") order by name", Collections.emptyList());
+        return inspection.compileTables(connection);
     }
 
     /**
@@ -447,8 +397,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public SchemaQuery compileViews(Connection connection) {
-        return new SchemaQuery("select name, 'main' as schema from sqlite_master where type = 'view'"
-                + " order by name", Collections.emptyList());
+        return inspection.compileViews(connection);
     }
 
     /**
@@ -458,7 +407,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      */
     @Override
     public boolean isInternalTable(TableInfo table) {
-        return ANDROID_METADATA.equals(table.name()) || table.name().startsWith("sqlite_");
+        return inspection.isInternalTable(table);
     }
 
     /**
@@ -794,5 +743,32 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
             }
         }
         return false;
+    }
+
+    /**
+     * Creates the database file, empty or copied from the template file; the strategy is ignored.
+     *
+     * @param connection unused: a SQLite database is a file, so no statement runs
+     * @param name the path of the new file
+     * @param template the path of the file to copy, or {@code null} for an empty database
+     * @param strategy ignored
+     * @throws IllegalArgumentException if the name is an in-memory spelling or the template is missing
+     */
+    @Override
+    public void createDatabase(Connection connection, String name, String template, CopyStrategy strategy) {
+        SQLiteDatabaseFiles.create(name, template);
+    }
+
+    /**
+     * Deletes the database file and its {@code -wal}, {@code -shm} and {@code -journal} files.
+     *
+     * @param connection unused: a SQLite database is a file, so no statement runs
+     * @param name the path of the file
+     * @param force ignored, as SQLite has no sessions to end
+     * @return {@code true} if the file existed
+     */
+    @Override
+    public boolean dropDatabaseIfExists(Connection connection, String name, boolean force) {
+        return SQLiteDatabaseFiles.dropIfExists(name);
     }
 }

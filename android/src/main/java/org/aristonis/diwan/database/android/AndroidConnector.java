@@ -1,8 +1,11 @@
 package org.aristonis.diwan.database.android;
 
 import android.database.sqlite.SQLiteOpenHelper;
+import java.io.File;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
@@ -11,6 +14,8 @@ import org.aristonis.diwan.database.config.LockWaitOption;
 import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.Connector;
+import org.aristonis.diwan.database.migrations.FileMigrationLock;
+import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.schema.Schema;
 
@@ -32,6 +37,13 @@ import org.aristonis.diwan.database.schema.Schema;
  *
  * <p>The {@code lock_wait} option, such as {@code 5s} or {@code 500ms}, sets {@code PRAGMA busy_timeout}
  * once the database opens, so every statement waits that long for a lock before it fails.
+ *
+ * <p>A migrator run is serialised by a {@link FileMigrationLock} on a file beside the database, named
+ * from the helper's database file with {@code .migrate.lock} added; the lock waits as long as
+ * {@code lock_wait}, or {@value FileMigrationLock#DEFAULT_WAIT_SECONDS} seconds when it is unset. A helper
+ * with no database name is in memory and has no lock. The lock opens the database when a run starts, so
+ * run migrations off the main thread. Opening runs the helper's own {@code onCreate} or
+ * {@code onUpgrade} before the lock is held, so keep schema changes in migrations, not in the helper.
  *
  * <p>Queries and schema use the SQLite grammars, which {@link #of(Supplier, Function, Function)}
  * takes explicitly: {@code AndroidConnector.of(() -> helper, SQLiteQuery::of, SQLiteSchema::of)}.
@@ -93,6 +105,26 @@ public final class AndroidConnector implements Connector {
         SQLiteOpenHelper opened = Objects.requireNonNull(helper.get(), "helper supplier returned null");
         return Connection.builder().name(config.name()).driver(AndroidSqliteDriver.of(opened, isNonExclusive, busyTimeout))
                 .tablePrefix(config.prefix()).strictTransactions(config.strictTransactions()).build();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The helper's database file is not opened here; the lock opens it when it is acquired.
+     *
+     * @throws NullPointerException if the helper supplier returns {@code null}
+     * @throws DatabaseConfigException if {@code lock_wait} is not a positive duration
+     */
+    @Override
+    public Optional<MigrationLock> lock(ConnectionConfig config, DataSource dataSource) {
+        long waitMillis = busyTimeout(config);
+        SQLiteOpenHelper opened = Objects.requireNonNull(helper.get(), "helper supplier returned null");
+        if (opened.getDatabaseName() == null) {
+            return Optional.empty();
+        }
+        long wait = waitMillis == 0L ? FileMigrationLock.DEFAULT_WAIT_SECONDS : waitMillis;
+        TimeUnit unit = waitMillis == 0L ? TimeUnit.SECONDS : TimeUnit.MILLISECONDS;
+        return Optional.of(new FileMigrationLock(() -> new File(opened.getReadableDatabase().getPath()), wait, unit));
     }
 
     // Zero means the option is unset and the database keeps its own busy timeout.

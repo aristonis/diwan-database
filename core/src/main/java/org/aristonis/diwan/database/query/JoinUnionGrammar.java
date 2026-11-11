@@ -70,6 +70,19 @@ abstract class JoinUnionGrammar extends WhereGrammar {
     }
 
     /**
+     * Sets the identity and serial counters of tables back, so the next insert gets the id it would
+     * get had no row been added since the data now committed. The default does nothing: SQLite's
+     * counter rolls back with the rows, so it already does.
+     *
+     * @param connection the connection to run on, never {@code null}
+     * @param tables the table names, never {@code null}, none {@code null} or blank, optionally
+     *     {@code schema.table}
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a statement
+     */
+    protected void restartIdentities(Connection connection, List<String> tables) {
+    }
+
+    /**
      * Runs the statements that empty one or more tables. When there are several, they run in one
      * transaction, unless the connection is already inside one. A grammar whose database needs
      * more around the statements, as SQLite does for keys declared {@code on delete restrict},

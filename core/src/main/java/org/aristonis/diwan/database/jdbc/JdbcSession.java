@@ -2,23 +2,15 @@ package org.aristonis.diwan.database.jdbc;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Statement;
-import java.sql.Types;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,13 +18,11 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 import org.aristonis.diwan.database.driver.DatabaseFamily;
 import org.aristonis.diwan.database.driver.DriverCapability;
 import org.aristonis.diwan.database.exception.DiwanError;
 import org.aristonis.diwan.database.exception.DriverException;
 import org.aristonis.diwan.database.driver.sqlite.SQLiteScripts;
-import org.aristonis.diwan.database.driver.sqlite.SQLiteText;
 import org.aristonis.diwan.database.driver.DriverFailureKind;
 import org.aristonis.diwan.database.driver.DriverFailureMessages;
 import org.aristonis.diwan.database.driver.DriverInfo;
@@ -56,9 +46,6 @@ import org.aristonis.diwan.database.driver.RowCursor;
  */
 final class JdbcSession implements DriverSession {
 
-    // The name goes to the database verbatim, so it must not be able to carry SQL.
-    private static final Pattern SAVEPOINT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,29}");
-
     // Rows a cursor asks the database for per round trip: enough to keep the round trips few, few
     // enough that a wide row cannot fill memory.
     private static final int CURSOR_FETCH_SIZE = 500;
@@ -66,12 +53,12 @@ final class JdbcSession implements DriverSession {
     private final JdbcConnectionProvider provider;
     private final Connection connection;
     private final boolean isExternal;
+    /** The savepoints of the open transaction. */
+    private final JdbcSavepoints savepoints = new JdbcSavepoints();
     /** The product name used to read vendor codes, or {@code null} if unknown. */
     private final String productName;
     /** The lock wait strategy of the database, or {@code null} when it has none. */
     private final JdbcLockWait lockWait;
-    /** Savepoints by name, in creation order. */
-    private final Map<String, Savepoint> savepoints = new LinkedHashMap<>();
 
     /** Whether auto-commit was off at open and was switched on for the session's life. */
     private final boolean shouldRestoreManualCommit;
@@ -142,9 +129,9 @@ final class JdbcSession implements DriverSession {
     @Override
     public List<Map<String, Object>> query(String sql, List<Object> bindings) {
         ensureOpen();
-        try (PreparedStatement statement = prepare(sql, bindings);
+        try (PreparedStatement statement = JdbcStatements.prepare(connection, productName, sql, bindings);
                 ResultSet resultSet = statement.executeQuery()) {
-            return readRows(resultSet);
+            return JdbcStatements.readRows(resultSet, productName);
         } catch (SQLException e) {
             throw failure(e);
         }
@@ -168,7 +155,7 @@ final class JdbcSession implements DriverSession {
         PreparedStatement statement = null;
         ResultSet resultSet = null;
         try {
-            statement = prepare(sql, bindings, true);
+            statement = JdbcStatements.prepare(connection, productName, sql, bindings, true);
             statement.setFetchSize(CURSOR_FETCH_SIZE);
             resultSet = statement.executeQuery();
             JdbcColumns columns = JdbcColumns.of(resultSet.getMetaData(), productName);
@@ -269,7 +256,7 @@ final class JdbcSession implements DriverSession {
     @Override
     public int update(String sql, List<Object> bindings) {
         ensureOpen();
-        try (PreparedStatement statement = prepare(sql, bindings)) {
+        try (PreparedStatement statement = JdbcStatements.prepare(connection, productName, sql, bindings)) {
             return statement.executeUpdate();
         } catch (SQLException e) {
             throw failure(e);
@@ -279,7 +266,7 @@ final class JdbcSession implements DriverSession {
     @Override
     public boolean execute(String sql, List<Object> bindings) {
         ensureOpen();
-        try (PreparedStatement statement = prepare(sql, bindings)) {
+        try (PreparedStatement statement = JdbcStatements.prepare(connection, productName, sql, bindings)) {
             return statement.execute();
         } catch (SQLException e) {
             throw failure(e);
@@ -369,13 +356,7 @@ final class JdbcSession implements DriverSession {
     public void savepoint(String name) {
         ensureOpen();
         Objects.requireNonNull(name, "name");
-        if (!SAVEPOINT_NAME.matcher(name).matches()) {
-            throw new IllegalArgumentException(
-                    "savepoint name must be 1 to 30 ASCII letters, digits or underscores, not starting with a digit");
-        }
-        if (savepoints.containsKey(name)) {
-            throw new IllegalArgumentException("savepoint already exists: " + name);
-        }
+        savepoints.requireNewName(name);
         try {
             savepoints.put(name, connection.setSavepoint(name));
         } catch (SQLException e) {
@@ -386,26 +367,26 @@ final class JdbcSession implements DriverSession {
     @Override
     public void rollbackToSavepoint(String name) {
         ensureOpen();
-        Savepoint savepoint = requireSavepoint(name);
+        Savepoint savepoint = savepoints.require(name);
         try {
             connection.rollback(savepoint);
         } catch (SQLException e) {
             throw failure(e);
         }
         // The rolled-back-to savepoint survives; every later one is gone.
-        dropAfter(name, false);
+        savepoints.dropAfter(name, false);
     }
 
     @Override
     public void releaseSavepoint(String name) {
         ensureOpen();
-        Savepoint savepoint = requireSavepoint(name);
+        Savepoint savepoint = savepoints.require(name);
         try {
             connection.releaseSavepoint(savepoint);
         } catch (SQLException e) {
             throw failure(e);
         }
-        dropAfter(name, true);
+        savepoints.dropAfter(name, true);
     }
 
     @Override
@@ -529,138 +510,10 @@ final class JdbcSession implements DriverSession {
         savepoints.clear();
     }
 
-    private Savepoint requireSavepoint(String name) {
-        Objects.requireNonNull(name, "name");
-        Savepoint savepoint = savepoints.get(name);
-        if (savepoint == null) {
-            throw new IllegalArgumentException("unknown savepoint: " + name);
-        }
-        return savepoint;
-    }
-
-    private void dropAfter(String name, boolean isInclusive) {
-        boolean isFound = false;
-        Iterator<String> names = savepoints.keySet().iterator();
-        while (names.hasNext()) {
-            String current = names.next();
-            if (isFound) {
-                names.remove();
-            } else if (current.equals(name)) {
-                isFound = true;
-                if (isInclusive) {
-                    names.remove();
-                }
-            }
-        }
-    }
-
     private void ensureOpen() {
         if (isClosed) {
             throw new IllegalStateException("session is closed");
         }
-    }
-
-    private PreparedStatement prepare(String sql, List<Object> bindings) throws SQLException {
-        return prepare(sql, bindings, false);
-    }
-
-    private PreparedStatement prepare(String sql, List<Object> bindings, boolean isCursor) throws SQLException {
-        Objects.requireNonNull(sql, "sql");
-        Objects.requireNonNull(bindings, "bindings");
-        PreparedStatement statement = isCursor
-                ? connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-                : connection.prepareStatement(sql);
-        try {
-            int index = 1;
-            for (Object value : bindings) {
-                bind(statement, index++, value, DatabaseFamily.of(productName));
-            }
-            return statement;
-        } catch (IndexOutOfBoundsException e) {
-            // A driver that does not check the index (sqlite-jdbc) throws it unchecked; report it as
-            // the ordinary statement failure.
-            closeAfterFailure(statement, e);
-            throw new SQLException("The statement has fewer placeholders than values.", e);
-        } catch (SQLException | RuntimeException e) {
-            closeAfterFailure(statement, e);
-            throw e;
-        }
-    }
-
-    private static void closeAfterFailure(PreparedStatement statement, Exception failure) {
-        try {
-            statement.close();
-        } catch (SQLException closeFailure) {
-            failure.addSuppressed(closeFailure);
-        }
-    }
-
-    private static void bind(PreparedStatement statement, int index, Object value, DatabaseFamily family)
-            throws SQLException {
-        SQLiteText.refuseNonFinite(value, index);
-        if (family == DatabaseFamily.SQLITE) {
-            // One text for dates and decimals on every SQLite driver, so values sort and compare.
-            value = SQLiteText.toStorage(value);
-        }
-        if (family == DatabaseFamily.POSTGRESQL) {
-            if (value == null) {
-                // Untyped, so a null fits any column type, uuid and jsonb included.
-                statement.setNull(index, Types.OTHER);
-                return;
-            }
-            if (value instanceof String) {
-                // Sent untyped, as pgjdbc's stringtype=unspecified does, so text binds into uuid, jsonb and inet.
-                statement.setObject(index, value, Types.OTHER);
-                return;
-            }
-        }
-        if (value == null) {
-            statement.setNull(index, Types.NULL);
-        } else if (value instanceof byte[]) {
-            statement.setBytes(index, (byte[]) value);
-        } else if (value instanceof BigInteger) {
-            statement.setBigDecimal(index, new BigDecimal((BigInteger) value));
-        } else if (value instanceof Instant) {
-            // JDBC 4.2 maps no SQL type to Instant; OffsetDateTime is the portable equivalent.
-            statement.setObject(index, OffsetDateTime.ofInstant((Instant) value, ZoneOffset.UTC));
-        } else if (!bindTyped(statement, index, value)) {
-            statement.setObject(index, value);
-        }
-    }
-
-    // Typed setters, because some drivers (sqlite-jdbc) store a Boolean given to setObject as text.
-    private static boolean bindTyped(PreparedStatement statement, int index, Object value) throws SQLException {
-        if (value instanceof Boolean) {
-            statement.setBoolean(index, (Boolean) value);
-        } else if (value instanceof Byte) {
-            statement.setByte(index, (Byte) value);
-        } else if (value instanceof Short) {
-            statement.setShort(index, (Short) value);
-        } else if (value instanceof Integer) {
-            statement.setInt(index, (Integer) value);
-        } else if (value instanceof Long) {
-            statement.setLong(index, (Long) value);
-        } else if (value instanceof Float) {
-            statement.setFloat(index, (Float) value);
-        } else if (value instanceof Double) {
-            statement.setDouble(index, (Double) value);
-        } else if (value instanceof BigDecimal) {
-            statement.setBigDecimal(index, (BigDecimal) value);
-        } else if (value instanceof String) {
-            statement.setString(index, (String) value);
-        } else {
-            return false;
-        }
-        return true;
-    }
-
-    private List<Map<String, Object>> readRows(ResultSet resultSet) throws SQLException {
-        JdbcColumns columns = JdbcColumns.of(resultSet.getMetaData(), productName);
-        List<Map<String, Object>> rows = new ArrayList<>();
-        while (resultSet.next()) {
-            rows.add(Collections.unmodifiableMap(columns.read(resultSet)));
-        }
-        return Collections.unmodifiableList(rows);
     }
 
     // A commit that lost its connection may have landed; the kind says so, apart from a plain loss.
@@ -691,12 +544,14 @@ final class JdbcSession implements DriverSession {
         kinds.add(DriverFailureKind.COMMIT_OUTCOME_UNKNOWN);
         String codeName = DatabaseFamily.of(productName) == DatabaseFamily.SQLITE
                 ? DriverFailureMessages.sqliteCodeName(failure.vendorCode()).orElse(null) : null;
-        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null), failure.error().columns());
+        DiwanError error = DiwanError.of(kinds, failure.error().key().orElse(null),
+                failure.error().table().orElse(null), failure.error().columns());
         String message = DriverFailureMessages.message(kinds, failure.sqlState().orElse(null),
                 failure.vendorCode(), codeName, error);
         return new DriverException(message, failure.sqlState().orElse(null), failure.vendorCode(),
                 failure.databaseMessage().orElse(null), failure.getCause(), kinds,
-                failure.error().key().orElse(null), failure.error().columns());
+                failure.error().key().orElse(null), failure.error().table().orElse(null),
+                failure.error().columns());
     }
 
     private DriverException failure(SQLException e) {

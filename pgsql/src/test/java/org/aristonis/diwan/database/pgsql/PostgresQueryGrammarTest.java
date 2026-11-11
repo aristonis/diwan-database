@@ -7,10 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Proxy;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.LockStrength;
@@ -36,6 +39,76 @@ class PostgresQueryGrammarTest {
                             throw new UnsupportedOperationException(method.getName());
                     }
                 });
+    }
+
+    /** A connection that answers the version and the owned-sequence query, and records every statement. */
+    private static Connection recording(String prefix, String version, List<String> log) {
+        return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
+                new Class<?>[] {Connection.class}, (proxy, method, args) -> {
+                    switch (method.getName()) {
+                        case "getTablePrefix":
+                            return prefix;
+                        case "scalar":
+                            log.add((String) args[0]);
+                            return Optional.of(version);
+                        case "select":
+                            List<?> bindings = args[1] instanceof List
+                                    ? (List<?>) args[1] : Arrays.asList((Object[]) args[1]);
+                            log.add(args[0] + " " + bindings);
+                            List<Map<String, Object>> rows = new ArrayList<>();
+                            if (((String) args[0]).contains("pg_depend")) {
+                                rows.add(row("seq", "app_users_id_seq", "tbl", "app_users", "col", "id",
+                                        "seqstart", 1L, "seqincrement", 1L));
+                                rows.add(row("seq", "app_users_n_seq", "tbl", "app_users", "col", "n",
+                                        "seqstart", -1L, "seqincrement", -1L));
+                            }
+                            return rows;
+                        case "hashCode":
+                            return System.identityHashCode(proxy);
+                        case "equals":
+                            return proxy == args[0];
+                        case "toString":
+                            return "recording connection";
+                        default:
+                            throw new UnsupportedOperationException(method.getName());
+                    }
+                });
+    }
+
+    @Test
+    void restartIdentitiesReadsTheOwnedSequencesOnceAndSetsEachWithThePrefixedTable() {
+        List<String> log = new ArrayList<>();
+
+        PostgresQuery.of(recording("app_", "16.3", log)).restartIdentities(List.of("users", "s.orders"));
+
+        assertEquals(4, log.size());
+        assertEquals("show server_version", log.get(0));
+        assertTrue(log.get(1).endsWith("d.refobjid in (?::regclass, ?::regclass) [\"app_users\", \"s\".\"app_orders\"]"),
+                log.get(1));
+        assertEquals("select setval(?::regclass, coalesce((select max(\"id\") from app_users) + ?, ?), false)"
+                + " [app_users_id_seq, 1, 1]", log.get(2));
+        assertEquals("select setval(?::regclass, coalesce((select min(\"n\") from app_users) + ?, ?), false)"
+                + " [app_users_n_seq, -1, -1]", log.get(3));
+    }
+
+    @Test
+    void restartIdentitiesWithNoTablesSendsNothing() {
+        List<String> log = new ArrayList<>();
+
+        PostgresQuery.of(recording("", "16.3", log)).restartIdentities(List.of());
+
+        assertTrue(log.isEmpty());
+    }
+
+    @Test
+    void restartIdentitiesBelowVersion10IsRefusedBeforeAnyCatalogQuery() {
+        List<String> log = new ArrayList<>();
+
+        UnsupportedOperationException error = assertThrows(UnsupportedOperationException.class,
+                () -> PostgresQuery.of(recording("", "9.6.24", log)).restartIdentities(List.of("users")));
+
+        assertEquals("restartIdentities needs PostgreSQL 10 or later, found 9.6.24", error.getMessage());
+        assertEquals(List.of("show server_version"), log);
     }
 
     private static QueryFactory db() {

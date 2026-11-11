@@ -37,10 +37,13 @@ public final class DiwanError implements Serializable {
     private final String key;
     /** The column names the database named, possibly empty. */
     private final ArrayList<String> columns;
+    /** The table name, or {@code null} when the database gave none; {@code null} in streams written before it existed. */
+    private final String table;
 
-    private DiwanError(String code, String key, List<String> columns) {
+    private DiwanError(String code, String key, String table, List<String> columns) {
         this.code = code;
         this.key = key;
+        this.table = table;
         this.columns = new ArrayList<>(columns);
     }
 
@@ -56,11 +59,27 @@ public final class DiwanError implements Serializable {
      */
     @Internal
     public static DiwanError of(Set<DriverFailureKind> kinds, String key, List<String> columns) {
+        return of(kinds, key, null, columns);
+    }
+
+    /**
+     * Builds the error for the kinds of a failure, with the table.
+     *
+     * @apiNote Internal: for drivers in this library.
+     * @param kinds the kinds the driver recognised, may be {@code null} or empty
+     * @param key the constraint or index name, or {@code null} when there is none
+     * @param table the table name, or {@code null} when there is none
+     * @param columns the column names, never {@code null}, may be empty; the list is copied
+     * @return the error, never {@code null}
+     * @throws NullPointerException if {@code columns} or one of its elements is {@code null}
+     */
+    @Internal
+    public static DiwanError of(Set<DriverFailureKind> kinds, String key, String table, List<String> columns) {
         Objects.requireNonNull(columns, "columns");
         for (String column : columns) {
             Objects.requireNonNull(column, "column");
         }
-        return new DiwanError(DiwanErrorCodes.codeOf(kinds), key, columns);
+        return new DiwanError(DiwanErrorCodes.codeOf(kinds), key, table, columns);
     }
 
     /**
@@ -82,6 +101,15 @@ public final class DiwanError implements Serializable {
     }
 
     /**
+     * Returns the name of the table the failure concerns.
+     *
+     * @return the name, or an empty optional when the database gave none
+     */
+    public Optional<String> table() {
+        return Optional.ofNullable(table);
+    }
+
+    /**
      * Returns the names of the columns involved.
      *
      * @return an unmodifiable list, possibly empty, never {@code null}
@@ -99,17 +127,18 @@ public final class DiwanError implements Serializable {
             return false;
         }
         DiwanError that = (DiwanError) other;
-        return code.equals(that.code) && Objects.equals(key, that.key) && columns.equals(that.columns);
+        return code.equals(that.code) && Objects.equals(key, that.key)
+                && Objects.equals(table, that.table) && columns.equals(that.columns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(code, key, columns);
+        return Objects.hash(code, key, table, columns);
     }
 
     @Override
     public String toString() {
-        return "DiwanError{code=" + code + ", key=" + key + ", columns=" + columns + "}";
+        return "DiwanError{code=" + code + ", key=" + key + ", table=" + table + ", columns=" + columns + "}";
     }
 
     /**
