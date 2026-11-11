@@ -92,10 +92,14 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     private void addComment(List<String> statements, Blueprint blueprint, ColumnDefinition column) {
         if (column.comment().isPresent()) {
             // An empty comment removes it, as PostgreSQL treats '' and null alike here.
-            String text = column.comment().get();
             statements.add("comment on column " + wrapTable(blueprint.table()) + "." + wrap(column.name()) + " is "
-                    + (text.isEmpty() ? "null" : literal(text)));
+                    + commentValue(column.comment().get()));
         }
+    }
+
+    // The value of a comment statement: null for an empty text, else the quoted literal.
+    private String commentValue(String text) {
+        return text.isEmpty() ? "null" : literal(text);
     }
 
     /**
@@ -131,7 +135,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create table <table> (<columns>, <checks>)}
+     * @return {@code create [temporary] table <table> (<columns>, <checks>)}
      */
     @Override
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
@@ -144,7 +148,7 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
                 separate(sql).append(tableCheck(check));
             }
         }
-        return "create table " + wrapTable(blueprint.table()) + " (" + sql + ")";
+        return createTable(blueprint) + " (" + sql + ")";
     }
 
     /**
@@ -636,6 +640,19 @@ public class PostgresSchemaGrammar extends SchemaGrammar {
     @Override
     protected String collationName(Collation collation) {
         return collation.equals(Collation.BINARY) ? "C" : super.collationName(collation);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return {@code comment on table <table> is <text>}, with {@code null} for an empty text, which
+     *     removes the comment
+     */
+    @Override
+    protected List<String> compileTableComment(Blueprint blueprint, Command command, Connection connection) {
+        String text = command.string(Command.COMMENT);
+        return Collections.singletonList("comment on table " + wrapTable(blueprint.table()) + " is "
+                + commentValue(text));
     }
 
     /**

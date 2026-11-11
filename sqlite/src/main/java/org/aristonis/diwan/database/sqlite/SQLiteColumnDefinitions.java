@@ -52,6 +52,19 @@ final class SQLiteColumnDefinitions {
     }
 
     /**
+     * Refuses a table that is a temporary table of the connection, which a change cannot rebuild.
+     *
+     * @param connection the connection to look on
+     * @param table the table name, matched without regard to letter case
+     * @throws IllegalStateException if the table is a temporary table
+     */
+    static void refuseTemporary(Connection connection, String table) {
+        if (connection.scalar(TABLE_SQL.replace(CATALOG, "sqlite_temp_master"), table).isPresent()) {
+            throw new IllegalStateException("Changing a temporary table is not supported on SQLite");
+        }
+    }
+
+    /**
      * Returns the collation written on a column.
      *
      * @param column the column name, in any case

@@ -24,10 +24,25 @@ public final class IndexDefinition {
     private final List<IndexCondition> conditions = new ArrayList<>();
     private final Map<String, String> orders = new LinkedHashMap<>();
     private final Map<String, String> collations = new LinkedHashMap<>();
+    private final boolean isRaw;
     private boolean isFrozen;
 
     IndexDefinition(List<String> columns) {
+        this(columns, false);
+    }
+
+    private IndexDefinition(List<String> columns, boolean isRaw) {
         this.columns = Collections.unmodifiableList(new ArrayList<>(columns));
+        this.isRaw = isRaw;
+    }
+
+    // An index whose only "column" is a raw SQL expression.
+    static IndexDefinition raw(String expression) {
+        return new IndexDefinition(Collections.singletonList(expression), true);
+    }
+
+    boolean isRaw() {
+        return isRaw;
     }
 
     /**
@@ -91,7 +106,8 @@ public final class IndexDefinition {
      * @return this definition
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalArgumentException if the column is not in the index
-     * @throws IllegalStateException if the definition is frozen
+     * @throws IllegalStateException if the definition is frozen, or is a raw index, whose order and
+     *     collation belong inside its expression
      */
     public IndexDefinition asc(String column) {
         return order(column, "asc");
@@ -104,7 +120,8 @@ public final class IndexDefinition {
      * @return this definition
      * @throws NullPointerException if {@code column} is {@code null}
      * @throws IllegalArgumentException if the column is not in the index
-     * @throws IllegalStateException if the definition is frozen
+     * @throws IllegalStateException if the definition is frozen, or is a raw index, whose order and
+     *     collation belong inside its expression
      */
     public IndexDefinition desc(String column) {
         return order(column, "desc");
@@ -119,10 +136,12 @@ public final class IndexDefinition {
      * @throws NullPointerException if an argument is {@code null}
      * @throws IllegalArgumentException if the column is not in the index, or the collation name is
      *     empty or has a quote or control character
-     * @throws IllegalStateException if the definition is frozen
+     * @throws IllegalStateException if the definition is frozen, or is a raw index, whose order and
+     *     collation belong inside its expression
      */
     public IndexDefinition collate(String column, String collation) {
         ensureOpen();
+        refuseRaw();
         String own = ownColumn(column);
         collations.put(own, Collation.of(collation).name());
         return this;
@@ -155,8 +174,15 @@ public final class IndexDefinition {
 
     private IndexDefinition order(String column, String direction) {
         ensureOpen();
+        refuseRaw();
         orders.put(ownColumn(column), direction);
         return this;
+    }
+
+    private void refuseRaw() {
+        if (isRaw) {
+            throw new IllegalStateException("Put the order and collation of a raw index inside its expression");
+        }
     }
 
     private String ownColumn(String column) {

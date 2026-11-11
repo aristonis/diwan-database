@@ -103,6 +103,8 @@ public abstract class SchemaGrammar extends InspectionGrammar {
                 return compileCheck(blueprint, command, connection);
             case Command.DROP_CHECK:
                 return compileDropCheck(blueprint, command, connection);
+            case Command.TABLE_COMMENT:
+                return compileTableComment(blueprint, command, connection);
             default:
                 throw unsupported("The command " + command.name());
         }
@@ -121,6 +123,35 @@ public abstract class SchemaGrammar extends InspectionGrammar {
      */
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
         throw unsupported("The command " + command.name());
+    }
+
+    /**
+     * Writes the start of a create statement, {@code create table "t"} or, for a temporary table,
+     * {@code create temporary table "t"}.
+     *
+     * @implSpec Writes {@code create temporary table} when {@link Blueprint#isTemporary()} is
+     *     {@code true}, else {@code create table}, followed by the wrapped table name.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @return the statement start without a trailing space, never {@code null}
+     */
+    protected String createTable(Blueprint blueprint) {
+        return (blueprint.isTemporary() ? "create temporary table " : "create table ")
+                + wrapTable(blueprint.table());
+    }
+
+    /**
+     * Compiles {@link Command#TABLE_COMMENT}.
+     *
+     * @implSpec The base writes no statement, as a grammar without table comments skips the command.
+     *
+     * @param blueprint the blueprint, never {@code null}
+     * @param command the command, never {@code null}
+     * @param connection the connection, never {@code null}
+     * @return the statements, never {@code null}; empty in the base
+     */
+    protected List<String> compileTableComment(Blueprint blueprint, Command command, Connection connection) {
+        return Collections.emptyList();
     }
 
     /**

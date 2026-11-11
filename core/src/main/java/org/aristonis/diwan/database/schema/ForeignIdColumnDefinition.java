@@ -17,6 +17,8 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
     private static final String ID_SUFFIX = "_id";
 
     private final Blueprint blueprint;
+    private String modelTable;
+    private String modelKey;
 
     ForeignIdColumnDefinition(Blueprint blueprint, String name) {
         super(name, ColumnType.BIG_INTEGER, 0, 0, 0);
@@ -29,10 +31,17 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
         this.blueprint = blueprint;
     }
 
+    // Remembers the table and key a ForeignKeySource named, for constrained().
+    void referencesModel(String table, String key) {
+        this.modelTable = table;
+        this.modelKey = key;
+    }
+
     /**
      * Adds a foreign key to the {@code id} column of the table the column name points at, as
      * Laravel does: {@code user_id} references {@code users}, {@code blog_category_id}
-     * {@code blog_categories}.
+     * {@code blog_categories}. A column added by {@link Blueprint#foreignIdFor(ForeignKeySource)}
+     * points at the table and key of its source instead.
      *
      * @apiNote The plural is guessed with English rules and a short list of irregular nouns; name
      *     the table with {@link #constrained(String)} when the guess is wrong.
@@ -40,6 +49,9 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
     public ForeignKeyDefinition constrained() {
+        if (modelTable != null) {
+            return constrained(modelTable, modelKey);
+        }
         String column = name();
         String stem = column.endsWith(ID_SUFFIX) && column.length() > ID_SUFFIX.length()
                 ? column.substring(0, column.length() - ID_SUFFIX.length())
@@ -48,7 +60,8 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
     }
 
     /**
-     * Adds a foreign key to the {@code id} column of a named table.
+     * Adds a foreign key to the {@code id} column of a named table; for a column added by
+     * {@link Blueprint#foreignIdFor(ForeignKeySource)}, to the key column of its source.
      *
      * @param table the referenced table without prefix, never {@code null}
      * @return the foreign key, for its actions, never {@code null}
@@ -57,7 +70,7 @@ public final class ForeignIdColumnDefinition extends ColumnDefinition {
      * @throws IllegalStateException if the blueprint can no longer be changed
      */
     public ForeignKeyDefinition constrained(String table) {
-        return constrained(table, "id");
+        return constrained(table, modelKey != null ? modelKey : "id");
     }
 
     /**

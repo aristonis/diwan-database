@@ -150,6 +150,10 @@ final class SQLiteTableRebuild {
 
     private void renameIndex(String from, String to) {
         SQLiteTableState.Index index = state.requireIndex(from);
+        if (index.rawSql != null) {
+            throw new UnsupportedOperationException("Index " + from + " is on an expression; drop it and add it"
+                    + " again with rawIndex to rename it");
+        }
         index.name = to;
         inPlace(Arrays.asList("drop index " + grammar.quote(from), createIndex(index)));
     }
@@ -292,6 +296,10 @@ final class SQLiteTableRebuild {
     }
 
     private SQLiteTableState.Index indexOf(Command command) {
+        if (command.has(Command.RAW)) {
+            return new SQLiteTableState.Index(command.string(Command.INDEX),
+                    grammar.compileOne(blueprint, command, connection).get(0));
+        }
         List<String> columns = new ArrayList<>(command.strings(Command.COLUMNS));
         Map<String, String> orders = namesOf(command, Command.ORDERS);
         Map<String, String> collations = namesOf(command, Command.COLLATIONS);
@@ -315,6 +323,9 @@ final class SQLiteTableRebuild {
     }
 
     private String createIndex(SQLiteTableState.Index index) {
+        if (index.rawSql != null) {
+            return index.rawSql;
+        }
         StringBuilder parts = new StringBuilder();
         for (int i = 0; i < index.columns.size(); i++) {
             separate(parts).append(grammar.quote(index.columns.get(i)));

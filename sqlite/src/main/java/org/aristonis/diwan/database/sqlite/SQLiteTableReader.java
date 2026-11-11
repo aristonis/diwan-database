@@ -340,6 +340,10 @@ final class SQLiteTableReader {
             if ("pk".equals(entry.origin)) {
                 continue;
             }
+            if (entry.hasExpression() && entry.sql != null) {
+                state.indexes.add(new Index(entry.name, entry.sql));
+                continue;
+            }
             if (entry.hasExpression()) {
                 throw new UnsupportedOperationException("Index " + entry.name + " of table " + state.table
                         + " is on an expression, which a SQLite table rebuild cannot carry over");

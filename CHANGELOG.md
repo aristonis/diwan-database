@@ -21,6 +21,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `MigrationLock.explain(RuntimeException)`, a default method a lock uses to add a note to a failed run.
 - `QueryFactory.restartIdentities(tables)`, which sets the identity and `serial` counters of PostgreSQL tables to the value after the highest committed id, or to the start value of an empty table. SQLite and Android do nothing. Needs PostgreSQL 10 or later.
 - `RefreshDatabase.rollback(...).restartingIdentities()`, which restarts those counters before each test, so rollback-mode tests get the same ids on every run. Refused with parallel tests and in truncate mode.
+- `Blueprint.temporary()`, which makes `schema.create` write `create temporary table` on SQLite and PostgreSQL. A temporary table lives on one connection; on SQLite a change that needs a table rebuild is refused with `IllegalStateException`; plain additions work.
+- `Blueprint.rawIndex(expression, name)`, an index over a raw SQL expression such as `lower(email)`, which returns an `IndexDefinition` so `where` can make it partial. The expression is written as given, so it must never come from user input. SQLite table rebuilds keep the index.
+- `Blueprint.comment(text)`, a table comment on PostgreSQL. SQLite skips it without an error.
+- `Blueprint.foreignIdFor(ForeignKeySource)` and `foreignIdFor(ForeignKeySource, column)`, which add the column for another table's key, typed by the key kind; `constrained()` then references the key's table and column.
+- `ForeignKeySource`, the interface that describes another table's key, with `KeyKind` (`INTEGER`, `UUID`, `ULID`), and `ModelKeys.of(...)` in the eloquent module, which builds one from a model.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.

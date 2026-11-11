@@ -72,6 +72,8 @@ final class SQLiteTableState {
         final List<String> collations;
         // The condition of a partial index without its leading where, or null.
         final String where;
+        // The whole create text of an index on an expression, or null for an index on columns.
+        final String rawSql;
 
         Index(String name, List<String> columns, boolean isUnique, List<String> orders, List<String> collations,
                 String where) {
@@ -81,6 +83,18 @@ final class SQLiteTableState {
             this.orders = orders;
             this.collations = collations;
             this.where = where;
+            this.rawSql = null;
+        }
+
+        /** An index on an expression, kept as the text that creates it; the text holds any unique or where. */
+        Index(String name, String rawSql) {
+            this.name = name;
+            this.columns = Collections.emptyList();
+            this.isUnique = false;
+            this.orders = Collections.emptyList();
+            this.collations = Collections.emptyList();
+            this.where = null;
+            this.rawSql = rawSql;
         }
     }
 
@@ -174,6 +188,11 @@ final class SQLiteTableState {
             refuseIfNames(check.sql, name);
         }
         for (Index index : indexes) {
+            if (index.rawSql != null && names(index.rawSql, name)) {
+                throw new UnsupportedOperationException("Column " + name + " of table " + table + " is named in"
+                        + " expression index " + index.name + ", which a SQLite table rebuild cannot rewrite;"
+                        + " drop the index first");
+            }
             if (index.where != null && names(index.where, name)) {
                 throw new UnsupportedOperationException("Column " + name + " of table " + table + " is named in the"
                         + " condition of partial index " + index.name + ", which a SQLite table rebuild cannot"
@@ -280,6 +299,7 @@ final class SQLiteTableState {
     }
 
     void addIndex(Index index) {
+        // An index on an expression names no column to check.
         for (String column : index.columns) {
             require(column);
         }

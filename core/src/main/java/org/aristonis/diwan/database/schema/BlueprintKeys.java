@@ -373,6 +373,43 @@ abstract class BlueprintKeys extends BlueprintState {
         return name.toString().toLowerCase(Locale.ROOT).replace('-', '_').replace('.', '_');
     }
 
+    /**
+     * Adds an index over a raw SQL expression, such as {@code lower(email)}, named by the caller.
+     *
+     * <p>The expression is written into the statement exactly as given, without quoting. Never
+     * build it from user input: it is an SQL injection point.
+     *
+     * @apiNote Put the order and collation inside the expression; {@code desc} and {@code collate}
+     *     on the returned definition are refused. A {@code where} condition makes a partial
+     *     expression index. SQLite refuses to rename a raw index; drop it and add it again.
+     * @param expression the SQL expression, never {@code null} or blank
+     * @param name the index name, never {@code null} or blank
+     * @return the index definition, for a partial index
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if the expression or the name is blank, or the name is
+     *     invalid, repeated or too long
+     * @throws IllegalStateException if the blueprint can no longer be changed
+     */
+    public IndexDefinition rawIndex(String expression, String name) {
+        ensureOpen();
+        Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(name, "name");
+        if (expression.trim().isEmpty()) {
+            throw new IllegalArgumentException("rawIndex needs an expression");
+        }
+        if (name.trim().isEmpty()) {
+            throw new IllegalArgumentException("rawIndex needs an index name");
+        }
+        IndexDefinition definition = IndexDefinition.raw(expression);
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(Command.COLUMNS, definition.columns());
+        attributes.put(DEFINITION, definition);
+        attributes.put(REQUESTED, SchemaNames.check("index", name));
+        attributes.put(Command.RAW, Boolean.TRUE);
+        commands.add(new Command(Command.PLAIN_INDEX, attributes));
+        return definition;
+    }
+
     IndexDefinition indexCommand(String type, List<String> columns, String name) {
         ensureOpen();
         Map<String, Object> attributes = new LinkedHashMap<>();

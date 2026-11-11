@@ -29,6 +29,8 @@ final class SQLiteIndexReader {
         final List<String> orders = new ArrayList<>();
         final List<String> collations = new ArrayList<>();
         String where;
+        // The stored create text; read only for an index on an expression, otherwise null.
+        String sql;
 
         Entry(String name, boolean isUnique, String origin, boolean isPartial) {
             this.name = name;
@@ -69,6 +71,9 @@ final class SQLiteIndexReader {
             Entry entry = new Entry(String.valueOf(row.get("name")), SQLiteTableState.number(row.get("unique")) == 1,
                     String.valueOf(row.get("origin")), SQLiteTableState.number(row.get("partial")) == 1);
             readColumns(entry);
+            if (entry.hasExpression()) {
+                entry.sql = readSql(entry.name);
+            }
             if (entry.isPartial) {
                 entry.where = readWhere(entry.name);
             }
@@ -100,6 +105,11 @@ final class SQLiteIndexReader {
             definitions = SQLiteColumnDefinitions.read(connection, table);
         }
         return definitions;
+    }
+
+    private String readSql(String index) {
+        return connection.scalar("select sql from sqlite_master where type = 'index' and name = ?", index)
+                .map(Object::toString).orElse(null);
     }
 
     // The text after the closing parenthesis of the column list, without the leading where.

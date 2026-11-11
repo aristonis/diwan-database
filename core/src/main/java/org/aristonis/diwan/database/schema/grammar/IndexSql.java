@@ -24,7 +24,9 @@ public final class IndexSql {
      *
      * @param grammar the grammar that quotes names, never {@code null}
      * @param command the index command, never {@code null}
-     * @return the column list, never {@code null}; ascending order, the default, is not written
+     * @return the column list, never {@code null}; ascending order, the default, is not written;
+     *     for a command with {@link Command#RAW} the expression text as it is, without quoting, order
+     *     or collation
      */
     public static String parts(SchemaGrammar grammar, Command command) {
         return columnParts(grammar, command);
@@ -44,6 +46,10 @@ public final class IndexSql {
         for (String column : command.strings(Command.COLUMNS)) {
             if (sql.length() > 0) {
                 sql.append(", ");
+            }
+            if (command.has(Command.RAW)) {
+                sql.append(column);
+                continue;
             }
             sql.append(grammar.wrap(column));
             String collation = collations.get(column);

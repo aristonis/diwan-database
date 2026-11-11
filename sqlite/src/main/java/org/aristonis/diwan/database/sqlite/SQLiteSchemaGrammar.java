@@ -85,7 +85,8 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
      *     existing table is compiled against the table's current shape, read through
      *     {@code connection}; when SQLite cannot make a change in place, the table is rebuilt: a new
      *     table, the rows copied, the old one dropped, the new one renamed, the indexes and the
-     *     auto-increment counter restored.
+     *     auto-increment counter restored. A temporary table can take plain additions, but a change that
+     *     needs a rebuild is refused.
      */
     @Override
     public List<String> compile(Blueprint blueprint, Connection connection) {
@@ -94,6 +95,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
         if (blueprint.isCreating() || !hasAny(blueprint, STATEFUL) && !hasRebuildingAdd(blueprint)) {
             return super.compile(blueprint, connection);
         }
+        SQLiteColumnDefinitions.refuseTemporary(connection, blueprint.table());
         return new SQLiteTableRebuild(this, blueprint, connection).compile();
     }
 
@@ -131,7 +133,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
     /**
      * {@inheritDoc}
      *
-     * @return {@code create table <table> (<columns>)}
+     * @return {@code create [temporary] table <table> (<columns>)}
      */
     @Override
     protected String compileCreate(Blueprint blueprint, Command command, Connection connection) {
@@ -169,7 +171,7 @@ public class SQLiteSchemaGrammar extends SchemaGrammar {
                 columns.append(", ").append(tableCheck(check.string(Command.NAME), check.string(Command.SQL)));
             }
         }
-        return "create table " + wrapTable(blueprint.table()) + " (" + columns + ")";
+        return createTable(blueprint) + " (" + columns + ")";
     }
 
     /**
