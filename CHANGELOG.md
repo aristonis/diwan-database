@@ -19,6 +19,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `FileMigrationLock`, a `MigrationLock` that locks a `<database>.migrate.lock` file beside a file database.
 - SQLite and Android connectors lock file databases during migrations, so two processes do not migrate one file at once. The `lock_wait` option sets the wait, 60 seconds by default; in-memory databases have no lock.
 - `MigrationLock.explain(RuntimeException)`, a default method a lock uses to add a note to a failed run.
+- `QueryFactory.restartIdentities(tables)`, which sets the identity and `serial` counters of PostgreSQL tables to the value after the highest committed id, or to the start value of an empty table. SQLite and Android do nothing. Needs PostgreSQL 10 or later.
+- `RefreshDatabase.rollback(...).restartingIdentities()`, which restarts those counters before each test, so rollback-mode tests get the same ids on every run. Refused with parallel tests and in truncate mode.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.

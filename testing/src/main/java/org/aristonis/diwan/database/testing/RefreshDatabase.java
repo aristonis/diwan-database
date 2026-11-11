@@ -43,6 +43,13 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
  *       nothing commits. Work done on other threads, such as threads or executors the test starts, or
  *       a test under {@code @Timeout(threadMode = SEPARATE_THREAD)}, is not part of the transaction
  *       and commits for real. Tests may run in parallel, one transaction per test thread.
+ *       Sequences are not rolled back, so on PostgreSQL the ids a test gets depend on the tests
+ *       that ran before it. {@link #restartingIdentities()} sets them back before each test, to the
+ *       value after the highest committed id: rows a migration or a seeder committed are kept, so
+ *       the first new row gets the id after them, and the same ids every time. It needs
+ *       PostgreSQL 10 or later, does nothing on SQLite, whose rollback already restores its
+ *       counters, and refuses parallel tests, which share the sequences; Gradle forks that use
+ *       one database are not detected, so give each fork its own database.
  *   <li>{@link #truncate} lets the test commit for real and empties every table except the
  *       migrations table after it, in one {@link QueryFactory#truncate(List)} call, so identities
  *       restart. Slower, but afterCommit callbacks run and other threads see the data. Internal
@@ -98,6 +105,7 @@ public final class RefreshDatabase
     }
 
     private final Mode mode;
+    private final boolean isRestartingIdentities;
     private final Supplier<QueryFactory> db;
     private final Function<Connection, Schema> schema;
     private final List<Migration> migrations;
@@ -105,9 +113,10 @@ public final class RefreshDatabase
     /** Per-instance state of one test: the open scope, and whether its set-up finished. */
     private final Namespace own = Namespace.create(RefreshDatabase.class, this);
 
-    private RefreshDatabase(Mode mode, Supplier<QueryFactory> db, Function<Connection, Schema> schema,
-            List<Migration> migrations) {
+    private RefreshDatabase(Mode mode, boolean isRestartingIdentities, Supplier<QueryFactory> db,
+            Function<Connection, Schema> schema, List<Migration> migrations) {
         this.mode = mode;
+        this.isRestartingIdentities = isRestartingIdentities;
         this.db = Objects.requireNonNull(db, "db");
         this.schema = Objects.requireNonNull(schema, "schema");
         this.migrations = new ArrayList<>(Objects.requireNonNull(migrations, "migrations"));
@@ -129,7 +138,7 @@ public final class RefreshDatabase
      */
     public static RefreshDatabase rollback(Supplier<QueryFactory> db, Function<Connection, Schema> schema,
             List<Migration> migrations) {
-        return new RefreshDatabase(Mode.ROLLBACK, db, schema, migrations);
+        return new RefreshDatabase(Mode.ROLLBACK, false, db, schema, migrations);
     }
 
     /**
@@ -145,23 +154,54 @@ public final class RefreshDatabase
      */
     public static RefreshDatabase truncate(Supplier<QueryFactory> db, Function<Connection, Schema> schema,
             List<Migration> migrations) {
-        return new RefreshDatabase(Mode.TRUNCATE, db, schema, migrations);
+        return new RefreshDatabase(Mode.TRUNCATE, false, db, schema, migrations);
+    }
+
+    /**
+     * Returns an extension like this one that also sets the identity and serial counters back
+     * before each test, so the test sees the ids it would see on a freshly migrated database.
+     *
+     * <p>Only rollback mode needs it: a rollback leaves the PostgreSQL sequences where the test
+     * moved them, while truncate mode restarts them already. Before each test, after the migrations
+     * ran and before the test's transaction opens, the counters of the tables the extension owns
+     * are set to the value after the highest committed id, or to the start value of an empty
+     * table; see {@link QueryFactory#restartIdentities(List)}. The table list is read once per run,
+     * right after the migrations, so a table a test creates later is not restarted. This needs
+     * PostgreSQL 10 or later and does nothing on SQLite. Tests must not run in parallel with this
+     * option: they share the sequences, and the extension fails with an
+     * {@link IllegalStateException} under {@link ExecutionMode#CONCURRENT}. The check sees one
+     * JVM, so Gradle forks that use one database are not caught.
+     *
+     * @return a new extension with the option on; this one is not changed, never {@code null}
+     * @throws IllegalStateException if this extension is in truncate mode, which restarts identities
+     *     already
+     */
+    public RefreshDatabase restartingIdentities() {
+        if (mode == Mode.TRUNCATE) {
+            throw new IllegalStateException("Truncate mode already restarts identities");
+        }
+        return new RefreshDatabase(mode, true, db, schema, migrations);
     }
 
     @Override
     public void beforeAll(ExtensionContext context) {
-        refuseParallelTruncate(context);
+        refuseParallel(context);
         migrateOnce(context);
     }
 
     @Override
     public void beforeEach(ExtensionContext context) {
-        refuseParallelTruncate(context);
+        refuseParallel(context);
         // A non-static registration never gets beforeAll; the check is cheap once migrated.
         migrateOnce(context);
         ExtensionContext.Store store = context.getStore(own);
         if (mode == Mode.ROLLBACK) {
-            store.put(SCOPE, db.get().connection().beginJoinedTransaction());
+            QueryFactory factory = db.get();
+            if (isRestartingIdentities) {
+                // Before the transaction opens, so a failure leaves no scope behind.
+                factory.restartIdentities(ownTables(context, factory.connection()));
+            }
+            store.put(SCOPE, factory.connection().beginJoinedTransaction());
         }
         store.put(READY, Boolean.TRUE);
     }
@@ -182,13 +222,20 @@ public final class RefreshDatabase
             return;
         }
         QueryFactory factory = db.get();
-        factory.truncate(tablesToEmpty(context, factory.connection()));
+        factory.truncate(ownTables(context, factory.connection()));
     }
 
-    private void refuseParallelTruncate(ExtensionContext context) {
-        if (mode == Mode.TRUNCATE && isRunningInParallel(context)) {
+    private void refuseParallel(ExtensionContext context) {
+        if (!isRunningInParallel(context)) {
+            return;
+        }
+        if (mode == Mode.TRUNCATE) {
             throw new IllegalStateException("Truncate mode cannot run tests in parallel: one test would empty the"
                     + " tables under another. Use rollback mode, or @Execution(ExecutionMode.SAME_THREAD)");
+        }
+        if (isRestartingIdentities) {
+            throw new IllegalStateException("restartingIdentities() cannot run tests in parallel: tests share the"
+                    + " sequences. Use @Execution(ExecutionMode.SAME_THREAD)");
         }
     }
 
@@ -222,7 +269,7 @@ public final class RefreshDatabase
         return isEnabled && context.getExecutionMode() == ExecutionMode.CONCURRENT;
     }
 
-    private List<String> tablesToEmpty(ExtensionContext context, Connection connection) {
+    private List<String> ownTables(ExtensionContext context, Connection connection) {
         // get and put under a lock, not getOrComputeIfAbsent: that is deprecated in JUnit 6 and its
         // replacement is missing from the JUnit 5.10 this module supports.
         ExtensionContext.Store store = context.getRoot().getStore(NAMESPACE);

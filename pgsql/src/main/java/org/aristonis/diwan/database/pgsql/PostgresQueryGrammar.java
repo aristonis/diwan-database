@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.LockStrength;
 import org.aristonis.diwan.database.query.LockWait;
@@ -349,6 +350,19 @@ public class PostgresQueryGrammar extends QueryGrammar {
         statements.put("truncate " + String.join(", ", wrapped) + " restart identity" + (cascade ? " cascade" : ""),
                 Collections.emptyList());
         return Collections.unmodifiableMap(statements);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Moves each sequence owned by a column of the tables to just past the highest
+     *     committed value, with {@code setval}. The sequences are read from the catalog, which
+     *     needs PostgreSQL 10 or later.
+     * @throws UnsupportedOperationException if the server is older than PostgreSQL 10
+     */
+    @Override
+    protected void restartIdentities(Connection connection, List<String> tables) {
+        PostgresIdentityRestart.run(connection, this, tables);
     }
 
     /**

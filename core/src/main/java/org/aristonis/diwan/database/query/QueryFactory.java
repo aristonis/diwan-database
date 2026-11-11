@@ -120,17 +120,56 @@ public final class QueryFactory {
      *     inside the transaction, every statement is then undone
      */
     public void truncate(List<String> tables, boolean cascade) {
-        List<String> names = new ArrayList<>(Objects.requireNonNull(tables, "tables"));
-        for (String name : names) {
-            if (name == null || name.trim().isEmpty()) {
-                throw new IllegalArgumentException("A table name to truncate must not be null or blank");
-            }
-        }
+        List<String> names = checkedNames(tables, "truncate");
         if (names.isEmpty()) {
             return;
         }
         Map<String, List<Object>> statements = grammar.compileTruncateMany(names, cascade, connection);
         grammar.runTruncate(connection, names, statements);
+    }
+
+    /**
+     * Sets the identity and serial counters of tables back, so the next insert gets the id it would
+     * get had no row been added since the data now committed: the start value of an empty table, or
+     * the value after the highest committed id. A test that rolls its rows back then sees the same
+     * ids each time.
+     *
+     * <p>Only PostgreSQL sends anything, and needs version 10 or later: SQLite's counter rolls back
+     * with the rows already. A sequence that no column owns, such as one created on its own and used
+     * as a default, is left alone. PostgreSQL never rolls a counter change back, so the reset stays
+     * even when the surrounding transaction is undone, and a counter moved past rows that are later
+     * rolled back stays past them.
+     *
+     * <p>Meant for tests, with nothing else writing to the tables: the highest id is read first and
+     * the counter set after, so a row another session adds in between can get an id handed out
+     * again. Rows of the caller's own open transaction count as committed here, so call it outside
+     * a transaction, as {@code RefreshDatabase} does.
+     *
+     * @param tables the table names, never {@code null}, none {@code null} or blank, optionally
+     *     {@code schema.table}; empty runs nothing
+     * @throws NullPointerException if {@code tables} is {@code null}
+     * @throws IllegalArgumentException if a name is {@code null} or blank
+     * @throws UnsupportedOperationException if the database is PostgreSQL older than version 10
+     * @throws org.aristonis.diwan.database.exception.QueryException if the database refuses a
+     *     statement, for example because a table does not exist, or because the next id would pass
+     *     the largest value the sequence allows
+     */
+    public void restartIdentities(List<String> tables) {
+        List<String> names = checkedNames(tables, "restart");
+        if (names.isEmpty()) {
+            return;
+        }
+        grammar.restartIdentities(connection, names);
+    }
+
+    private static List<String> checkedNames(List<String> tables, String what) {
+        List<String> names = new ArrayList<>(Objects.requireNonNull(tables, "tables"));
+        for (String name : names) {
+            if (name == null || name.trim().isEmpty()) {
+                throw new IllegalArgumentException("A table name to " + what + " must not be null or blank");
+            }
+        }
+        return names;
     }
 
 
