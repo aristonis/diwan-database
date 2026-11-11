@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.exception.UniqueConstraintViolationException;
@@ -339,6 +341,21 @@ class MigratorSqliteTest {
         assertEquals(Arrays.asList("acquire", "release"), calls);
         assertEquals("release failed", failure.getSuppressed()[0].getMessage());
         assertThrows(IllegalStateException.class, migrator::reset, "a release failure after success surfaces");
+    }
+
+    @Test
+    void aFailedRunLeavesTheFileLockFree() {
+        File database = folder.resolve("main.db").toFile();
+        Migrator migrator = Migrator.builder(schema)
+                .lock(new FileMigrationLock(() -> database, 100, TimeUnit.MILLISECONDS))
+                .add(new TestMigration("a", s -> s.connection().statement("insert into nowhere values (1)"), null))
+                .build();
+
+        assertThrows(MigrationFailedException.class, migrator::run);
+
+        FileMigrationLock after = new FileMigrationLock(() -> database, 100, TimeUnit.MILLISECONDS);
+        after.acquire();
+        after.release();
     }
 
     @Test

@@ -16,10 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `OffsetTime` as a binding on every driver (SQLite and Android store it as UTC text, `HH:mm:ss+00:00`) and as a cursor value, so cursor pagination works on a PostgreSQL `timetz` column.
 - `DriverCapability.ERROR_ABORTS_TRANSACTION`, declared by the PostgreSQL driver for a driver whose failed statement aborts the transaction.
 - PostgreSQL `timezone` connection option (for example `UTC`), off by default: sets the session time zone. Use it, or a `timestamptz` column, when `Instant` values go into plain `timestamp` columns.
+- `FileMigrationLock`, a `MigrationLock` that locks a `<database>.migrate.lock` file beside a file database.
+- SQLite and Android connectors lock file databases during migrations, so two processes do not migrate one file at once. The `lock_wait` option sets the wait, 60 seconds by default; in-memory databases have no lock.
+- `MigrationLock.explain(RuntimeException)`, a default method a lock uses to add a note to a failed run.
 
 ### Changed
 - `index` and `unique` return `IndexDefinition` instead of `void`. Code compiled against 0.3.0 must be recompiled.
 - PostgreSQL: after a failed statement, the next statement, commit or savepoint release in the same transaction is refused with a clear `IllegalStateException` ("The transaction was aborted by a failed statement; roll back (or roll back to the savepoint) first", the first failure as cause) instead of server error 25P02. Rolling back to a savepoint clears it.
+- PostgreSQL: when a pool is too small for the migration lock and the migrator, a failed run says the pool needs two sessions, in a suppressed note on the error.
 
 ### Fixed
 - Android: a commit that fails on a deferred foreign key now rolls back instead of leaving the transaction open.

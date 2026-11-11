@@ -10,7 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,6 +22,9 @@ import org.aristonis.diwan.database.exception.DatabaseConfigException;
 import org.aristonis.diwan.database.exception.ForeignKeyViolationException;
 import org.aristonis.diwan.database.manager.ConnectionConfig;
 import org.aristonis.diwan.database.manager.DatabaseManager;
+import org.aristonis.diwan.database.jdbc.DriverManagerDataSource;
+import org.aristonis.diwan.database.migrations.FileMigrationLock;
+import org.aristonis.diwan.database.migrations.MigrationLock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -329,6 +334,86 @@ class SQLiteConnectorTest {
     @Test
     void theDriverNameIsSqlite() {
         assertEquals("sqlite", new SQLiteConnector().driver());
+    }
+
+    @Test
+    void anInMemoryDatabaseHasNoMigrationLock() {
+        SQLiteConnector connector = new SQLiteConnector();
+
+        assertFalse(connector.lock(sqlite("mem", ":memory:"), null).isPresent());
+        assertFalse(connector.lock(urlConfig("jdbc:sqlite::memory:"), null).isPresent());
+        assertFalse(connector.lock(urlConfig("jdbc:sqlite:file:x?mode=memory&cache=shared"), null).isPresent());
+    }
+
+    @Test
+    void aFileDatabaseHasAMigrationLock() {
+        assertTrue(new SQLiteConnector().lock(sqlite("main", folder.resolve("a.db").toString()), null).isPresent());
+    }
+
+    @Test
+    void theUrlTargetKeepsItsCaseAndDropsTheQuery() {
+        assertEquals("/Tmp/MyDb.DB", SQLiteConnector.urlTarget("jdbc:sqlite:/Tmp/MyDb.DB?foreign_keys=true"));
+        assertEquals("/Tmp/MyDb.DB", SQLiteConnector.urlTarget("JDBC:SQLITE:/Tmp/MyDb.DB"));
+        assertEquals(null, SQLiteConnector.urlTarget("jdbc:postgresql://h/db"));
+    }
+
+    @Test
+    void aMixedCaseUrlPathIsLockedAsWritten() {
+        Optional<File> file = SQLiteConnector.databaseFile(urlConfig("jdbc:sqlite:/Var/Data/MyApp.db?mode=rw"));
+
+        assertEquals(new File("/Var/Data/MyApp.db"), file.orElseThrow(AssertionError::new));
+    }
+
+    @Test
+    void aFileUriIsDecodedForTheLockFile() {
+        Optional<File> triple = SQLiteConnector.databaseFile(urlConfig("jdbc:sqlite:file:///tmp/data/app.db?cache=shared"));
+        Optional<File> encoded = SQLiteConnector.databaseFile(urlConfig("jdbc:sqlite:file:/tmp/my%20data/app.db"));
+        Optional<File> relative = SQLiteConnector.databaseFile(urlConfig("jdbc:sqlite:file:app.db"));
+
+        assertEquals(new File("/tmp/data/app.db"), triple.orElseThrow(AssertionError::new));
+        assertEquals(new File("/tmp/my data/app.db"), encoded.orElseThrow(AssertionError::new));
+        assertEquals(new File("app.db"), relative.orElseThrow(AssertionError::new));
+    }
+
+    @Test
+    void aSuppliedDataSourceGetsTheLockOnlyWhenASettingNamesTheFile() {
+        SQLiteConnector connector = new SQLiteConnector();
+        File db = folder.resolve("supplied.db").toFile();
+        DriverManagerDataSource supplied = new DriverManagerDataSource("jdbc:sqlite:" + db, null, null);
+        ConnectionConfig noPath = ConnectionConfig.builder("main").driver("sqlite").build();
+
+        assertTrue(connector.lock(sqlite("main", db.toString()), supplied).isPresent());
+        assertFalse(connector.lock(noPath, supplied).isPresent());
+    }
+
+    @Test
+    void theLockWaitOptionSetsHowLongTheLockWaits() {
+        File db = folder.resolve("wait.db").toFile();
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite").database(db.toString())
+                .option("lock_wait", "300ms").build();
+        MigrationLock lock = new SQLiteConnector().lock(config, null).orElseThrow(AssertionError::new);
+        MigrationLock holder = new FileMigrationLock(() -> db);
+        holder.acquire();
+        try {
+            IllegalStateException e = assertThrows(IllegalStateException.class, lock::acquire);
+
+            assertTrue(e.getMessage().contains("waited 300 ms"), e.getMessage());
+            assertTrue(e.getMessage().contains("wait.db.migrate.lock"), e.getMessage());
+        } finally {
+            holder.release();
+        }
+    }
+
+    @Test
+    void anInvalidLockWaitIsAConfigError() {
+        ConnectionConfig config = ConnectionConfig.builder("main").driver("sqlite")
+                .database(folder.resolve("bad.db").toString()).option("lock_wait", "soon").build();
+
+        assertThrows(DatabaseConfigException.class, () -> new SQLiteConnector().lock(config, null));
+    }
+
+    private static ConnectionConfig urlConfig(String url) {
+        return ConnectionConfig.builder("main").driver("sqlite").url(url).build();
     }
 
     private static String messages(Throwable e) {
