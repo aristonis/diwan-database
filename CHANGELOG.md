@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
 ### Added
 - Partial indexes: `where`, `whereNull` and `whereNotNull` on the `IndexDefinition` that `index` and `unique` return.
 - Index order and collation: `asc`, `desc` and `collate` on `IndexDefinition`.
@@ -343,7 +345,8 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
-[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aristonis/diwan-database/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/aristonis/diwan-database/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aristonis/diwan-database/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aristonis/diwan-database/compare/v0.1.0...v0.2.0
