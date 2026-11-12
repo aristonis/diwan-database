@@ -12,6 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `QueryGrammar.searchPattern(String, SearchWhere.Anchor, SearchOptions)` and a `validateSearchOptions` hook a grammar overrides to refuse a setting.
 - `Casts.collection()` and `Casts.object()`, and the `collection` and `object` cast strings: a stored JSON array reads as a `List`, a stored JSON object as a `Map`, a value of the other shape throws `InvalidCastException`, and null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
 - `AttributeEncrypter`, `Model.attributeEncrypter()`, `Casts.encrypted()` and `Casts.encrypted(Cast)`, and the `encrypted`, `encrypted:array`, `encrypted:json`, `encrypted:collection` and `encrypted:object` cast strings. Diwan does no cryptography: the model supplies the encrypter, the column must be text, encrypted columns cannot be searched with `where`, and an encrypter failure surfaces as `InvalidCastException` with the original as cause.
+- `AttributeHasher`, `Model.attributeHasher()`, `Casts.hashed()` and the `hashed` cast string. Diwan does no hashing: the model supplies the hasher, the column must be text, the cast takes a `String` only, and a hasher failure surfaces as `InvalidCastException` with the original as cause.
 
 ### Deprecated
 - The 24 `boolean caseSensitive` overloads of the escaped search methods (12 on the query builder, 12 on the model builder) and `QueryGrammar.searchPattern(String, SearchWhere.Anchor, boolean)`, for removal in 0.6.0. Use `SearchOptions.caseSensitive()` in place of `true`.

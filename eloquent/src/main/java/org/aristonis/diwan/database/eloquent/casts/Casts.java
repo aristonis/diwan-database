@@ -30,7 +30,8 @@ public final class Casts {
      * {@code immutable_datetime[:F]}, {@code custom_datetime:F}, {@code timestamp}, {@code json},
      * {@code array}, {@code json:unicode}, {@code collection}, {@code object},
      * {@code encrypted}, {@code encrypted:array}, {@code encrypted:json},
-     * {@code encrypted:collection}, {@code encrypted:object}, {@code instant}. The argument is
+     * {@code encrypted:collection}, {@code encrypted:object}, {@code hashed},
+     * {@code instant}. The argument is
      * kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
@@ -325,6 +326,25 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code hashed} cast: a text column holding the model's hash of a written string.
+     *
+     * <p>A write stores the string as given when the model's
+     * {@link Model#getAttributeHasher() hasher} says it is already hashed and current, refuses it
+     * when it is hashed but not current, and otherwise stores the hasher's hash of it. A value
+     * that is not a {@code String} is refused with an {@link InvalidCastException}. A read
+     * returns the stored text without calling the hasher. A null value stores SQL NULL and a null
+     * column reads null, without calling the hasher. A model without a hasher fails on a non-null
+     * write. An exception thrown by the hasher reaches the caller as an
+     * {@link InvalidCastException} whose cause is the original exception (same instance). The
+     * column must be a text type.
+     *
+     * @return a cast that hashes written strings
+     */
+    public static Cast<Object> hashed() {
+        return new HashedCast();
+    }
+
+    /**
      * Returns an enum cast.
      *
      * @param <E> the enum type
@@ -343,7 +363,8 @@ public final class Casts {
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
      * {@code timestamp}, {@code instant}, {@code json}, {@code collection}, {@code object},
-     * {@code encrypted}, {@code enum}. Any other cast returns its class name. A cast string is parsed first.
+     * {@code encrypted}, {@code hashed}, {@code enum}. Any other cast returns its class name. A
+     * cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -400,6 +421,9 @@ public final class Casts {
         }
         if (cast instanceof EncryptedCast) {
             return "encrypted";
+        }
+        if (cast instanceof HashedCast) {
+            return "hashed";
         }
         if (cast instanceof JsonShapeCast) {
             return ((JsonShapeCast<?>) cast).name();

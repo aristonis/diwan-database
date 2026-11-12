@@ -104,6 +104,7 @@ fun find(id: Long): Optional<UnitInfo> {
 - `casts()` and `accessors()` are read once per class and must not use instance state.
 - `collection` and `object` casts read a JSON array as a `List` and a JSON object as a `Map`; the other stored shape throws `InvalidCastException`; null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
 - `encrypted` casts (`encrypted`, `encrypted:array|json|collection|object`) need a text column, a model `attributeEncrypter()` and no `where` on them; Diwan does no cryptography; an encrypter failure is an `InvalidCastException` with the original as cause.
+- `hashed` casts need a text column and a model `attributeHasher()`, accept a `String` only, and belong in `hidden()`; Diwan does no hashing, so bring your own bcrypt or argon2 and verify with your own hasher.
 - Money: use `Casts.decimal(precision, scale)` (or `decimal:P,S`) with the same numbers as the
   migration's decimal column. It refuses extra decimals; `decimal:N` rounds half up instead.
 - On SQLite the strict decimal cast refuses a value with more than 15 significant digits

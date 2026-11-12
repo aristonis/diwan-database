@@ -40,6 +40,11 @@ class ModelConfigTest {
     }
 
     @Test
+    void attributeHasherDefaultsToNone() {
+        assertNull(new User().getAttributeHasher());
+    }
+
+    @Test
     void tableIsTheSnakePluralOfTheClassName() {
         assertEquals("blog_posts", new BlogPost().getTable());
         assertEquals("blog_posts.id", new BlogPost().getQualifiedKeyName());

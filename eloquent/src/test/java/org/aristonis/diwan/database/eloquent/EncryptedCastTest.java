@@ -441,4 +441,38 @@ class EncryptedCastTest {
 
         assertThrows(InvalidCastException.class, vault::isDirty);
     }
+
+    @Test
+    void theMissingEncrypterMessageIsExact() {
+        Bare bare = new Bare();
+
+        InvalidCastException e = assertThrows(InvalidCastException.class, () -> bare.setAttribute("secret", "x"));
+
+        assertEquals("Model [" + Bare.class.getName()
+                + "] has no attribute encrypter for encrypted attribute [secret]; override attributeEncrypter()",
+                e.getCause().getMessage());
+    }
+
+    @Test
+    void theNullCipherMessageIsExact() {
+        fake.returnNull = true;
+
+        InvalidCastException e = assertThrows(InvalidCastException.class,
+                () -> new Vault().setAttribute("secret", "x"));
+
+        assertEquals("Encrypter for [" + Vault.class.getName() + "] returned null for encrypted attribute [secret]",
+                e.getCause().getMessage());
+    }
+
+    @Test
+    void anUnsupportedRawTypeFailsWithTheEncryptedCastName() {
+        Vault vault = stored("secret", 42L);
+
+        InvalidCastException e = assertThrows(InvalidCastException.class, () -> vault.getAttribute("secret"));
+
+        assertEquals("encrypted", e.getCastName());
+        assertEquals("secret", e.getKey());
+        assertInstanceOf(IllegalArgumentException.class, e.getCause());
+        assertEquals("column holds unsupported type Long", e.getCause().getMessage());
+    }
 }

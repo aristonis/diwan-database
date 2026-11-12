@@ -280,6 +280,30 @@ class CastSpecParserTest {
     }
 
     @Test
+    void hashedSpecsResolve() {
+        assertInstanceOf(HashedCast.class, CastSpecParser.parse("hashed"));
+        assertInstanceOf(HashedCast.class, CastSpecParser.parse(" HASHED "));
+        assertInstanceOf(HashedCast.class, Casts.resolve(Casts.of("hashed")));
+    }
+
+    @Test
+    void hashedRefusesAnArgument() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("hashed:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [hashed:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("hashed:"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("hashed: x"));
+    }
+
+    @Test
+    void typeNameForHashed() {
+        assertEquals("hashed", Casts.typeName(Casts.hashed()));
+        assertEquals("hashed", Casts.typeName(Casts.of("hashed")));
+        assertEquals("hashed", Casts.typeName(Casts.of("HASHED")));
+    }
+
+    @Test
     void castMapKeepsOrderAndIsImmutable() {
         UpperCast user = new UpperCast();
         Map<String, Cast<?>> map = CastMap.create()

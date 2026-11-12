@@ -2,7 +2,6 @@ package org.aristonis.diwan.database.eloquent.casts;
 
 import java.util.Map;
 import org.aristonis.diwan.database.eloquent.Model;
-import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 
 /**
  * The {@code encrypted} casts: a text, array, json, collection or object value stored as the
@@ -46,7 +45,8 @@ final class EncryptedCast implements Cast<Object>, CastComparator, CastSerialize
         if (raw == null) {
             return null;
         }
-        String plain = encrypterOf(model, key).decrypt(textOf(model, key, raw));
+        String plain = encrypterOf(model, key)
+                .decrypt(CastHooks.rawText(model, key, raw, CAST_NAME));
         return inner.get(model, key, plain, attributes);
     }
 
@@ -60,12 +60,8 @@ final class EncryptedCast implements Cast<Object>, CastComparator, CastSerialize
         if (stored == null) {
             return null;
         }
-        String cipher = encrypter.encrypt((String) stored);
-        if (cipher == null) {
-            throw new IllegalStateException("Encrypter for [" + modelName(model)
-                    + "] returned null for encrypted attribute [" + key + "]");
-        }
-        return cipher;
+        return CastHooks.requireResult(encrypter.encrypt((String) stored), model, key,
+                "Encrypter", CAST_NAME);
     }
 
     @Override
@@ -78,8 +74,8 @@ final class EncryptedCast implements Cast<Object>, CastComparator, CastSerialize
             return false;
         }
         return comparator.compare(model, key,
-                encrypter.decrypt(textOf(model, key, originalRaw)),
-                encrypter.decrypt(textOf(model, key, currentRaw)));
+                encrypter.decrypt(CastHooks.rawText(model, key, originalRaw, CAST_NAME)),
+                encrypter.decrypt(CastHooks.rawText(model, key, currentRaw, CAST_NAME)));
     }
 
     @Override
@@ -88,24 +84,7 @@ final class EncryptedCast implements Cast<Object>, CastComparator, CastSerialize
     }
 
     private static AttributeEncrypter encrypterOf(Model model, String key) {
-        AttributeEncrypter encrypter = model == null ? null : model.getAttributeEncrypter();
-        if (encrypter == null) {
-            throw new IllegalStateException("Model [" + modelName(model)
-                    + "] has no attribute encrypter for encrypted attribute [" + key
-                    + "]; override attributeEncrypter()");
-        }
-        return encrypter;
-    }
-
-    private static String modelName(Model model) {
-        return model == null ? "unknown model" : model.getClass().getName();
-    }
-
-    private static String textOf(Model model, String key, Object raw) {
-        try {
-            return JsonCasts.textOf(raw);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidCastException(JsonCasts.modelClass(model), key, CAST_NAME, e);
-        }
+        return CastHooks.requireHook(model == null ? null : model.getAttributeEncrypter(),
+                model, key, "attribute encrypter", CAST_NAME, "attributeEncrypter");
     }
 }

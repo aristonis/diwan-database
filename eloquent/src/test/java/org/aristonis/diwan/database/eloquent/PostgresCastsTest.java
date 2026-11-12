@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
+import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
@@ -38,6 +39,7 @@ class PostgresCastsTest {
     static final class Probe extends Model {
         static final ModelQuery<Probe> QUERY = ModelQuery.of(Probe.class, Probe::new);
         static FakeEncrypter encrypter;
+        static FakeHasher hasher;
 
         @Override
         protected String table() {
@@ -47,6 +49,11 @@ class PostgresCastsTest {
         @Override
         protected AttributeEncrypter attributeEncrypter() {
             return encrypter;
+        }
+
+        @Override
+        protected AttributeHasher attributeHasher() {
+            return hasher;
         }
 
         @Override
@@ -75,6 +82,7 @@ class PostgresCastsTest {
             casts.put("opts", Casts.object());
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
+            casts.put("password", Casts.of("hashed"));
             return casts;
         }
     }
@@ -87,10 +95,11 @@ class PostgresCastsTest {
         connection = PostgresServer.newDatabase();
         db = PostgresQuery.of(connection);
         Probe.encrypter = new FakeEncrypter();
+        Probe.hasher = new FakeHasher();
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
                 + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
                 + "instant_at timestamptz(6), strict numeric(12,2), tags jsonb, opts json, "
-                + "secret text, payload text)");
+                + "secret text, payload text, password text)");
     }
 
     private void insertSample() {
@@ -352,5 +361,58 @@ class PostgresCastsTest {
         InvalidCastException e = assertThrows(InvalidCastException.class, () -> found.getAttribute("secret"));
 
         assertSame(failure, e.getCause());
+    }
+
+    @Test
+    void hashedValuesStoreTheHashAndReadItBack() {
+        Probe created = Probe.QUERY.on(db).create(row("password", "hunter2"));
+
+        String stored = (String) db.table("probes").first().get().get("password");
+        assertNotEquals("hunter2", stored);
+        assertTrue(Probe.hasher.verify("hunter2", stored));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals(stored, found.getAttribute("password"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void hashedNullStoresSqlNullAndWhereNullFindsIt() {
+        Probe created = Probe.QUERY.on(db).create(row("password", "hunter2"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        found.setAttribute("password", null);
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertNull(reloaded.getAttributes().get("password"));
+        assertEquals(1, Probe.QUERY.on(db).query().whereNull("password").count());
+    }
+
+    @Test
+    void settingTheSamePlainAgainIsDirtyAndSaves() {
+        Probe created = Probe.QUERY.on(db).create(row("password", "hunter2"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        String before = (String) db.table("probes").first().get().get("password");
+
+        found.setAttribute("password", "hunter2");
+
+        assertTrue(found.isDirty("password"));
+        assertTrue(found.save());
+        String after = (String) db.table("probes").first().get().get("password");
+        assertNotEquals(before, after);
+        assertTrue(Probe.hasher.verify("hunter2", after));
+    }
+
+    @Test
+    void toJsonReturnsTheStoredHash() {
+        Probe created = Probe.QUERY.on(db).create(row("password", "hunter2"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        String stored = (String) found.getAttributes().get("password");
+
+        String json = found.toJson();
+
+        assertTrue(json.contains("\"password\":\"" + stored + "\""));
+        assertFalse(json.contains("hunter2"));
     }
 }

@@ -2,6 +2,7 @@ package org.aristonis.diwan.database.android;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -20,6 +21,7 @@ import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelClock;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
+import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -59,13 +61,39 @@ public class AndroidCastsTest {
         }
     }
 
+    /**
+     * A reversible, salted stand-in for a user hasher: the counter makes a second hash of one plain differ,
+     * as a real salt does. This driver test checks storage and cast wiring, not hashing.
+     */
+    private static final class Hasher implements AttributeHasher {
+        private int salt;
+
+        @Override
+        public String hash(String plain) {
+            salt++;
+            String payload = Base64.getUrlEncoder().encodeToString(plain.getBytes(StandardCharsets.UTF_8));
+            return "$fake$" + salt + "$" + payload;
+        }
+
+        @Override
+        public boolean isHashed(String value) {
+            return value.startsWith("$fake$");
+        }
+
+        boolean verify(String plain, String hashed) {
+            String payload = hashed.substring(hashed.lastIndexOf('$') + 1);
+            return plain.equals(new String(Base64.getUrlDecoder().decode(payload), StandardCharsets.UTF_8));
+        }
+    }
+
     /** An order with a decimal, a json document, a datetime, an enum, a collection, an object and encrypted casts. */
     public static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
+        static Hasher hasher;
 
         @Override
         protected List<String> fillable() {
-            return List.of("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload");
+            return List.of("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload", "password");
         }
 
         @Override
@@ -79,12 +107,18 @@ public class AndroidCastsTest {
             casts.put("opts", Casts.object());
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
+            casts.put("password", Casts.of("hashed"));
             return casts;
         }
 
         @Override
         protected AttributeEncrypter attributeEncrypter() {
             return new Encrypter();
+        }
+
+        @Override
+        protected AttributeHasher attributeHasher() {
+            return hasher;
         }
     }
 
@@ -107,8 +141,10 @@ public class AndroidCastsTest {
             t.text("opts").nullable();
             t.text("secret").nullable();
             t.text("payload").nullable();
+            t.text("password").nullable();
             t.timestamps();
         });
+        Order.hasher = new Hasher();
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
     }
 
@@ -296,5 +332,60 @@ public class AndroidCastsTest {
 
         assertTrue(json, json.contains("\"secret\":\"top secret\""));
         assertTrue(json, json.contains("\"payload\":{\"a\":1}"));
+    }
+
+    private Order createHashedOrder() {
+        return orders.create(row("password", "hunter2"));
+    }
+
+    @Test
+    public void hashedValuesStoreTheHashAndReadItBack() {
+        Order created = createHashedOrder();
+        Order found = orders.findOrFail(created.getKey());
+        String stored = (String) found.getRawOriginal("password");
+
+        assertNotEquals("hunter2", stored);
+        assertTrue(Order.hasher.verify("hunter2", stored));
+        assertEquals(stored, found.getAttribute("password"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void hashedNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = createHashedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("password", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("password"));
+        assertEquals(1, orders.query().whereNull("password").count());
+    }
+
+    @Test
+    public void settingTheSamePlainAgainIsDirtyAndSaves() {
+        Order created = createHashedOrder();
+        Order found = orders.findOrFail(created.getKey());
+        String before = (String) found.getRawOriginal("password");
+
+        found.setAttribute("password", "hunter2");
+
+        assertTrue(found.isDirty("password"));
+        assertTrue(found.save());
+        String after = (String) orders.findOrFail(created.getKey()).getRawOriginal("password");
+        assertNotEquals(before, after);
+        assertTrue(Order.hasher.verify("hunter2", after));
+    }
+
+    @Test
+    public void toJsonReturnsTheStoredHash() {
+        Order found = orders.findOrFail(createHashedOrder().getKey());
+        String stored = (String) found.getRawOriginal("password");
+
+        String json = found.toJson();
+
+        assertTrue(json, json.contains("\"password\":\"" + stored + "\""));
+        assertFalse(json, json.contains("hunter2"));
     }
 }

@@ -152,6 +152,8 @@ final class CastSpecParser {
                 return Casts.object();
             case "encrypted":
                 return Casts.encrypted();
+            case "hashed":
+                return Casts.hashed();
             case "decimal":
                 throw new IllegalArgumentException("Cast [" + spec + "] needs a scale, as in decimal:2");
             case "custom_datetime":

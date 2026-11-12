@@ -26,8 +26,8 @@ found.delete();
 
 | You want to | Use |
 |---|---|
-| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec`, `attributeEncrypter` |
-| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.encrypted`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
+| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec`, `attributeEncrypter`, `attributeHasher` |
+| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.encrypted`, `Casts.hashed`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
 | Compute or normalise attributes | `Attribute.of`, `Attribute.get`, `Attribute.set`, `shouldCache`, `withoutObjectCaching` |
 | Serialize | `toMap`, `toJson`, `setHidden`, `makeHidden`, `setVisible`, `makeVisible`, `append`, `setAppends`, `withoutAppends` |
 | Pick a connection | `ModelQuery.on(QueryFactory)`, `on(Connection)` inside a transaction, `using(ConnectionResolver)`, `ConnectionResolver.setDefault` |
@@ -113,6 +113,22 @@ The column must be a text type, and an encrypted column cannot be searched with 
 `toMap()` and `toJson()` return the decrypted value, so list encrypted attributes in `hidden()`
 unless you mean to expose them. Only `setAttribute` and `fill` encrypt; raw attribute writes and
 query builder inserts or updates store what they are given.
+
+A hashed cast keeps a one-way hash of a `String` in a text column. The cast string is `hashed`;
+`Casts.hashed()` is the typed form. Diwan does no hashing: the model supplies an `AttributeHasher`
+(`hash`, `isHashed` and `isCurrent`, which returns `true` by default) by overriding
+`attributeHasher()` and returning one shared, thread-safe instance. Use a proper password hash,
+bcrypt or argon2, from your own library.
+
+```java
+@Override
+protected AttributeHasher attributeHasher() { return myHasher; }
+```
+
+The cast is write-only: a read returns the stored hash, and verifying a password is your hasher's
+job. The column must be a text type wide enough for the hash. `toMap()` and `toJson()` return the
+hash, so list hashed attributes in `hidden()`. Only `setAttribute` and `fill` hash; raw attribute
+writes and query builder inserts or updates store what they are given.
 
 ## Relations
 
@@ -345,6 +361,13 @@ SQLite 3.24 or later (Android API 30+). See the
   dirty check that cannot decrypt counts the attribute as changed. While `hasPreviousKeys()` is
   `true`, an encrypted attribute whose stored text changed is dirty even when the decrypted value
   is the same, and an encrypted JSON value that was only read also turns dirty.
+- Diwan does no hashing; your `AttributeHasher` does it. A `hashed` cast accepts a `String` only,
+  and any other value fails as `InvalidCastException`. A value that `isHashed` accepts is kept
+  when `isCurrent` returns `true` and refused otherwise; null stays SQL NULL. A failure of the
+  hasher, or a missing hasher on a non-null value, surfaces as `InvalidCastException` with the
+  original exception as its cause. Setting the same plain value again is dirty when the hasher's output
+  differs, as a salted hash does. A hash-shaped value from a request skips the hasher, so validate untrusted
+  input as plain text first or keep the attribute out of `fillable()`, and make `isHashed` strict.
 - A value object returned by a user cast needs `equals`, or the cast a `CastComparator`, to stay
   clean after a read.
 - `casts()` and `accessors()` are read once per class; they must not depend on instance state.

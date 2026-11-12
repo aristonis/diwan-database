@@ -22,6 +22,7 @@ import java.util.Set;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.SQLiteModelTest.SingleConnection;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
+import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
@@ -48,6 +49,7 @@ class SQLiteCastsTest {
     static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
         static FakeEncrypter encrypter;
+        static FakeHasher hasher;
 
         @Override
         protected AttributeEncrypter attributeEncrypter() {
@@ -55,8 +57,14 @@ class SQLiteCastsTest {
         }
 
         @Override
+        protected AttributeHasher attributeHasher() {
+            return hasher;
+        }
+
+        @Override
         protected List<String> fillable() {
-            return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload");
+            return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload",
+                    "password");
         }
 
         @Override
@@ -70,6 +78,7 @@ class SQLiteCastsTest {
             casts.put("opts", Casts.object());
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
+            casts.put("password", Casts.of("hashed"));
             return casts;
         }
     }
@@ -81,6 +90,7 @@ class SQLiteCastsTest {
     @BeforeEach
     void open() throws SQLException {
         Order.encrypter = new FakeEncrypter();
+        Order.hasher = new FakeHasher();
         jdbc = DriverManager.getConnection("jdbc:sqlite::memory:");
         Connection connection = Connection.builder().name("sqlite").connectionProvider(new SingleConnection(jdbc))
                 .build();
@@ -95,6 +105,7 @@ class SQLiteCastsTest {
             t.text("opts").nullable();
             t.text("secret").nullable();
             t.text("payload").nullable();
+            t.text("password").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -367,5 +378,76 @@ class SQLiteCastsTest {
 
         assertSame(failure, e.getCause());
         assertEquals("secret", e.getKey());
+    }
+
+    @Test
+    void hashedValuesStoreTheHashAndReadItBack() {
+        Order created = orders.create(row("password", "hunter2"));
+
+        Map<String, Object> raw = db.table("orders").first().get();
+        Order found = orders.findOrFail(created.getKey());
+
+        String stored = (String) raw.get("password");
+        assertNotEquals("hunter2", stored);
+        assertTrue(Order.hasher.verify("hunter2", stored));
+        assertEquals(1, Order.hasher.hashCalls);
+        assertEquals(stored, found.getAttribute("password"));
+        assertTrue(found.isClean());
+        assertEquals(1, Order.hasher.hashCalls);
+    }
+
+    @Test
+    void hashedNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = orders.create(row("password", "hunter2"));
+        Order found = orders.findOrFail(created.getKey());
+        int hashesBefore = Order.hasher.hashCalls;
+
+        found.setAttribute("password", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("password"));
+        assertNull(reloaded.getAttribute("password"));
+        assertEquals(1, orders.query().whereNull("password").count());
+        assertEquals(hashesBefore, Order.hasher.hashCalls);
+    }
+
+    @Test
+    void settingTheSamePlainAgainIsDirtyAndSaves() {
+        Order created = orders.create(row("password", "hunter2"));
+        Order found = Order.QUERY.on(db).withClock(ModelClock.fixed(LATER)).findOrFail(created.getKey());
+        Object before = found.getRawOriginal("password");
+
+        found.setAttribute("password", "hunter2");
+
+        assertEquals(Set.of("password"), found.getDirty().keySet());
+        assertTrue(found.save());
+        Object after = orders.findOrFail(created.getKey()).getRawOriginal("password");
+        assertNotEquals(before, after);
+        assertTrue(Order.hasher.verify("hunter2", (String) after));
+    }
+
+    @Test
+    void anAlreadyHashedValueIsStoredAsGiven() {
+        String hash = Order.hasher.fakeFrom("hunter2", "bcrypt", 10, 64, 3, 2);
+
+        Order created = orders.create(row("password", hash));
+
+        assertEquals(hash, db.table("orders").first().get().get("password"));
+        assertEquals(hash, orders.findOrFail(created.getKey()).getAttribute("password"));
+        assertEquals(0, Order.hasher.hashCalls);
+    }
+
+    @Test
+    void aNonStringValueFailsWithInvalidCastException() {
+        Order order = new Order();
+
+        InvalidCastException e = assertThrows(InvalidCastException.class,
+                () -> order.setAttribute("password", 424242));
+
+        assertEquals("hashed", e.getCastName());
+        assertEquals("password", e.getKey());
+        assertTrue(e.getCause() instanceof IllegalArgumentException, String.valueOf(e.getCause()));
+        assertEquals(0, Order.hasher.hashCalls);
     }
 }
