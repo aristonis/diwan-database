@@ -523,6 +523,8 @@ abstract class ModelCasts extends ModelAttributes {
         map.put("instant", "instant");
         map.put("json", "json");
         map.put("array", "json");
+        map.put("collection", "collection");
+        map.put("object", "object");
         map.put("enum", "enum");
         return Collections.unmodifiableMap(map);
     }

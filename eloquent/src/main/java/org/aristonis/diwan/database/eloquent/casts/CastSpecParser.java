@@ -146,6 +146,10 @@ final class CastSpecParser {
             case "json":
             case "array":
                 return new JsonCasts(type, false);
+            case "collection":
+                return Casts.collection();
+            case "object":
+                return Casts.object();
             case "decimal":
                 throw new IllegalArgumentException("Cast [" + spec + "] needs a scale, as in decimal:2");
             case "custom_datetime":

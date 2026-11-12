@@ -2,6 +2,8 @@ package org.aristonis.diwan.database.eloquent.casts;
 
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -25,7 +27,8 @@ public final class Casts {
      * {@code decimal:P,S,MODE} (a {@link java.math.RoundingMode} name, any case), {@code date},
      * {@code date:F}, {@code immutable_date[:F]}, {@code datetime}, {@code datetime:F},
      * {@code immutable_datetime[:F]}, {@code custom_datetime:F}, {@code timestamp}, {@code json},
-     * {@code array}, {@code json:unicode}, {@code instant}. The argument is kept as written. A format {@code F} is a
+     * {@code array}, {@code json:unicode}, {@code collection}, {@code object},
+     * {@code instant}. The argument is kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
      *
@@ -240,6 +243,41 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code collection} cast: a JSON array column read as a {@code List}.
+     *
+     * <p>A stored JSON array reads as a mutable {@code List}; changing it in place marks the
+     * attribute dirty, as with {@link #json()}. A null column, an empty string and the JSON
+     * literal {@code null} read as null. A stored value of another shape, such as an object or a
+     * scalar, throws {@link InvalidCastException} naming the key and {@code JSON array}, never
+     * the value. Writes encode the list like {@link #json()}, a null value stores SQL NULL, and a
+     * value that is not a {@code List} throws {@link InvalidCastException}. An element the codec
+     * cannot encode fails the write with a cause of
+     * {@link org.aristonis.diwan.database.eloquent.exception.JsonException}.
+     *
+     * @return a cast reading and writing {@code List} values
+     */
+    public static Cast<List<Object>> collection() {
+        return new JsonShapeCast<>(JsonShapeCast.Shape.COLLECTION);
+    }
+
+    /**
+     * Returns the {@code object} cast: a JSON object column read as a {@code Map}.
+     *
+     * <p>A stored JSON object reads as a mutable {@code Map} that keeps the stored key order;
+     * changing it in place marks the attribute dirty, as with {@link #json()}. A null column, an
+     * empty string and the JSON literal {@code null} read as null. A stored value of another
+     * shape, such as an array or a scalar, throws {@link InvalidCastException} naming the key and
+     * {@code JSON object}, never the value. Writes encode the map like {@link #json()}, a null
+     * value stores SQL NULL, and a value that is not a {@code Map} throws
+     * {@link InvalidCastException}.
+     *
+     * @return a cast reading and writing {@code Map} values keyed by {@code String}
+     */
+    public static Cast<Map<String, Object>> object() {
+        return new JsonShapeCast<>(JsonShapeCast.Shape.OBJECT);
+    }
+
+    /**
      * Returns an enum cast.
      *
      * @param <E> the enum type
@@ -257,8 +295,8 @@ public final class Casts {
      *
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
-     * {@code timestamp}, {@code instant}, {@code json}, {@code enum}. Any other cast returns its
-     * class name. A cast string is parsed first.
+     * {@code timestamp}, {@code instant}, {@code json}, {@code collection}, {@code object},
+     * {@code enum}. Any other cast returns its class name. A cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -312,6 +350,9 @@ public final class Casts {
         if (cast instanceof MomentCast) {
             String momentName = ((MomentCast) cast).name();
             return momentName.equals("timestamp") || momentName.equals("instant") ? momentName : "datetime";
+        }
+        if (cast instanceof JsonShapeCast) {
+            return ((JsonShapeCast<?>) cast).name();
         }
         if (cast instanceof JsonCasts) {
             return "json";

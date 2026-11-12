@@ -3,12 +3,14 @@ package org.aristonis.diwan.database.eloquent;
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,13 +39,13 @@ class SQLiteCastsTest {
         OPEN, PAID
     }
 
-    /** An order with a decimal, a json document, a datetime and an enum cast. */
+    /** An order with a decimal, a json document, a datetime, an enum, a collection and an object cast. */
     static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
 
         @Override
         protected List<String> fillable() {
-            return Arrays.asList("total", "meta", "paid_at", "status");
+            return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts");
         }
 
         @Override
@@ -53,6 +55,8 @@ class SQLiteCastsTest {
             casts.put("meta", Casts.json());
             casts.put("paid_at", Casts.datetime());
             casts.put("status", Casts.enumOf(Status.class));
+            casts.put("tags", Casts.collection());
+            casts.put("opts", Casts.object());
             return casts;
         }
     }
@@ -73,6 +77,8 @@ class SQLiteCastsTest {
             t.text("meta").nullable();
             t.dateTime("paid_at").nullable();
             t.string("status").nullable();
+            t.text("tags").nullable();
+            t.text("opts").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -89,6 +95,21 @@ class SQLiteCastsTest {
         meta.put("tags", Arrays.asList(1L, 2L));
         return orders.create(row("total", new BigDecimal("19.5"), "meta", meta, "paid_at", PAID, "status",
                 Status.PAID));
+    }
+
+    private Order createShapedOrder() {
+        return orders.create(row("tags", new ArrayList<>(Arrays.asList(1L, 2L)), "opts",
+                new LinkedHashMap<>(Map.of("a", 1L))));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> tagsOf(Order order) {
+        return (List<Object>) order.getAttribute("tags");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> optsOf(Order order) {
+        return (Map<String, Object>) order.getAttribute("opts");
     }
 
     @Test
@@ -168,5 +189,76 @@ class SQLiteCastsTest {
         assertTrue(json.contains("\"meta\":{\"tier\":\"gold\",\"tags\":[1,2]}"), json);
         assertTrue(json.contains("\"status\":\"PAID\""), json);
         assertTrue(json.contains("\"paid_at\":\"2026-11-01T09:30:00.000000Z\""), json);
+    }
+
+    @Test
+    void collectionAndObjectSurviveASaveAndAReload() {
+        Order created = createShapedOrder();
+
+        Order found = orders.findOrFail(created.getKey());
+
+        assertEquals(Arrays.asList(1L, 2L), found.getAttribute("tags"));
+        assertEquals(Map.of("a", 1L), found.getAttribute("opts"));
+        assertEquals("[1,2]", found.getRawOriginal("tags"));
+        assertEquals("{\"a\":1}", found.getRawOriginal("opts"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void nullWriteStoresSqlNullAndWhereNullFindsIt() {
+        Order created = createShapedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("tags", null);
+        found.setAttribute("opts", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("tags"));
+        assertNull(reloaded.getRawOriginal("opts"));
+        assertNull(reloaded.getAttribute("tags"));
+        assertEquals(1, orders.query().whereNull("tags").count());
+        assertEquals(1, orders.query().whereNull("opts").count());
+    }
+
+    @Test
+    void mutatingTheReadListAndMapSavesThem() {
+        Order created = createShapedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        tagsOf(found).add(3L);
+        optsOf(found).put("b", 2L);
+        assertEquals(Set.of("tags", "opts"), found.getDirty().keySet());
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertEquals(Arrays.asList(1L, 2L, 3L), reloaded.getAttribute("tags"));
+        assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("opts"));
+    }
+
+    @Test
+    void rewritingEqualCollectionWritesNothing() {
+        Order created = createShapedOrder();
+        Order found = Order.QUERY.on(db).withClock(ModelClock.fixed(LATER)).findOrFail(created.getKey());
+
+        found.setAttribute("tags", new ArrayList<>(Arrays.asList(1L, 2L)));
+        found.setAttribute("opts", new LinkedHashMap<>(Map.of("a", 1L)));
+
+        assertFalse(found.isDirty());
+        assertTrue(found.save());
+        assertEquals(NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS),
+                orders.findOrFail(created.getKey()).getInstant("updated_at"));
+    }
+
+    @Test
+    void toJsonEmitsListAndMap() {
+        Order found = orders.findOrFail(createShapedOrder().getKey());
+
+        String json = found.toJson();
+
+        assertEquals(Arrays.asList(1L, 2L), found.toMap().get("tags"));
+        assertEquals(Map.of("a", 1L), found.toMap().get("opts"));
+        assertTrue(json.contains("\"tags\":[1,2]"), json);
+        assertTrue(json.contains("\"opts\":{\"a\":1}"), json);
     }
 }

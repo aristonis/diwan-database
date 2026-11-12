@@ -15,8 +15,8 @@ import org.aristonis.diwan.database.eloquent.casts.CastComparator;
  * its {@link Cast#get} returns; an uncast key falls back to {@link AttributeValues#equivalent},
  * the same check models without casts have always used.
  *
- * <p>Laravel's object, collection, encrypted and {@code As*} steps are reserved: Diwan has no
- * such casts yet, so they are no-ops here.
+ * <p>Laravel's encrypted and {@code As*} steps are reserved: Diwan has no such casts yet, so
+ * they are no-ops here. The object and collection casts decide through {@link CastComparator}.
  */
 final class DirtyLadder {
 
@@ -72,7 +72,7 @@ final class DirtyLadder {
             Model model, String key, Object original, Object current, Cast<?> cast,
             Map<String, Object> attributes) {
         // Laravel steps for dates, floats, decimals, JSON and primitives live in each built-in
-        // cast's CastComparator. Object, collection, encrypted and As* steps are reserved.
+        // cast's CastComparator. Encrypted and As* steps are reserved.
         if (cast instanceof CastComparator) {
             return ((CastComparator) cast).compare(model, key, original, current);
         }

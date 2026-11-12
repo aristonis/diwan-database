@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent;
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -59,6 +61,8 @@ class PostgresCastsTest {
             casts.put("doc", Casts.json());
             casts.put("docb", Casts.json());
             casts.put("instant_at", Casts.instant());
+            casts.put("tags", Casts.collection());
+            casts.put("opts", Casts.object());
             return casts;
         }
     }
@@ -72,7 +76,7 @@ class PostgresCastsTest {
         db = PostgresQuery.of(connection);
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
                 + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
-                + "instant_at timestamptz(6), strict numeric(12,2))");
+                + "instant_at timestamptz(6), strict numeric(12,2), tags jsonb, opts json)");
     }
 
     private void insertSample() {
@@ -188,5 +192,71 @@ class PostgresCastsTest {
         Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
 
         assertEquals(new BigDecimal("12345.60"), found.getAttribute("strict"));
+    }
+
+    @Test
+    void collectionAndObjectReadFromJsonAndJsonb() {
+        connection.statement("insert into probes (tags, opts) values ('[1, {\"a\": 2}]', '{\"b\":1,\"a\":2}')");
+
+        Probe probe = Probe.QUERY.on(db).findOrFail(1);
+
+        assertTrue(probe.getAttributes().get("tags") instanceof String);
+        assertTrue(probe.getAttributes().get("opts") instanceof String);
+        assertEquals(Arrays.asList(1L, Map.of("a", 2L)), probe.getAttribute("tags"));
+        assertEquals(Map.of("a", 2L, "b", 1L), probe.getAttribute("opts"));
+        assertTrue(probe.isClean());
+    }
+
+    @Test
+    void jsonbReorderOfAnObjectStaysCleanAndListOrderIsDirty() {
+        connection.statement("insert into probes (tags, opts) values ('[1,2]', '{\"b\":1,\"a\":2}')");
+        Probe probe = Probe.QUERY.on(db).findOrFail(1);
+        Map<String, Object> reordered = new LinkedHashMap<>();
+        reordered.put("a", 2L);
+        reordered.put("b", 1L);
+
+        probe.setAttribute("opts", reordered);
+        assertFalse(probe.isDirty("opts"));
+        probe.setAttribute("tags", new ArrayList<>(Arrays.asList(2L, 1L)));
+
+        assertTrue(probe.isDirty("tags"));
+    }
+
+    @Test
+    void nullWriteStoresSqlNullAndWhereNullFindsIt() {
+        Probe created = Probe.QUERY.on(db).create(row("tags", Arrays.asList(1L), "opts", Map.of("a", 1L)));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        found.setAttribute("tags", null);
+        found.setAttribute("opts", null);
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertNull(reloaded.getAttributes().get("tags"));
+        assertNull(reloaded.getAttributes().get("opts"));
+        assertEquals(1, Probe.QUERY.on(db).query().whereNull("tags").count());
+        assertEquals(1, Probe.QUERY.on(db).query().whereNull("opts").count());
+    }
+
+    @Test
+    void collectionAndObjectMutationRoundTrips() {
+        Probe created = Probe.QUERY.on(db).create(row("tags", new ArrayList<>(Arrays.asList(1L)), "opts",
+                new LinkedHashMap<>(Map.of("a", 1L))));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        @SuppressWarnings("unchecked")
+        List<Object> tags = (List<Object>) found.getAttribute("tags");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> opts = (Map<String, Object>) found.getAttribute("opts");
+        tags.add(2L);
+        opts.put("b", 2L);
+        assertTrue(found.isDirty("tags"));
+        assertTrue(found.isDirty("opts"));
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertEquals(Arrays.asList(1L, 2L), reloaded.getAttribute("tags"));
+        assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("opts"));
+        assertTrue(reloaded.isClean());
     }
 }

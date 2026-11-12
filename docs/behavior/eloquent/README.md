@@ -27,7 +27,7 @@ found.delete();
 | You want to | Use |
 |---|---|
 | Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec` |
-| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
+| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
 | Compute or normalise attributes | `Attribute.of`, `Attribute.get`, `Attribute.set`, `shouldCache`, `withoutObjectCaching` |
 | Serialize | `toMap`, `toJson`, `setHidden`, `makeHidden`, `setVisible`, `makeVisible`, `append`, `setAppends`, `withoutAppends` |
 | Pick a connection | `ModelQuery.on(QueryFactory)`, `on(Connection)` inside a transaction, `using(ConnectionResolver)`, `ConnectionResolver.setDefault` |
@@ -95,7 +95,7 @@ protected List<String> appends() { return List.of("display_name"); }
 Reading goes accessor, then cast, then the stored value; writing goes mutator, then cast, then
 store, and always stores the storage form. The dirty check compares by meaning: JSON by structure,
 floats within 4 ULP, moments as instants, dates as dates, decimals after rounding. Reading never
-makes a model dirty; changing a map a JSON cast returned does. `toMap` applies `visible`, then
+makes a model dirty; changing a map or list that a JSON, collection or object cast returned does. `toMap` applies `visible`, then
 `hidden`, then `appends`; moments come out as ISO-8601 UTC with microseconds.
 
 ## Relations
@@ -317,6 +317,11 @@ SQLite 3.24 or later (Android API 30+). See the
   with another meaning (`Y` is the week-based year, `m` the minute).
 - Bad stored data under a cast throws `InvalidCastException`, where Laravel reads `null`, `0` or
   `true`.
+- A `collection` cast reads only a JSON array and an `object` cast only a JSON object; a row of
+  the other shape throws `InvalidCastException`, so `getAttribute`, `toMap` and `toJson` of that
+  model throw too. Null, an empty string and the JSON text `null` read as `null`, and writing
+  `null` stores SQL NULL. For typed elements, a typed map or
+  a DTO, implement `Cast<T>` yourself.
 - A value object returned by a user cast needs `equals`, or the cast a `CastComparator`, to stay
   clean after a read.
 - `casts()` and `accessors()` are read once per class; they must not depend on instance state.

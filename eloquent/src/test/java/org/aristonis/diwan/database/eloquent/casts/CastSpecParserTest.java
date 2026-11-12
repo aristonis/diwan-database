@@ -163,6 +163,31 @@ class CastSpecParserTest {
     }
 
     @Test
+    void collectionAndObjectSpecsResolve() {
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse("collection"));
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse("OBJECT"));
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse(" Collection "));
+        assertInstanceOf(JsonShapeCast.class, Casts.resolve(Casts.of("collection")));
+    }
+
+    @Test
+    void collectionAndObjectTakeNoArgument() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("collection:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [collection:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("object:x"));
+    }
+
+    @Test
+    void typeNameForCollectionAndObject() {
+        assertEquals("collection", Casts.typeName(Casts.of("collection")));
+        assertEquals("object", Casts.typeName(Casts.of("Object")));
+        assertEquals("collection", Casts.typeName(Casts.collection()));
+        assertEquals("object", Casts.typeName(Casts.object()));
+    }
+
+    @Test
     void typeNameForBuiltInsAndUserCasts() {
         assertEquals("int", Casts.typeName(Casts.integer()));
         assertEquals("int", Casts.typeName(Casts.of("Integer")));

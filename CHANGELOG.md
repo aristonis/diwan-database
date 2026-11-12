@@ -10,6 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - `SearchOptions`, the settings of an escaped text search, and a `SearchOptions` overload of the 12 escaped search methods on the query builder and the model builder.
 - `QueryGrammar.searchPattern(String, SearchWhere.Anchor, SearchOptions)` and a `validateSearchOptions` hook a grammar overrides to refuse a setting.
+- `Casts.collection()` and `Casts.object()`, and the `collection` and `object` cast strings: a stored JSON array reads as a `List`, a stored JSON object as a `Map`, a value of the other shape throws `InvalidCastException`, and null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
 
 ### Deprecated
 - The 24 `boolean caseSensitive` overloads of the escaped search methods (12 on the query builder, 12 on the model builder) and `QueryGrammar.searchPattern(String, SearchWhere.Anchor, boolean)`, for removal in 0.6.0. Use `SearchOptions.caseSensitive()` in place of `true`.

@@ -90,6 +90,33 @@ class DirtyLadderTest {
     }
 
     @Test
+    void objectKeyOrderIsClean() {
+        assertTrue(ladder("{\"a\":1,\"b\":2}", "{\"b\": 2, \"a\": 1}", Casts.object()));
+    }
+
+    @Test
+    void collectionOneEqualsOnePointZero() {
+        assertTrue(ladder("[1]", "[1.0]", Casts.collection()));
+    }
+
+    @Test
+    void collectionListOrderIsDirty() {
+        assertFalse(ladder("[1,2]", "[2,1]", Casts.collection()));
+    }
+
+    @Test
+    void collectionJsonNullAgainstListIsDirty() {
+        assertFalse(ladder("null", "[1]", Casts.collection()));
+        assertFalse(ladder("[1]", "null", Casts.collection()));
+    }
+
+    @Test
+    void collectionAndObjectUndecodableTextIsDirty() {
+        assertFalse(ladder("[1]", "[1,", Casts.collection()));
+        assertFalse(ladder("{\"a\":1}", "{\"a\":", Casts.object()));
+    }
+
+    @Test
     void floatTinyChangeIsDirty() {
         assertFalse(ladder(1e-17, 5e-17, Casts.floating()));
     }

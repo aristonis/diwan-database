@@ -2,11 +2,13 @@ package org.aristonis.diwan.database.android;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,13 +43,13 @@ public class AndroidCastsTest {
         OPEN, PAID
     }
 
-    /** An order with a decimal, a json document, a datetime and an enum cast. */
+    /** An order with a decimal, a json document, a datetime, an enum, a collection and an object cast. */
     public static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
 
         @Override
         protected List<String> fillable() {
-            return List.of("total", "meta", "paid_at", "status");
+            return List.of("total", "meta", "paid_at", "status", "tags", "opts");
         }
 
         @Override
@@ -57,6 +59,8 @@ public class AndroidCastsTest {
             casts.put("meta", Casts.json());
             casts.put("paid_at", Casts.datetime());
             casts.put("status", Casts.enumOf(Status.class));
+            casts.put("tags", Casts.collection());
+            casts.put("opts", Casts.object());
             return casts;
         }
     }
@@ -76,6 +80,8 @@ public class AndroidCastsTest {
             t.text("meta").nullable();
             t.dateTime("paid_at").nullable();
             t.string("status").nullable();
+            t.text("tags").nullable();
+            t.text("opts").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -100,6 +106,11 @@ public class AndroidCastsTest {
         meta.put("tags", List.of(1L, 2L));
         return orders.create(row("total", new BigDecimal("19.5"), "meta", meta, "paid_at", PAID, "status",
                 Status.PAID));
+    }
+
+    private Order createShapedOrder() {
+        return orders.create(row("tags", new ArrayList<>(List.of(1L, 2L)), "opts",
+                new LinkedHashMap<>(Map.of("a", 1L))));
     }
 
     @Test
@@ -163,5 +174,57 @@ public class AndroidCastsTest {
         assertTrue(json, json.contains("\"meta\":{\"tier\":\"gold\",\"tags\":[1,2]}"));
         assertTrue(json, json.contains("\"status\":\"PAID\""));
         assertTrue(json, json.contains("\"paid_at\":\"2026-11-01T09:30:00.000000Z\""));
+    }
+
+    @Test
+    public void collectionAndObjectSurviveAReload() {
+        Order found = orders.findOrFail(createShapedOrder().getKey());
+
+        assertEquals(List.of(1L, 2L), found.getAttribute("tags"));
+        assertEquals(Map.of("a", 1L), found.getAttribute("opts"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void nullWriteStoresSqlNullAndWhereNullFindsIt() {
+        Order created = createShapedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("tags", null);
+        found.setAttribute("opts", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("tags"));
+        assertNull(reloaded.getRawOriginal("opts"));
+        assertEquals(1, orders.query().whereNull("tags").count());
+        assertEquals(1, orders.query().whereNull("opts").count());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void mutatingTheReadListAndMapSavesThem() {
+        Order created = createShapedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        ((List<Object>) found.getAttribute("tags")).add(3L);
+        ((Map<String, Object>) found.getAttribute("opts")).put("b", 2L);
+        assertTrue(found.isDirty("tags"));
+        assertTrue(found.isDirty("opts"));
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertEquals(List.of(1L, 2L, 3L), reloaded.getAttribute("tags"));
+        assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("opts"));
+    }
+
+    @Test
+    public void toJsonEmitsListAndMap() {
+        Order found = orders.findOrFail(createShapedOrder().getKey());
+
+        String json = found.toJson();
+
+        assertTrue(json, json.contains("\"tags\":[1,2]"));
+        assertTrue(json, json.contains("\"opts\":{\"a\":1}"));
     }
 }

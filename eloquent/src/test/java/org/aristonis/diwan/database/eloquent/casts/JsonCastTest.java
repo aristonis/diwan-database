@@ -3,6 +3,7 @@ package org.aristonis.diwan.database.eloquent.casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,6 +29,10 @@ class JsonCastTest {
     private final JsonCasts json = new JsonCasts("json", false);
 
     private final JsonCasts unicode = new JsonCasts("json:unicode", true);
+
+    private final Cast<List<Object>> collection = Casts.collection();
+
+    private final Cast<Map<String, Object>> object = Casts.object();
 
     @Test
     void emptyStringReadsNull() {
@@ -150,6 +155,177 @@ class JsonCastTest {
 
         assertFalse(JsonCasts.structurallyEqual(deep, nest(JsonCasts.MAX_DEPTH + 1), 0));
         assertTrue(JsonCasts.structurallyEqual(shallow, nest(JsonCasts.MAX_DEPTH - 1), 0));
+    }
+
+    private static String repeat(String unit, int times) {
+        return unit.repeat(times);
+    }
+
+    /** Calls {@code set} with a value of any type, as an erased caller could. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object setAny(Cast<?> cast, String key, Object value) {
+        return ((Cast) cast).set(null, key, value, NO_ATTRIBUTES);
+    }
+
+    private InvalidCastException readFails(Cast<?> cast, String raw) {
+        return assertThrows(InvalidCastException.class, () -> cast.get(null, "tags", raw, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionReadsAList() {
+        List<Object> value = collection.get(null, "tags", "[1,{\"a\":2}]", NO_ATTRIBUTES);
+
+        assertEquals(List.of(1L, Map.of("a", 2L)), value);
+    }
+
+    @Test
+    void collectionEmptyAndRawNullReadNull() {
+        assertNull(collection.get(null, "tags", "", NO_ATTRIBUTES));
+        assertNull(collection.get(null, "tags", null, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionStoredJsonNullReadsNull() {
+        assertNull(collection.get(null, "tags", "null", NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionRejectsObjectAndScalars() {
+        for (String raw : new String[] {"{\"a\":1}", "5", "\"x\"", "true"}) {
+            InvalidCastException e = readFails(collection, raw);
+
+            assertEquals("tags", e.getKey());
+            assertEquals("collection", e.getCastName());
+            assertTrue(e.getMessage().contains("tags"));
+            assertTrue(e.getMessage().contains("JSON array"));
+            assertFalse(e.getMessage().contains("\"x\""));
+        }
+    }
+
+    @Test
+    void collectionReadsBytes() {
+        byte[] raw = "[\"café\"]".getBytes(StandardCharsets.UTF_8);
+
+        assertEquals(List.of("café"), collection.get(null, "tags", raw, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionBrokenJsonKeepsJsonExceptionCause() {
+        InvalidCastException e = readFails(collection, "[1,");
+
+        assertEquals("collection", e.getCastName());
+        assertTrue(e.getCause() instanceof JsonException);
+    }
+
+    @Test
+    void collectionRejectsWrongRawType() {
+        assertThrows(InvalidCastException.class, () -> collection.get(null, "tags", 5L, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionResultIsMutable() {
+        List<Object> value = collection.get(null, "tags", "[1]", NO_ATTRIBUTES);
+
+        value.add(2L);
+
+        assertEquals(List.of(1L, 2L), value);
+    }
+
+    @Test
+    void objectReadsAMapInKeyOrder() {
+        Map<String, Object> value = object.get(null, "opts", "{\"b\":1,\"a\":2}", NO_ATTRIBUTES);
+
+        assertEquals(List.of("b", "a"), new ArrayList<>(value.keySet()));
+        assertEquals(2L, value.get("a"));
+    }
+
+    @Test
+    void objectEmptyAndJsonNullReadNull() {
+        assertNull(object.get(null, "opts", "", NO_ATTRIBUTES));
+        assertNull(object.get(null, "opts", "null", NO_ATTRIBUTES));
+    }
+
+    @Test
+    void objectRejectsArrayAndScalars() {
+        for (String raw : new String[] {"[1]", "5", "\"x\"", "false"}) {
+            InvalidCastException e = readFails(object, raw);
+
+            assertEquals("object", e.getCastName());
+            assertTrue(e.getMessage().contains("JSON object"));
+        }
+    }
+
+    @Test
+    void objectResultIsMutable() {
+        Map<String, Object> value = object.get(null, "opts", "{\"a\":1}", NO_ATTRIBUTES);
+
+        value.put("b", 2L);
+
+        assertEquals(2, value.size());
+    }
+
+    @Test
+    void setNullReturnsNullForBothShapes() {
+        assertNull(collection.set(null, "tags", null, NO_ATTRIBUTES));
+        assertNull(object.set(null, "opts", null, NO_ATTRIBUTES));
+    }
+
+    @Test
+    void collectionSetRejectsWrongShape() {
+        for (Object wrong : new Object[] {Map.of("a", 1), "secret-text", 7L}) {
+            InvalidCastException e = assertThrows(InvalidCastException.class,
+                    () -> setAny(collection, "tags", wrong));
+
+            assertEquals("collection", e.getCastName());
+            assertTrue(e.getMessage().contains("JSON array"));
+            assertFalse(e.getMessage().contains("secret-text"));
+        }
+    }
+
+    @Test
+    void objectSetRejectsWrongShape() {
+        for (Object wrong : new Object[] {List.of(1), "secret-text"}) {
+            InvalidCastException e = assertThrows(InvalidCastException.class,
+                    () -> setAny(object, "opts", wrong));
+
+            assertEquals("object", e.getCastName());
+            assertTrue(e.getMessage().contains("JSON object"));
+            assertFalse(e.getMessage().contains("secret-text"));
+        }
+    }
+
+    @Test
+    void setEncodesLikeJson() {
+        List<Object> list = List.of(1L, Map.of("a", "é"));
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("b", 1L);
+        map.put("a", List.of());
+
+        assertEquals(json.set(null, "k", list, NO_ATTRIBUTES), collection.set(null, "k", list, NO_ATTRIBUTES));
+        assertEquals(json.set(null, "k", map, NO_ATTRIBUTES), object.set(null, "k", map, NO_ATTRIBUTES));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void serializeReturnsTheDecodedValue() {
+        List<Object> list = collection.get(null, "tags", "[1]", NO_ATTRIBUTES);
+        Map<String, Object> map = object.get(null, "opts", "{\"a\":1}", NO_ATTRIBUTES);
+
+        assertSame(list, ((CastSerializer<List<Object>>) collection).serialize(null, "tags", list, NO_ATTRIBUTES));
+        assertSame(map, ((CastSerializer<Map<String, Object>>) object).serialize(null, "opts", map, NO_ATTRIBUTES));
+        assertNotSame(list, map);
+    }
+
+    @Test
+    void collectionStructuralCompareStopsPastDepthLimit() {
+        CastComparator comparator = (CastComparator) collection;
+        String within = repeat("[", 500) + "1" + repeat("]", 500);
+        String withinFloat = repeat("[", 500) + "1.0" + repeat("]", 500);
+        String past = repeat("[", 600) + "1" + repeat("]", 600);
+        String pastFloat = repeat("[", 600) + "1.0" + repeat("]", 600);
+
+        assertTrue(comparator.compare(null, "tags", within, withinFloat));
+        assertFalse(comparator.compare(null, "tags", past, pastFloat));
     }
 
     private static Object nest(int depth) {

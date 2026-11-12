@@ -102,6 +102,7 @@ fun find(id: Long): Optional<UnitInfo> {
 - Date cast formats are Java patterns (`yyyy-MM-dd`), not PHP letters.
 - An `instant` column needs `Casts.instant()`. Instant `created_at`, `updated_at` or `deleted_at` need `timestampFormat()` = `TimestampFormat.INSTANT`, since the framework writes them directly.
 - `casts()` and `accessors()` are read once per class and must not use instance state.
+- `collection` and `object` casts read a JSON array as a `List` and a JSON object as a `Map`; the other stored shape throws `InvalidCastException`; null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
 - Money: use `Casts.decimal(precision, scale)` (or `decimal:P,S`) with the same numbers as the
   migration's decimal column. It refuses extra decimals; `decimal:N` rounds half up instead.
 - On SQLite the strict decimal cast refuses a value with more than 15 significant digits
