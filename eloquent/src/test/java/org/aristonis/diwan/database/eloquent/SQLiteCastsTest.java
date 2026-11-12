@@ -3,7 +3,10 @@ package org.aristonis.diwan.database.eloquent;
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -18,8 +21,10 @@ import java.util.Map;
 import java.util.Set;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.SQLiteModelTest.SingleConnection;
+import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import org.aristonis.diwan.database.query.QueryFactory;
 import org.aristonis.diwan.database.sqlite.SQLiteQuery;
 import org.aristonis.diwan.database.sqlite.SQLiteSchema;
@@ -42,10 +47,16 @@ class SQLiteCastsTest {
     /** An order with a decimal, a json document, a datetime, an enum, a collection and an object cast. */
     static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
+        static FakeEncrypter encrypter;
+
+        @Override
+        protected AttributeEncrypter attributeEncrypter() {
+            return encrypter;
+        }
 
         @Override
         protected List<String> fillable() {
-            return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts");
+            return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload");
         }
 
         @Override
@@ -57,6 +68,8 @@ class SQLiteCastsTest {
             casts.put("status", Casts.enumOf(Status.class));
             casts.put("tags", Casts.collection());
             casts.put("opts", Casts.object());
+            casts.put("secret", Casts.of("encrypted"));
+            casts.put("payload", Casts.of("encrypted:json"));
             return casts;
         }
     }
@@ -67,6 +80,7 @@ class SQLiteCastsTest {
 
     @BeforeEach
     void open() throws SQLException {
+        Order.encrypter = new FakeEncrypter();
         jdbc = DriverManager.getConnection("jdbc:sqlite::memory:");
         Connection connection = Connection.builder().name("sqlite").connectionProvider(new SingleConnection(jdbc))
                 .build();
@@ -79,6 +93,8 @@ class SQLiteCastsTest {
             t.string("status").nullable();
             t.text("tags").nullable();
             t.text("opts").nullable();
+            t.text("secret").nullable();
+            t.text("payload").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -260,5 +276,96 @@ class SQLiteCastsTest {
         assertEquals(Map.of("a", 1L), found.toMap().get("opts"));
         assertTrue(json.contains("\"tags\":[1,2]"), json);
         assertTrue(json.contains("\"opts\":{\"a\":1}"), json);
+    }
+
+    private Order createEncryptedOrder() {
+        return orders.create(row("secret", "hush", "payload", new LinkedHashMap<>(Map.of("a", 1L))));
+    }
+
+    @Test
+    void encryptedValuesStoreCipherTextAndReadPlain() {
+        Order created = createEncryptedOrder();
+
+        Map<String, Object> raw = db.table("orders").first().get();
+        Order found = orders.findOrFail(created.getKey());
+
+        assertNotEquals("hush", raw.get("secret"));
+        assertFalse(((String) raw.get("secret")).contains("hush"));
+        assertNotEquals("{\"a\":1}", raw.get("payload"));
+        assertEquals("hush", found.getAttribute("secret"));
+        assertEquals(Map.of("a", 1L), found.getAttribute("payload"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void encryptedNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = createEncryptedOrder();
+        Order found = orders.findOrFail(created.getKey());
+        int encryptsBefore = Order.encrypter.encrypts;
+
+        found.setAttribute("secret", null);
+        found.setAttribute("payload", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("secret"));
+        assertNull(reloaded.getAttribute("secret"));
+        assertEquals(1, orders.query().whereNull("secret").count());
+        assertEquals(1, orders.query().whereNull("payload").count());
+        assertEquals(encryptsBefore, Order.encrypter.encrypts);
+    }
+
+    @Test
+    void rewritingEqualEncryptedValuesWritesNothing() {
+        Order created = createEncryptedOrder();
+        Order found = Order.QUERY.on(db).withClock(ModelClock.fixed(LATER)).findOrFail(created.getKey());
+        Object storedCipher = found.getRawOriginal("secret");
+
+        found.setAttribute("secret", "hush");
+        found.setAttribute("payload", new LinkedHashMap<>(Map.of("a", 1L)));
+
+        assertTrue(found.getDirty().isEmpty());
+        assertTrue(found.save());
+        assertEquals(storedCipher, orders.findOrFail(created.getKey()).getRawOriginal("secret"));
+    }
+
+    @Test
+    void mutatingTheReadEncryptedMapSavesIt() {
+        Order created = createEncryptedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) found.getAttribute("payload");
+        payload.put("b", 2L);
+        assertEquals(Set.of("payload"), found.getDirty().keySet());
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("payload"));
+    }
+
+    @Test
+    void toJsonHoldsDecryptedValues() {
+        Order found = orders.findOrFail(createEncryptedOrder().getKey());
+
+        String json = found.toJson();
+
+        assertEquals("hush", found.toMap().get("secret"));
+        assertEquals(Map.of("a", 1L), found.toMap().get("payload"));
+        assertTrue(json.contains("\"secret\":\"hush\""), json);
+        assertTrue(json.contains("\"payload\":{\"a\":1}"), json);
+        assertFalse(json.contains((String) found.getRawOriginal("secret")), json);
+    }
+
+    @Test
+    void encrypterFailureSurfacesAsInvalidCastException() {
+        Order found = orders.findOrFail(createEncryptedOrder().getKey());
+        IllegalArgumentException failure = new IllegalArgumentException("bad key");
+        Order.encrypter.decryptFailure = failure;
+
+        InvalidCastException e = assertThrows(InvalidCastException.class, () -> found.getAttribute("secret"));
+
+        assertSame(failure, e.getCause());
+        assertEquals("secret", e.getKey());
     }
 }

@@ -234,6 +234,52 @@ class CastSpecParserTest {
     }
 
     @Test
+    void encryptedSpecsResolve() {
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("ENCRYPTED:JSON"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:array"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:collection"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:object"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse(" Encrypted "));
+        assertInstanceOf(EncryptedCast.class, Casts.resolve(Casts.of("encrypted:json")));
+    }
+
+    @Test
+    void encryptedRefusesOtherArguments() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("encrypted:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [encrypted:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted: json"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:string"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:encrypted"));
+    }
+
+    @Test
+    void typeNameForEncrypted() {
+        assertEquals("encrypted", Casts.typeName(Casts.encrypted()));
+        assertEquals("encrypted", Casts.typeName(Casts.encrypted(Casts.of("json"))));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:json")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:array")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:collection")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:object")));
+    }
+
+    @Test
+    void encryptedFactoryRulesMatchTheSpec() {
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.of("int")));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.string()));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.encrypted()));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(new UpperCast()));
+        assertThrows(NullPointerException.class, () -> Casts.encrypted((Cast<?>) null));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.collection()));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.jsonUnicode()));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.of("object")));
+    }
+
+    @Test
     void castMapKeepsOrderAndIsImmutable() {
         UpperCast user = new UpperCast();
         Map<String, Cast<?>> map = CastMap.create()

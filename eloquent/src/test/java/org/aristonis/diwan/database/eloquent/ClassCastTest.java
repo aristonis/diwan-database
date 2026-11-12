@@ -129,6 +129,7 @@ class ClassCastTest {
             casts.put("broken", new FailingCast());
             casts.put("total", Casts.of("decimal:2"));
             casts.put("happened_at", Casts.of("immutable_datetime"));
+            casts.put("secret", Casts.of("encrypted:json"));
             return casts;
         }
     }
@@ -429,6 +430,9 @@ class ClassCastTest {
         assertTrue(wallet.hasCast("happened_at", "custom_datetime"));
         assertTrue(wallet.hasCast("price", PriceCast.class.getName()));
         assertFalse(wallet.hasCast("meta", "int"));
+        assertTrue(wallet.hasCast("secret", "encrypted"));
+        assertTrue(wallet.hasCast("secret", "ENCRYPTED:json"));
+        assertFalse(wallet.hasCast("secret", "json"));
         assertFalse(wallet.hasCast("missing"));
     }
 

@@ -26,8 +26,8 @@ found.delete();
 
 | You want to | Use |
 |---|---|
-| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec` |
-| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
+| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec`, `attributeEncrypter` |
+| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.encrypted`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
 | Compute or normalise attributes | `Attribute.of`, `Attribute.get`, `Attribute.set`, `shouldCache`, `withoutObjectCaching` |
 | Serialize | `toMap`, `toJson`, `setHidden`, `makeHidden`, `setVisible`, `makeVisible`, `append`, `setAppends`, `withoutAppends` |
 | Pick a connection | `ModelQuery.on(QueryFactory)`, `on(Connection)` inside a transaction, `using(ConnectionResolver)`, `ConnectionResolver.setDefault` |
@@ -97,6 +97,22 @@ store, and always stores the storage form. The dirty check compares by meaning: 
 floats within 4 ULP, moments as instants, dates as dates, decimals after rounding. Reading never
 makes a model dirty; changing a map or list that a JSON, collection or object cast returned does. `toMap` applies `visible`, then
 `hidden`, then `appends`; moments come out as ISO-8601 UTC with microseconds.
+
+An encrypted cast keeps its value in a text column as the text your encrypter returns. The cast
+strings are `encrypted` (a string), `encrypted:array` and `encrypted:json` (a JSON value),
+`encrypted:collection` (a `List`) and `encrypted:object` (a `Map`); `Casts.encrypted()` and
+`Casts.encrypted(Cast)` are the typed forms. Diwan does no cryptography: the model supplies an
+`AttributeEncrypter` by overriding `attributeEncrypter()`.
+
+```java
+@Override
+protected AttributeEncrypter attributeEncrypter() { return myEncrypter; }
+```
+
+The column must be a text type, and an encrypted column cannot be searched with `where`.
+`toMap()` and `toJson()` return the decrypted value, so list encrypted attributes in `hidden()`
+unless you mean to expose them. Only `setAttribute` and `fill` encrypt; raw attribute writes and
+query builder inserts or updates store what they are given.
 
 ## Relations
 
@@ -322,6 +338,13 @@ SQLite 3.24 or later (Android API 30+). See the
   model throw too. Null, an empty string and the JSON text `null` read as `null`, and writing
   `null` stores SQL NULL. For typed elements, a typed map or
   a DTO, implement `Cast<T>` yourself.
+- Diwan does no cryptography; your `AttributeEncrypter` does it. An encrypted column must be text
+  and cannot be used in a `where` clause. A failure of `encrypt` or `decrypt`, or a missing
+  encrypter on a non-null value, surfaces as `InvalidCastException` with the original exception as
+  its cause. A decrypted value of the wrong shape fails as a `collection` or `object` cast does. A
+  dirty check that cannot decrypt counts the attribute as changed. While `hasPreviousKeys()` is
+  `true`, an encrypted attribute whose stored text changed is dirty even when the decrypted value
+  is the same, and an encrypted JSON value that was only read also turns dirty.
 - A value object returned by a user cast needs `equals`, or the cast a `CastComparator`, to stay
   clean after a read.
 - `casts()` and `accessors()` are read once per class; they must not depend on instance state.

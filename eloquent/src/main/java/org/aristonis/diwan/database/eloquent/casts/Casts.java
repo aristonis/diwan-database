@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.aristonis.diwan.database.eloquent.Model;
 
 /**
  * Factory for the built-in casts.
@@ -28,7 +29,9 @@ public final class Casts {
      * {@code date:F}, {@code immutable_date[:F]}, {@code datetime}, {@code datetime:F},
      * {@code immutable_datetime[:F]}, {@code custom_datetime:F}, {@code timestamp}, {@code json},
      * {@code array}, {@code json:unicode}, {@code collection}, {@code object},
-     * {@code instant}. The argument is kept as written. A format {@code F} is a
+     * {@code encrypted}, {@code encrypted:array}, {@code encrypted:json},
+     * {@code encrypted:collection}, {@code encrypted:object}, {@code instant}. The argument is
+     * kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
      *
@@ -278,6 +281,50 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code encrypted} cast: a text column holding encrypter output for a string.
+     *
+     * <p>A read decrypts the stored text with the model's {@link Model#getAttributeEncrypter()
+     * encrypter} and returns the {@code String}; a write encrypts the text form of the value. A
+     * null column reads null and a null value stores SQL NULL, without calling the encrypter.
+     * An exception thrown by the encrypter, and a model without an encrypter, reach the caller as
+     * an {@link InvalidCastException} whose cause is the original exception (same instance). The
+     * column must be a text type and cannot be searched with {@code where}.
+     *
+     * @return a cast reading and writing encrypted strings
+     */
+    public static Cast<Object> encrypted() {
+        return new EncryptedCast();
+    }
+
+    /**
+     * Returns an {@code encrypted} cast that applies {@code inner} to the decrypted text.
+     *
+     * <p>A read decrypts, then reads the text through {@code inner}; a write encodes through
+     * {@code inner}, then encrypts the result. The dirty check decrypts both stored values and
+     * compares them through {@code inner}. Rules for null, the missing encrypter and failures are
+     * those of {@link #encrypted()}: an exception thrown by the encrypter, and a model without an
+     * encrypter, reach the caller as an {@link InvalidCastException} whose cause is the original
+     * exception (same instance).
+     *
+     * @param inner the {@link #json()}, {@link #jsonUnicode()}, {@link #collection()} or
+     *     {@link #object()} cast, or a cast string for one of them
+     * @return a cast reading and writing encrypted values of the inner cast's type
+     * @throws NullPointerException if {@code inner} is null
+     * @throws IllegalArgumentException if {@code inner} is not one of the four casts, or is an
+     *     invalid cast string
+     */
+    public static Cast<Object> encrypted(Cast<?> inner) {
+        Objects.requireNonNull(inner, "inner");
+        Cast<?> resolved = resolve(inner);
+        String name = typeName(resolved);
+        if (!name.equals("json") && !name.equals("collection") && !name.equals("object")) {
+            throw new IllegalArgumentException(
+                    "Cast [" + name + "] cannot be encrypted; use json, array, collection or object");
+        }
+        return new EncryptedCast(resolved);
+    }
+
+    /**
      * Returns an enum cast.
      *
      * @param <E> the enum type
@@ -296,7 +343,7 @@ public final class Casts {
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
      * {@code timestamp}, {@code instant}, {@code json}, {@code collection}, {@code object},
-     * {@code enum}. Any other cast returns its class name. A cast string is parsed first.
+     * {@code encrypted}, {@code enum}. Any other cast returns its class name. A cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -350,6 +397,9 @@ public final class Casts {
         if (cast instanceof MomentCast) {
             String momentName = ((MomentCast) cast).name();
             return momentName.equals("timestamp") || momentName.equals("instant") ? momentName : "datetime";
+        }
+        if (cast instanceof EncryptedCast) {
+            return "encrypted";
         }
         if (cast instanceof JsonShapeCast) {
             return ((JsonShapeCast<?>) cast).name();

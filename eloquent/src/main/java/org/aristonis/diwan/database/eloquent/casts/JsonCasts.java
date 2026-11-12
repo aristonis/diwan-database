@@ -186,17 +186,17 @@ final class JsonCasts implements Cast<Object>, CastComparator, CastSerializer<Ob
     }
 
     /** Stored text of a raw value; bytes decode as UTF-8; other types are rejected. */
-    private static String textOf(Object raw) {
+    static String textOf(Object raw) {
         if (raw == null || raw instanceof String) {
             return (String) raw;
         }
         if (raw instanceof byte[]) {
             return new String((byte[]) raw, StandardCharsets.UTF_8);
         }
-        throw new IllegalArgumentException("JSON column holds unsupported type " + raw.getClass().getSimpleName());
+        throw new IllegalArgumentException("column holds unsupported type " + raw.getClass().getSimpleName());
     }
 
-    private static Class<?> modelClass(Model model) {
+    static Class<?> modelClass(Model model) {
         return model == null ? null : model.getClass();
     }
 }

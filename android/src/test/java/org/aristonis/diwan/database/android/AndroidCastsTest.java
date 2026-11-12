@@ -7,8 +7,10 @@ import static org.junit.Assert.assertTrue;
 
 import android.database.sqlite.SQLiteDatabase;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,7 @@ import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelClock;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
+import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -43,13 +46,26 @@ public class AndroidCastsTest {
         OPEN, PAID
     }
 
-    /** An order with a decimal, a json document, a datetime, an enum, a collection and an object cast. */
+    /** Base64 stands in for a user cipher: this driver test checks storage and cast wiring, not secrecy. */
+    private static final class Encrypter implements AttributeEncrypter {
+        @Override
+        public String encrypt(String plain) {
+            return Base64.getEncoder().encodeToString(plain.getBytes(StandardCharsets.UTF_8));
+        }
+
+        @Override
+        public String decrypt(String cipher) {
+            return new String(Base64.getDecoder().decode(cipher), StandardCharsets.UTF_8);
+        }
+    }
+
+    /** An order with a decimal, a json document, a datetime, an enum, a collection, an object and encrypted casts. */
     public static final class Order extends Model {
         static final ModelQuery<Order> QUERY = ModelQuery.of(Order.class, Order::new);
 
         @Override
         protected List<String> fillable() {
-            return List.of("total", "meta", "paid_at", "status", "tags", "opts");
+            return List.of("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload");
         }
 
         @Override
@@ -61,7 +77,14 @@ public class AndroidCastsTest {
             casts.put("status", Casts.enumOf(Status.class));
             casts.put("tags", Casts.collection());
             casts.put("opts", Casts.object());
+            casts.put("secret", Casts.of("encrypted"));
+            casts.put("payload", Casts.of("encrypted:json"));
             return casts;
+        }
+
+        @Override
+        protected AttributeEncrypter attributeEncrypter() {
+            return new Encrypter();
         }
     }
 
@@ -82,6 +105,8 @@ public class AndroidCastsTest {
             t.string("status").nullable();
             t.text("tags").nullable();
             t.text("opts").nullable();
+            t.text("secret").nullable();
+            t.text("payload").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -226,5 +251,50 @@ public class AndroidCastsTest {
 
         assertTrue(json, json.contains("\"tags\":[1,2]"));
         assertTrue(json, json.contains("\"opts\":{\"a\":1}"));
+    }
+
+    private Order createEncryptedOrder() {
+        return orders.create(row("secret", "top secret", "payload", new LinkedHashMap<>(Map.of("a", 1L))));
+    }
+
+    @Test
+    public void encryptedValuesSurviveAReload() {
+        Order found = orders.findOrFail(createEncryptedOrder().getKey());
+
+        assertEquals("top secret", found.getAttribute("secret"));
+        assertEquals(Map.of("a", 1L), found.getAttribute("payload"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void encryptedNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = createEncryptedOrder();
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("secret", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("secret"));
+        assertEquals(1, orders.query().whereNull("secret").count());
+    }
+
+    @Test
+    public void rewritingEqualEncryptedValueIsClean() {
+        Order found = orders.findOrFail(createEncryptedOrder().getKey());
+
+        found.setAttribute("secret", "top secret");
+
+        assertFalse(found.isDirty());
+    }
+
+    @Test
+    public void encryptedValuesSerializeDecrypted() {
+        Order found = orders.findOrFail(createEncryptedOrder().getKey());
+
+        String json = found.toJson();
+
+        assertTrue(json, json.contains("\"secret\":\"top secret\""));
+        assertTrue(json, json.contains("\"payload\":{\"a\":1}"));
     }
 }

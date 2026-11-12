@@ -35,6 +35,11 @@ class ModelConfigTest {
     }
 
     @Test
+    void attributeEncrypterDefaultsToNone() {
+        assertNull(new User().getAttributeEncrypter());
+    }
+
+    @Test
     void tableIsTheSnakePluralOfTheClassName() {
         assertEquals("blog_posts", new BlogPost().getTable());
         assertEquals("blog_posts.id", new BlogPost().getQualifiedKeyName());

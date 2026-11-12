@@ -3,7 +3,9 @@ package org.aristonis.diwan.database.eloquent;
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,8 +21,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.Connection;
+import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
+import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import org.aristonis.diwan.database.pgsql.PostgresQuery;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -33,10 +37,16 @@ class PostgresCastsTest {
     /** A model over one column of each Postgres type under test. */
     static final class Probe extends Model {
         static final ModelQuery<Probe> QUERY = ModelQuery.of(Probe.class, Probe::new);
+        static FakeEncrypter encrypter;
 
         @Override
         protected String table() {
             return "probes";
+        }
+
+        @Override
+        protected AttributeEncrypter attributeEncrypter() {
+            return encrypter;
         }
 
         @Override
@@ -63,6 +73,8 @@ class PostgresCastsTest {
             casts.put("instant_at", Casts.instant());
             casts.put("tags", Casts.collection());
             casts.put("opts", Casts.object());
+            casts.put("secret", Casts.of("encrypted"));
+            casts.put("payload", Casts.of("encrypted:json"));
             return casts;
         }
     }
@@ -74,9 +86,11 @@ class PostgresCastsTest {
     void open() {
         connection = PostgresServer.newDatabase();
         db = PostgresQuery.of(connection);
+        Probe.encrypter = new FakeEncrypter();
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
                 + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
-                + "instant_at timestamptz(6), strict numeric(12,2), tags jsonb, opts json)");
+                + "instant_at timestamptz(6), strict numeric(12,2), tags jsonb, opts json, "
+                + "secret text, payload text)");
     }
 
     private void insertSample() {
@@ -258,5 +272,85 @@ class PostgresCastsTest {
         assertEquals(Arrays.asList(1L, 2L), reloaded.getAttribute("tags"));
         assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("opts"));
         assertTrue(reloaded.isClean());
+    }
+
+    @Test
+    void encryptedValuesStoreCiphertextAndReadPlain() {
+        Probe created = Probe.QUERY.on(db).create(row("secret", "top secret", "payload", Map.of("a", 1L)));
+
+        Map<String, Object> raw = db.table("probes").first().get();
+        assertNotEquals("top secret", raw.get("secret"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals("top secret", found.getAttribute("secret"));
+        assertEquals(Map.of("a", 1L), found.getAttribute("payload"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void encryptedNullStoresSqlNullAndWhereNullFindsIt() {
+        Probe created = Probe.QUERY.on(db).create(row("secret", "top secret"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        int encryptsBefore = Probe.encrypter.encrypts;
+
+        found.setAttribute("secret", null);
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertNull(reloaded.getAttributes().get("secret"));
+        assertEquals(encryptsBefore, Probe.encrypter.encrypts);
+        assertEquals(1, Probe.QUERY.on(db).query().whereNull("secret").count());
+    }
+
+    @Test
+    void rewritingEqualEncryptedValueWritesNothing() {
+        Probe created = Probe.QUERY.on(db).create(row("secret", "top secret"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        Map<String, Object> before = db.table("probes").first().get();
+
+        found.setAttribute("secret", "top secret");
+
+        assertTrue(found.getDirty().isEmpty());
+        assertTrue(found.save());
+        assertEquals(before.get("secret"), db.table("probes").first().get().get("secret"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mutatingTheReadEncryptedMapSavesIt() {
+        Probe created = Probe.QUERY.on(db).create(row("payload", new LinkedHashMap<>(Map.of("a", 1L))));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        Map<String, Object> payload = (Map<String, Object>) found.getAttribute("payload");
+
+        payload.put("b", 2L);
+        assertTrue(found.isDirty("payload"));
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertEquals(Map.of("a", 1L, "b", 2L), reloaded.getAttribute("payload"));
+        assertTrue(reloaded.isClean());
+    }
+
+    @Test
+    void toJsonHoldsDecryptedValues() {
+        Probe created = Probe.QUERY.on(db).create(row("secret", "top secret", "payload", Map.of("a", 1L)));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        String json = found.toJson();
+
+        assertTrue(json.contains("\"secret\":\"top secret\""));
+        assertTrue(json.contains("\"payload\":{\"a\":1}"));
+    }
+
+    @Test
+    void encrypterFailureSurfacesAsInvalidCastException() {
+        Probe created = Probe.QUERY.on(db).create(row("secret", "top secret"));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+        RuntimeException failure = new IllegalStateException("vault unavailable");
+        Probe.encrypter.decryptFailure = failure;
+
+        InvalidCastException e = assertThrows(InvalidCastException.class, () -> found.getAttribute("secret"));
+
+        assertSame(failure, e.getCause());
     }
 }

@@ -103,6 +103,7 @@ fun find(id: Long): Optional<UnitInfo> {
 - An `instant` column needs `Casts.instant()`. Instant `created_at`, `updated_at` or `deleted_at` need `timestampFormat()` = `TimestampFormat.INSTANT`, since the framework writes them directly.
 - `casts()` and `accessors()` are read once per class and must not use instance state.
 - `collection` and `object` casts read a JSON array as a `List` and a JSON object as a `Map`; the other stored shape throws `InvalidCastException`; null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
+- `encrypted` casts (`encrypted`, `encrypted:array|json|collection|object`) need a text column, a model `attributeEncrypter()` and no `where` on them; Diwan does no cryptography; an encrypter failure is an `InvalidCastException` with the original as cause.
 - Money: use `Casts.decimal(precision, scale)` (or `decimal:P,S`) with the same numbers as the
   migration's decimal column. It refuses extra decimals; `decimal:N` rounds half up instead.
 - On SQLite the strict decimal cast refuses a value with more than 15 significant digits
