@@ -73,7 +73,8 @@ connection.transaction { c -> db.on(c).table("accounts")   // inside a transacti
   the list before a delete.
 - User text goes through `whereContains`, `whereStartsWith` or `whereEndsWith`, which escape `%`
   and `_`. Never build a `whereLike` pattern from user input: `whereLike` takes `%` and `_` as
-  wildcards and escapes nothing.
+  wildcards and escapes nothing. Pass `SearchOptions.caseSensitive()` as a third argument for a
+  case-sensitive match; the boolean form is deprecated.
 - Row locks need a transaction on PostgreSQL, which throws `IllegalStateException` outside one.
   SQLite has no row locks: every strength is a no-op there, and `NOWAIT` and `SKIP_LOCKED` are refused.
 - `lock(LockStrength.UPDATE, Duration.ofSeconds(2))` is a timed row lock: PostgreSQL only, inside a

@@ -24,11 +24,11 @@ public final class SearchWhere implements Where {
     private final String conjunction;
     private final String column;
     private final Anchor anchor;
-    private final boolean caseSensitive;
+    private final SearchOptions options;
     private final boolean not;
 
     /**
-     * Creates the condition.
+     * Creates the condition from a case flag.
      *
      * @param conjunction the joining word
      * @param column the column name
@@ -37,10 +37,23 @@ public final class SearchWhere implements Where {
      * @param not whether the condition is negated
      */
     public SearchWhere(String conjunction, String column, Anchor anchor, boolean caseSensitive, boolean not) {
+        this(conjunction, column, anchor, SearchOptions.DEFAULT.withCaseSensitive(caseSensitive), not);
+    }
+
+    /**
+     * Creates the condition.
+     *
+     * @param conjunction the joining word
+     * @param column the column name
+     * @param anchor where the text must appear
+     * @param options the search settings
+     * @param not whether the condition is negated
+     */
+    public SearchWhere(String conjunction, String column, Anchor anchor, SearchOptions options, boolean not) {
         this.conjunction = conjunction;
         this.column = column;
         this.anchor = anchor;
-        this.caseSensitive = caseSensitive;
+        this.options = options;
         this.not = not;
     }
 
@@ -74,7 +87,16 @@ public final class SearchWhere implements Where {
      * @return whether the match must respect case
      */
     public boolean caseSensitive() {
-        return caseSensitive;
+        return options.isCaseSensitive();
+    }
+
+    /**
+     * Returns the search settings.
+     *
+     * @return the options
+     */
+    public SearchOptions options() {
+        return options;
     }
 
     /**

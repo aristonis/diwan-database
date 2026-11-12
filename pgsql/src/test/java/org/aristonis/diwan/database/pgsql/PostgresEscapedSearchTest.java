@@ -8,8 +8,10 @@ import java.util.Map;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.QueryFactory;
+import org.aristonis.diwan.database.query.SearchOptions;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("removal")
 class PostgresEscapedSearchTest {
 
     private static QueryFactory people() {
@@ -86,5 +88,58 @@ class PostgresEscapedSearchTest {
                 .whereNotContains("name", "x").whereNotContains("name", "i").whereNotContains("name", "b")));
         assertEquals(15L, db.table("people").whereContains("name", "").count());
         assertEquals(15L, db.table("people").whereContains("name", "", true).count());
+    }
+
+    @Test
+    void defaultOptionsMatchTheFlaglessForm() {
+        QueryFactory db = people();
+        SearchOptions defaults = SearchOptions.DEFAULT;
+
+        assertEquals(names(db.table("people").whereContains("name", "ali")),
+                names(db.table("people").whereContains("name", "ali", defaults)));
+        assertEquals(names(db.table("people").whereStartsWith("name", "a")),
+                names(db.table("people").whereStartsWith("name", "a", defaults)));
+        assertEquals(names(db.table("people").whereEndsWith("name", "x")),
+                names(db.table("people").whereEndsWith("name", "x", defaults)));
+        assertEquals(List.of("Ali", "ali"), names(db.table("people").whereContains("name", "ali", defaults)));
+    }
+
+    @Test
+    void caseSensitiveOptionsMatchOnlyTheSameCase() {
+        QueryFactory db = people();
+        SearchOptions sensitive = SearchOptions.caseSensitive();
+
+        assertEquals(List.of("ali"), names(db.table("people").whereContains("name", "ali", sensitive)));
+        assertEquals(List.of("x"), names(db.table("people").whereEndsWith("name", "x", sensitive)));
+        assertEquals(List.of("a_c", "abc", "ali"), names(db.table("people").whereStartsWith("name", "a", sensitive)
+                .whereNotContains("name", "Al", sensitive)));
+    }
+
+    @Test
+    void optionsFormsTreatPercentUnderscoreAndBangLiterally() {
+        QueryFactory db = people();
+        String[][] cases = {{"50%", "50%"}, {"a_c", "a_c"}, {"!", "bang!"}, {"[", "[x]"}, {"*", "star*"}};
+
+        for (SearchOptions options : new SearchOptions[] {SearchOptions.DEFAULT, SearchOptions.caseSensitive()}) {
+            for (String[] c : cases) {
+                assertEquals(List.of(c[1]), names(db.table("people").whereContains("name", c[0], options)), c[0]);
+            }
+        }
+    }
+
+    @Test
+    void optionsAndBooleanFormsCompileTheSameSqlAndBindings() {
+        QueryFactory db = people();
+
+        for (boolean caseSensitive : new boolean[] {false, true}) {
+            Builder flag = db.table("people").whereContains("name", "a", caseSensitive)
+                    .orWhereNotStartsWith("name", "b", caseSensitive);
+            Builder options = db.table("people")
+                    .whereContains("name", "a", SearchOptions.DEFAULT.withCaseSensitive(caseSensitive))
+                    .orWhereNotStartsWith("name", "b", SearchOptions.DEFAULT.withCaseSensitive(caseSensitive));
+
+            assertEquals(flag.toSql(), options.toSql());
+            assertEquals(flag.getBindings(), options.getBindings());
+        }
     }
 }

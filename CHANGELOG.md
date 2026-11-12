@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `SearchOptions`, the settings of an escaped text search, and a `SearchOptions` overload of the 12 escaped search methods on the query builder and the model builder.
+- `QueryGrammar.searchPattern(String, SearchWhere.Anchor, SearchOptions)` and a `validateSearchOptions` hook a grammar overrides to refuse a setting.
+
+### Deprecated
+- The 24 `boolean caseSensitive` overloads of the escaped search methods (12 on the query builder, 12 on the model builder) and `QueryGrammar.searchPattern(String, SearchWhere.Anchor, boolean)`, for removal in 0.6.0. Use `SearchOptions.caseSensitive()` in place of `true`.
+
 ## [0.4.0] - 2026-11-11
 
 ### Added
