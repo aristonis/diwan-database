@@ -130,7 +130,7 @@ public class PostgresQueryGrammar extends QueryGrammar {
      *
      * @implNote Both case modes use the base pattern.
      * @deprecated since 0.5.0, for removal in 0.6.0; use
-     *     {@link #searchPattern(String, SearchWhere.Anchor, SearchOptions)}
+     *     {@link QueryGrammar#searchPattern(String, SearchWhere.Anchor, SearchOptions)}
      */
     @Deprecated(since = "0.5.0", forRemoval = true)
     @SuppressWarnings("removal")

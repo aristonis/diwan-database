@@ -148,7 +148,7 @@ public class SQLiteQueryGrammar extends QueryGrammar {
      * @implNote Case-sensitive matches build a {@code glob} pattern with {@code [}, {@code *} and
      *     {@code ?} in brackets, {@code [} first so later brackets are not escaped again.
      * @deprecated since 0.5.0, for removal in 0.6.0; use
-     *     {@link #searchPattern(String, SearchWhere.Anchor, SearchOptions)}
+     *     {@link QueryGrammar#searchPattern(String, SearchWhere.Anchor, SearchOptions)}
      */
     @Deprecated(since = "0.5.0", forRemoval = true)
     @SuppressWarnings("removal")
