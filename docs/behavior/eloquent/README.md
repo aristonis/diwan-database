@@ -59,6 +59,7 @@ found.delete();
 | Find, iterate and page many-to-many rows | `find`, `findMany`, `findOrFail`, `first`, `firstWhere`, `sole`, `chunk`, `each`, `lazy`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` on `BelongsToMany` |
 | Link the joining row to both sides | `chaperone`, `withoutChaperone` on `BelongsToMany`, after `using` |
 | Run code on save, delete and restore | `ModelQuery.events()`, `observe`, `Model.withoutEvents`, `saveQuietly`, `deleteQuietly`; see [model events](model-events.md) |
+| Build models for tests and seeding | `Factory.of`, `make`, `create`, `raw`, `insert`, `Sequence`; see [factories](factories.md) |
 | Declare relations to many parent types | `morphOne`, `morphMany`, `morphTo`, `getMorphClass`, `MorphMap`; see [morph relations](morph-relations.md) |
 | Filter by a morph parent | `hasMorph`, `whereHasMorph`, `doesntHaveMorph`, `whereMorphRelation`, `whereMorphedTo`, `whereNotMorphedTo` and their `or` forms |
 | Eager load per parent class | `withMorph` with `morphWith`, `morphWithCount`, `constrain`; `loadMorph`, `loadMorphCount` |
