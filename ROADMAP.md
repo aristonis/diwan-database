@@ -1,6 +1,6 @@
 # Roadmap
 
-What is planned after 0.4.0. Order and scope can change; an item a user asks for moves up. To ask
+What is planned after 0.5.0. Order and scope can change; an item a user asks for moves up. To ask
 for one, open a [feature request](https://github.com/aristonis/diwan-database/issues/new/choose).
 
 ## Versions
@@ -11,7 +11,7 @@ for one, open a [feature request](https://github.com/aristonis/diwan-database/is
 | 0.2.0 | Fixes and Laravel ports from the first app reports. | Released 2026-11-08 |
 | 0.3.0 | Strict decimals, escaped search, error codes, lock wait, testing module, schema listing. | Released 2026-11-09 |
 | 0.4.0 | Schema inspection, index parts, migration lock, test database modes, blueprint extras, date and time fixes. | Released 2026-11-11 |
-| 0.5 | Model data: casts, model and collection helpers, pruning, factories. | Planned |
+| 0.5.0 | Model data: search options overload, collection, object, encrypted, hashed and binary casts, factories. | Released 2026-11-13 |
 | 0.6 | Query and relation API: search options, builder helpers, JSON and full-text wheres, relation helpers. | Planned |
 | 0.7 | Connections in production: isolation, timeouts, retries, events, query hooks, read and write hosts. | Planned |
 | 0.8 | The command line: `diwan-database` with migrate, make and db commands. | Planned |
@@ -44,14 +44,14 @@ The command is `diwan-database`, with the short alias `diwan-db`.
 | Feature | Description | Version |
 |---|---|---|
 | Strict decimal cast | `Casts.decimal` and `Casts.decimalText` refuse extra digits instead of rounding silently. | ✅ 0.3.0 |
-| Factories | Model factories with states and relations, for test data. | 0.5 |
-| Collection and encrypted casts | `AsCollection`, `AsArrayObject` and encrypted casts with a key provider. | 0.5 |
-| Hashed and binary casts | A hashed cast for passwords, and binary UUID and ULID casts. | 0.5 |
-| Model collection helpers | `toQuery`, `only`, `except`, `diff`, `intersect`, `unique` and `makeHidden` on model collections. | 0.5 |
-| Pruning | Prunable and mass-prunable models for scheduled cleanup. | 0.5 |
+| Factories | Model factories with states, sequences, relations and recycle, for test data. | ✅ 0.5.0 |
+| Collection and encrypted casts | `Casts.collection` and `Casts.object`, and encrypted casts with an encrypter you supply. | ✅ 0.5.0 |
+| Hashed and binary casts | A hashed cast for passwords with a hasher you supply, and binary UUID and ULID casts. | ✅ 0.5.0 |
+| Model collection helpers | `toQuery`, `only`, `except`, `diff`, `intersect`, `unique` and `makeHidden` on model collections. | Pending |
+| Pruning | Prunable and mass-prunable models for scheduled cleanup. | Pending |
 | Relation query helpers | `withWhereHas` and `whereAttachedTo`. | 0.6 |
 | Relation extras | `is` and `isNot` on relations, `withAttributes`, `incrementOrCreate`, `restoreOrCreate`, and `chunkMap` and `eachById` on relations. | 0.6 |
-| Model extras | `incrementEach`, `decrementEach`, `valueOrFail`, `soleValue`, strict missing-attribute access and `hasNamedScope`. | 0.5 |
+| Model extras | `incrementEach`, `decrementEach`, `valueOrFail`, `soleValue`, strict missing-attribute access and `hasNamedScope`. | Pending |
 | Relation and scope annotations | `@HasOne`, `@HasMany`, `@BelongsTo`, `@BelongsToMany`, the morph and through annotations, and `@Scope`; the processor generates the registration, with no reflection at run time. | 0.9 |
 | Thread-bound transactions | Model writes join the active transaction, and listeners can run after commit. | 0.7 |
 | Many-to-many through | Through relations across a pivot table. | 0.10 |
@@ -68,7 +68,7 @@ The command is `diwan-database`, with the short alias `diwan-db`.
 | Truncate many tables | `truncate` accepts a list of tables, with an optional cascade. | ✅ 0.3.0 |
 | Error table name | The failed table name on the error, when the driver reports it. | ✅ 0.4.0 |
 | Builder helpers | `inOrderOf`, the `wherePast` / `whereFuture` / `whereToday` family, `sole`, `firstOrFail`, `findOr`, `existsOr`, `cloneWithout` and index hints. | 0.6 |
-| Search options argument | One options argument for the escaped search methods. | 0.6 |
+| Search options argument | One options argument for the escaped search methods. | ✅ 0.5.0 |
 | Dates and times | Edge cases such as `timetz`, daylight saving time and infinity, and SQLite text storage gaps. | ✅ 0.4.0 |
 | Android: deferred foreign key commit | A failed commit on a deferred foreign key rolls back cleanly. | ✅ 0.4.0 |
 | JSON wheres | `->` paths, `whereJsonContains` and `whereJsonLength`, PostgreSQL first. | 0.6 |

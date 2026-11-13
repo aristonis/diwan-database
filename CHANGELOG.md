@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
 ### Added
 - `SearchOptions`, the settings of an escaped text search, and a `SearchOptions` overload of the 12 escaped search methods on the query builder and the model builder.
 - `QueryGrammar.searchPattern(String, SearchWhere.Anchor, SearchOptions)` and a `validateSearchOptions` hook a grammar overrides to refuse a setting.
@@ -358,7 +360,8 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
-[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/aristonis/diwan-database/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aristonis/diwan-database/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/aristonis/diwan-database/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aristonis/diwan-database/compare/v0.2.0...v0.3.0
