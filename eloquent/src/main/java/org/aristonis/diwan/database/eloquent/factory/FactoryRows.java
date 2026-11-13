@@ -13,8 +13,8 @@ import java.util.function.Supplier;
 import org.aristonis.diwan.database.eloquent.Model;
 
 /**
- * Builds the attribute rows of a factory: the definition, then each state layer, with lazy values
- * resolved.
+ * Builds the attribute rows of a factory: the definition, the for layers, then each state layer, with
+ * lazy values resolved and nested values expanded.
  */
 final class FactoryRows {
 
@@ -24,36 +24,42 @@ final class FactoryRows {
     }
 
     /**
-     * Builds the attributes of the model at one position.
+     * Builds the attributes of the model at one position: the definition, the for layers, the states
+     * and sequences, then the expansion of nested values.
      *
      * @param spec the settings of the factory
      * @param index the position of the model, from zero
+     * @param run the frame of the run this model is built in, never {@code null}
      * @param <M> the model type
      * @return a new mutable map of attributes, never {@code null}
      */
-    static <M extends Model> Map<String, Object> row(FactorySpec<M> spec, int index) {
+    static <M extends Model> Map<String, Object> row(FactorySpec<M> spec, int index, FactoryRun run) {
         String modelClass = spec.query().getModelClass().getName();
         Map<String, Object> attrs = new LinkedHashMap<>();
         putLayer(attrs, Objects.requireNonNull(spec.definition().get(), "definition"), modelClass);
+        for (ForLink link : spec.relations().forLinks()) {
+            putLayer(attrs, FactoryOwners.columns(link, spec, run), modelClass);
+        }
         for (FactorySpec.State state : spec.states()) {
-            Map<String, Object> layer = state.apply(spec, snapshot(attrs), index);
+            Map<String, Object> layer = state.apply(spec, snapshot(attrs), index, run.parent());
             putLayer(attrs, Objects.requireNonNull(layer, "state"), modelClass);
         }
-        return attrs;
+        return FactoryExpansion.expand(attrs, spec, run);
     }
 
     /**
      * Builds the attributes of the models at positions zero up to the count, none below one.
      *
      * @param spec the settings of the factory
+     * @param run the frame of the run the models are built in, never {@code null}
      * @param count the number of models, below 1 for none
      * @param <M> the model type
      * @return a new mutable list of new mutable maps, empty when {@code count} is below 1
      */
-    static <M extends Model> List<Map<String, Object>> rows(FactorySpec<M> spec, int count) {
+    static <M extends Model> List<Map<String, Object>> rows(FactorySpec<M> spec, FactoryRun run, int count) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            out.add(row(spec, i));
+            out.add(row(spec, i, run));
         }
         return out;
     }
@@ -66,7 +72,7 @@ final class FactoryRows {
      * @return the layer, never {@code null}
      */
     static FactorySpec.State trashedState(Instant given) {
-        return (spec, soFar, index) -> {
+        return (spec, soFar, index, parent) -> {
             Model probe = spec.effectiveQuery().newModel();
             if (!probe.isSoftDeletable()) {
                 throw new IllegalStateException("Model [" + probe.getClass().getName()

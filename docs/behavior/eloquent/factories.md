@@ -1,8 +1,8 @@
 # Factories
 
 A factory builds models for tests and seeding from a definition the caller writes. It lives in the
-exported package `org.aristonis.diwan.database.eloquent.factory` with two public types, `Factory`
-and `Sequence`. Diwan holds no fake or random data and no dependency for it: the definition is the
+exported package `org.aristonis.diwan.database.eloquent.factory` with three public types, `Factory`,
+`Sequence` and `RecycleMode`. Diwan holds no fake or random data and no dependency for it: the definition is the
 caller's own lambda, a fixed value or any library.
 
 ```java
@@ -93,11 +93,122 @@ one factory give the same entries. `make`, `create` and `raw` use position zero.
 | `Sequence.of()` or `byIndex()` with no entry | `IllegalArgumentException` |
 | `crossJoin` with no list, an empty list, or a result too large | `IllegalArgumentException` |
 | `insert` with rows of different key sets | `IllegalArgumentException` |
+| `has` on a relation that is not HasOne, HasMany, MorphOne or MorphMany | `IllegalArgumentException` |
+| `hasAttached` on a relation that is not BelongsToMany | `IllegalArgumentException` |
+| `forParent` on a relation that is not BelongsTo or MorphTo | `IllegalArgumentException` |
+| `hasAttached` with an empty pivot list or an unsaved model | `IllegalArgumentException` |
+| unknown relation name, or a bad `relations()` map | `RelationNotFoundException`, `InvalidRelationException` |
+| `forParent(Model)` not saved, a recycled model not saved | `IllegalStateException` |
+| `has` when the parent has no value for the local key | `IllegalStateException` |
+| `raw` with a `Factory` value or a `forParent(Factory)` | `IllegalStateException` |
+| nesting deeper than 32 levels | `IllegalStateException` |
 | a null argument, key or sequence entry | `NullPointerException` |
 
 Messages name a class, a position or an attribute and never a value.
 
+## Related models
+
+`has(child, relation)` creates the children of each created model, for HasOne, HasMany, MorphOne
+and MorphMany. The child factory's count is the number of children per parent. The parent is saved
+first, then each child is created with the foreign key (and the morph type) set; those columns win
+over the child's own states. Every parent gets its own batch, and a child runs its own create steps.
+
+```java
+Author ada = authors.has(posts.count(3), "posts").create();
+```
+
+`hasAttached` fills a BelongsToMany or MorphToMany with five forms: a factory; a factory and a pivot
+`Map`; a factory and a `Function<Model, Map>` that receives the saved parent; a factory and a
+`List<Map>` that cycles (an empty list throws); a list of saved models and a pivot `Map`, creating
+nothing. Pivot values are written as given.
+
+```java
+Post post = posts.hasAttached(tags.count(2), Map.of("weight", 1), "tags").create();
+```
+
+## Owners
+
+`forParent(parent, relation)` sets the owner of a BelongsTo or MorphTo. The parent is a factory or
+a saved model; the method is not named `for` because that is a Java keyword. A factory parent is
+created once per terminal call, so `count(3)` shares it. The key and type columns come before the
+states, so a state can replace them.
+
+```java
+List<Post> hers = posts.forParent(ada, "author").createMany(3);
+```
+
+## Parent-aware states and hooks
+
+`state(BiFunction)`, `afterMaking(BiConsumer)` and `afterCreating(BiConsumer)` receive the parent
+as a second argument: the saved parent for a child made by `has` or `hasAttached`, otherwise `null`.
+A `Sequence` still receives the index only.
+
+```java
+Factory<Post> titled = posts.state((soFar, parent) -> parent == null
+    ? Map.<String, Object>of() : Map.<String, Object>of("title", "By " + parent.getKey()));
+```
+
+## Nested values
+
+A `Factory` or `Model` value in a definition, a state or a returned value is replaced by a key after
+all layers. A `Factory` creates a model (or takes a recycled one), a `Model` gives its key, `null`
+stays `null`. A `Factory` value that a later layer replaces creates no row.
+
+```java
+Factory<Post> posts = Factory.of(Post.query.on(db), () -> Map.of("author_id", authors));
+```
+
+## Recycle
+
+`recycle(models...)` and `recycle(List)` give one call a pool of saved models, grouped by exact
+class. A nested factory takes a model of its class from the pool instead of creating one; a class
+with no pooled model creates. `RecycleMode` picks: `IN_TURN` (default, in order and around),
+`RANDOM`, `FIRST`. `recycleMode(mode)` sets it; `recycleRandom()` is `RANDOM` without a seed and
+clears a set seed; `recycleRandom(long seed)` is `RANDOM` with a seed, so the same seed and pool
+repeat the same picks on every call. `recycleMode(RANDOM)` keeps a seed already set.
+
+```java
+posts.recycle(ada, grace).recycleRandom(42L).count(5).createMany();
+```
+
+The pool lasts one terminal call and nothing is stored in the factory, so `IN_TURN` and a seed
+restart on the next call. Only the factory the terminal is called on supplies the pool; a nested
+factory's own `recycle` is ignored. A picked model that is not saved throws.
+
+## Without parents
+
+`withoutParents()` turns every nested `Factory` value of that factory into `null`;
+`withoutParents(Class...)` and `withoutParents(String...)` limit it to a model class or an attribute
+name. Calls add together. It does not reach into a nested factory, which keeps its own settings.
+
+```java
+posts.withoutParents(Author.class).create();
+```
+
+## Terminals and relations
+
+| Terminal | Parents (`forParent` factory, `Factory` values) | `has`, `hasAttached` | Hooks |
+|---|---|---|---|
+| `make`, `makeMany` | created and saved | never run | `afterMaking` |
+| `create`, `createMany` and the quiet forms | created and saved | run after the save | both |
+| `insert` | created and saved | skipped | none |
+| `raw`, `rawMany` | never created | never run | none |
+
+`raw` never touches the database: a `Model` value or `forParent(Model)` gives its key, a `Factory`
+value or `forParent(Factory)` throws `IllegalStateException`, even when a recycle pool holds the
+class. Relation names and kinds are checked before the first row is written.
+
+## Connection and depth
+
+A nested factory uses the connection of the factory that created it unless it set its own with
+`connection`. A model given to `forParent` or `hasAttached(List, ...)` keeps its own. Creation stops
+at 32 levels with `IllegalStateException`. There is no transaction around a tree: rows already
+written stay.
+
+## Load relations
+
+No method is needed: `afterCreating(a -> a.load("posts"))` runs after the children exist.
+
 ## Not included
 
-`has`, `for` and `recycle` (related and shared parent models) come later. There are no name-guessing
-helpers, no fake data and no dependency.
+There are no name-guessing helpers, no fake data and no dependency.

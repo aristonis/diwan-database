@@ -2,12 +2,16 @@ package org.aristonis.diwan.database.eloquent.factory;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import org.aristonis.diwan.database.Connection;
@@ -25,7 +29,8 @@ import org.aristonis.diwan.database.eloquent.ModelQuery;
  * <p>The definition and each state are maps from attribute names to values. A value that is a
  * {@link Supplier} is called with no argument, and a value that is a {@link java.util.function.Function}
  * is called with a read-only snapshot of the attributes built so far; the result is used as is and
- * is not resolved again. A {@link ClassCastException} thrown while a value is resolved is rethrown
+ * is not resolved again, except that a result that is a factory or a model is expanded as a nested
+ * value. A {@link ClassCastException} thrown while a value is resolved is rethrown
  * as an {@link IllegalArgumentException} that names the attribute and the model class, never the
  * value, with the original as its cause.
  *
@@ -39,6 +44,17 @@ import org.aristonis.diwan.database.eloquent.ModelQuery;
  * {@link ModelQuery#create(Map)} returns the unsaved model. {@code insert} sends one statement, so
  * the binding limit of the database applies (999 on SQLite before 3.32), and rows with different
  * key sets make it throw an {@link IllegalArgumentException}.
+ *
+ * <p>Relations: {@link #has(Factory, String)} and {@link #hasAttached(Factory, String)} create
+ * children after each created model is saved, and {@link #forParent(Factory, String)} gives a model
+ * its parent first. A value in the attributes that is a factory creates its model and stores the key,
+ * and a value that is a model stores its key. {@link #recycle(Model...)} lets a call reuse saved
+ * models instead of creating parents, and {@link #withoutParents()} turns nested factory values
+ * into {@code null}. Every terminal call builds one run context that holds the recycle position and
+ * the random generator, so two calls on one factory share nothing and the factory stays immutable.
+ * {@code make} creates the parents but never the children, {@code insert} creates the parents and
+ * skips the children and the hooks, and {@code raw} never touches the database. There is no
+ * transaction: rows already written stay when a later one fails.
  *
  * @param <M> the model type
  */
@@ -92,7 +108,7 @@ public abstract class Factory<M extends Model> {
     public Factory<M> state(Map<String, Object> attributes) {
         Map<String, Object> copy = Collections.unmodifiableMap(
                 new LinkedHashMap<>(Objects.requireNonNull(attributes, "attributes")));
-        return withSpec(bound().withState((s, soFar, index) -> copy));
+        return withSpec(bound().withState((s, soFar, index, parent) -> copy));
     }
 
     /**
@@ -105,7 +121,7 @@ public abstract class Factory<M extends Model> {
      */
     public Factory<M> state(UnaryOperator<Map<String, Object>> state) {
         Objects.requireNonNull(state, "state");
-        return withSpec(bound().withState((s, soFar, index) -> state.apply(soFar)));
+        return withSpec(bound().withState((s, soFar, index, parent) -> state.apply(soFar)));
     }
 
     /**
@@ -119,7 +135,7 @@ public abstract class Factory<M extends Model> {
      */
     public Factory<M> set(String name, Object value) {
         Objects.requireNonNull(name, "name");
-        return withSpec(bound().withState((s, soFar, index) -> Collections.singletonMap(name, value)));
+        return withSpec(bound().withState((s, soFar, index, parent) -> Collections.singletonMap(name, value)));
     }
 
     /**
@@ -131,7 +147,7 @@ public abstract class Factory<M extends Model> {
      */
     public Factory<M> sequence(Sequence sequence) {
         Objects.requireNonNull(sequence, "sequence");
-        return withSpec(bound().withState((s, soFar, index) -> sequence.at(index)));
+        return withSpec(bound().withState((s, soFar, index, parent) -> sequence.at(index)));
     }
 
     /**
@@ -144,7 +160,12 @@ public abstract class Factory<M extends Model> {
      */
     @SafeVarargs
     public final Factory<M> sequence(Map<String, Object>... entries) {
-        return sequence(Sequence.of(entries));
+        Objects.requireNonNull(entries, "entries");
+        List<Map<String, Object>> copy = new ArrayList<>(entries.length);
+        for (Map<String, Object> entry : entries) {
+            copy.add(entry);
+        }
+        return sequence(fixedSequence(copy));
     }
 
     /**
@@ -157,7 +178,18 @@ public abstract class Factory<M extends Model> {
      */
     @SafeVarargs
     public final Factory<M> forEachSequence(Map<String, Object>... entries) {
-        return sequence(Sequence.of(entries)).count(entries.length);
+        return sequence(entries).count(entries.length);
+    }
+
+    private static Sequence fixedSequence(List<Map<String, Object>> entries) {
+        if (entries.isEmpty()) {
+            return Sequence.of();
+        }
+        Sequence sequence = Sequence.of(entries.get(0));
+        for (int i = 1; i < entries.size(); i++) {
+            sequence = sequence.and(entries.get(i));
+        }
+        return sequence;
     }
 
     /**
@@ -199,7 +231,8 @@ public abstract class Factory<M extends Model> {
      * @throws NullPointerException if {@code hook} is {@code null}
      */
     public Factory<M> afterMaking(Consumer<M> hook) {
-        return withSpec(bound().withAfterMaking(hook));
+        Objects.requireNonNull(hook, "hook");
+        return withSpec(bound().withAfterMaking((model, parent) -> hook.accept(model)));
     }
 
     /**
@@ -211,7 +244,8 @@ public abstract class Factory<M extends Model> {
      * @throws NullPointerException if {@code hook} is {@code null}
      */
     public Factory<M> afterCreating(Consumer<M> hook) {
-        return withSpec(bound().withAfterCreating(hook));
+        Objects.requireNonNull(hook, "hook");
+        return withSpec(bound().withAfterCreating((model, parent) -> hook.accept(model)));
     }
 
     /**
@@ -244,7 +278,315 @@ public abstract class Factory<M extends Model> {
     }
 
     /**
-     * Makes one unsaved model, ignoring the count.
+     * Returns a factory that creates children under each created model, through a has-one,
+     * has-many, morph-one or morph-many relation.
+     *
+     * <p>The children are created after the model is saved, with the key column (and the type column
+     * of a morph relation) set last, so it wins over the child's own states. The child factory keeps
+     * its own count, states and hooks, and its parent-aware states and hooks receive the saved model.
+     * Nothing is created by {@code make}, {@code insert} or {@code raw}.
+     *
+     * @param child the factory of the children, never {@code null}
+     * @param relation the relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a create call runs, if the relation is not one of the four kinds
+     * @throws org.aristonis.diwan.database.eloquent.exception.RelationNotFoundException when a create
+     *     call runs, if the model has no relation of that name
+     * @throws IllegalStateException when a create call runs, if the saved model has no value for the
+     *     local key
+     */
+    public Factory<M> has(Factory<? extends Model> child, String relation) {
+        Objects.requireNonNull(child, "child");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withHas(HasLink.has(child, relation)));
+    }
+
+    /**
+     * Returns a factory that creates related models under each created model and attaches them
+     * through a many-to-many relation with no pivot values.
+     *
+     * @param related the factory of the related models, never {@code null}
+     * @param relation the many-to-many relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a create call runs, if the relation is not many-to-many
+     * @throws IllegalStateException when a create call runs, if the saved model has no key
+     */
+    public Factory<M> hasAttached(Factory<? extends Model> related, String relation) {
+        Objects.requireNonNull(related, "related");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withHas(HasLink.attachedFactory(related, relation)));
+    }
+
+    /**
+     * Returns a factory that creates related models and attaches each with the same pivot values.
+     *
+     * @param related the factory of the related models, never {@code null}
+     * @param pivot the pivot values, copied and passed as given, never {@code null}
+     * @param relation the many-to-many relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a create call runs, if the relation is not many-to-many
+     * @throws IllegalStateException when a create call runs, if the saved model has no key
+     */
+    public Factory<M> hasAttached(Factory<? extends Model> related, Map<String, Object> pivot, String relation) {
+        Objects.requireNonNull(related, "related");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withHas(HasLink.attachedFactory(related, pivot, relation)));
+    }
+
+    /**
+     * Returns a factory that creates related models and attaches each with pivot values computed
+     * from the saved model, once per related model.
+     *
+     * @param related the factory of the related models, never {@code null}
+     * @param pivot the function from the saved model to the pivot values; a {@code null} result
+     *     means none, never {@code null} itself
+     * @param relation the many-to-many relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a create call runs, if the relation is not many-to-many
+     * @throws IllegalStateException when a create call runs, if the saved model has no key
+     */
+    public Factory<M> hasAttached(
+            Factory<? extends Model> related, Function<Model, Map<String, Object>> pivot, String relation) {
+        Objects.requireNonNull(related, "related");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withHas(HasLink.attachedFactory(related, pivot, relation)));
+    }
+
+    /**
+     * Returns a factory that creates related models and attaches the n-th with the n-th pivot
+     * entry, cycling the list when there are more models than entries. When the related factory has
+     * no count, its count becomes the size of the list.
+     *
+     * @param related the factory of the related models, never {@code null}
+     * @param pivots the pivot entries, each copied, never {@code null} and never empty
+     * @param relation the many-to-many relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException if {@code pivots} is empty, or when a create call runs, if
+     *     the relation is not many-to-many
+     * @throws IllegalStateException when a create call runs, if the saved model has no key
+     */
+    public Factory<M> hasAttached(
+            Factory<? extends Model> related, List<Map<String, Object>> pivots, String relation) {
+        Objects.requireNonNull(related, "related");
+        Objects.requireNonNull(pivots, "pivots");
+        Objects.requireNonNull(relation, "relation");
+        Factory<? extends Model> sized = related.bound().hasCount() || pivots.isEmpty()
+                ? related : related.count(pivots.size());
+        return relate(r -> r.withHas(HasLink.attachedFactory(sized, pivots, relation)));
+    }
+
+    /**
+     * Returns a factory that attaches models that already exist, all with the same pivot values,
+     * once per created model.
+     *
+     * @param existing the saved models to attach, copied, never {@code null}
+     * @param pivot the pivot values, copied and passed as given, never {@code null}
+     * @param relation the many-to-many relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a create call runs, if the relation is not many-to-many
+     *     or an attached model is not saved
+     * @throws IllegalStateException when a create call runs, if the saved model has no key
+     */
+    public Factory<M> hasAttached(List<? extends Model> existing, Map<String, Object> pivot, String relation) {
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withHas(HasLink.attachedExisting(existing, pivot, relation)));
+    }
+
+    /**
+     * Returns a factory whose models belong to a parent that a factory creates, through a belongs-to
+     * or morph-to relation. This is the relation's "for", named {@code forParent} because {@code for}
+     * is a Java keyword.
+     *
+     * <p>The parent is created before the model, once for the whole call whatever the count, unless
+     * the recycle pool holds a model of its class. The key column, and the type column of a morph-to
+     * relation, are set before the states, so a state can override them. A recycled model must be
+     * saved. {@code raw} throws, because it never touches the database.
+     *
+     * @param parent the factory of the parent, never {@code null}
+     * @param relation the belongs-to or morph-to relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a terminal call runs, if the relation is not belongs-to
+     *     or morph-to
+     * @throws IllegalStateException when {@code raw} or {@code rawMany} runs
+     */
+    public Factory<M> forParent(Factory<? extends Model> parent, String relation) {
+        Objects.requireNonNull(parent, "parent");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withFor(ForLink.of(parent, relation)));
+    }
+
+    /**
+     * Returns a factory whose models belong to a parent that is already saved, through a belongs-to
+     * or morph-to relation. The model keeps its own connection, and {@code raw} accepts it.
+     *
+     * @param parent the saved parent, never {@code null}
+     * @param relation the belongs-to or morph-to relation name on this model, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if an argument is {@code null}
+     * @throws IllegalArgumentException when a terminal call runs, if the relation is not belongs-to
+     *     or morph-to
+     * @throws IllegalStateException when a terminal call runs, if the parent is not saved
+     */
+    public Factory<M> forParent(Model parent, String relation) {
+        Objects.requireNonNull(parent, "parent");
+        Objects.requireNonNull(relation, "relation");
+        return relate(r -> r.withFor(ForLink.of(parent, relation)));
+    }
+
+    /**
+     * Returns a factory with a state computed from the attributes built so far and from the parent.
+     *
+     * @param state the function, given a read-only snapshot and the model the run creates this one
+     *     under, or {@code null} at the top level, and returning the attributes to put over it,
+     *     never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code state} is {@code null}
+     */
+    public Factory<M> state(BiFunction<Map<String, Object>, Model, Map<String, Object>> state) {
+        Objects.requireNonNull(state, "state");
+        return withSpec(bound().withState((s, soFar, index, parent) -> state.apply(soFar, parent)));
+    }
+
+    /**
+     * Returns a factory with a hook run on each made model and its parent, after the earlier hooks.
+     *
+     * @param hook the hook, given the model and the model it is created under or {@code null} at the
+     *     top level, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code hook} is {@code null}
+     */
+    public Factory<M> afterMaking(BiConsumer<M, Model> hook) {
+        return withSpec(bound().withAfterMaking(hook));
+    }
+
+    /**
+     * Returns a factory with a hook run on each created model and its parent once it is saved and
+     * its children exist, after the earlier hooks.
+     *
+     * @param hook the hook, given the model and the model it is created under or {@code null} at the
+     *     top level, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code hook} is {@code null}
+     */
+    public Factory<M> afterCreating(BiConsumer<M, Model> hook) {
+        return withSpec(bound().withAfterCreating(hook));
+    }
+
+    /**
+     * Returns a factory that reuses saved models instead of creating parents and nested values of
+     * their exact class. Models are added to the pool, one entry per instance.
+     *
+     * <p>Only the pool of the factory a terminal call is made on counts, and a recycled model must
+     * be saved or the call throws {@link IllegalStateException}.
+     *
+     * @param models the saved models, never {@code null} and without {@code null} entries
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code models} or an entry is {@code null}
+     */
+    public Factory<M> recycle(Model... models) {
+        Objects.requireNonNull(models, "models");
+        List<Model> copy = new ArrayList<>(Arrays.asList(models));
+        return recycle(copy);
+    }
+
+    /**
+     * Returns a factory that reuses saved models instead of creating parents and nested values of
+     * their exact class. Models are added to the pool, one entry per instance.
+     *
+     * @param models the saved models, never {@code null} and without {@code null} entries; an empty
+     *     list changes nothing
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code models} or an entry is {@code null}
+     * @see #recycle(Model...)
+     */
+    public Factory<M> recycle(List<? extends Model> models) {
+        return relate(r -> r.withRecycled(models));
+    }
+
+    /**
+     * Returns a factory that picks recycled models in a mode, keeping a seed that is already set.
+     *
+     * @param mode the mode, {@link RecycleMode#IN_TURN} by default, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code mode} is {@code null}
+     */
+    public Factory<M> recycleMode(RecycleMode mode) {
+        return relate(r -> r.withMode(mode));
+    }
+
+    /**
+     * Returns a factory that picks recycled models at random, with no seed, so two calls differ.
+     * A seed set earlier is cleared.
+     *
+     * @return a new factory, never {@code null}
+     */
+    public Factory<M> recycleRandom() {
+        return relate(r -> r.withRandom(null));
+    }
+
+    /**
+     * Returns a factory that picks recycled models at random from a seed, so two calls on it pick
+     * the same models.
+     *
+     * @param seed the seed of the generator
+     * @return a new factory, never {@code null}
+     */
+    public Factory<M> recycleRandom(long seed) {
+        return relate(r -> r.withRandom(seed));
+    }
+
+    /**
+     * Returns a factory whose nested factory values become {@code null} and create nothing. A
+     * parent given to {@code forParent} and a model value are not affected.
+     *
+     * @return a new factory, never {@code null}
+     */
+    public Factory<M> withoutParents() {
+        return relate(FactoryRelations::withExcludedAll);
+    }
+
+    /**
+     * Returns a factory whose nested factory values that build one of these exact model classes
+     * become {@code null} and create nothing. Repeated calls add to the earlier ones.
+     *
+     * @param models the exact model classes, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code models} or an entry is {@code null}
+     */
+    @SafeVarargs
+    public final Factory<M> withoutParents(Class<? extends Model>... models) {
+        Objects.requireNonNull(models, "models");
+        List<Class<? extends Model>> copy = new ArrayList<>(models.length);
+        for (Class<? extends Model> modelClass : models) {
+            copy.add(modelClass);
+        }
+        return relate(r -> r.withExcludedClasses(copy));
+    }
+
+    /**
+     * Returns a factory whose nested factory values held by these attributes become {@code null}
+     * and create nothing. Repeated calls add to the earlier ones.
+     *
+     * @param attributeNames the attribute names, never {@code null}
+     * @return a new factory, never {@code null}
+     * @throws NullPointerException if {@code attributeNames} or an entry is {@code null}
+     */
+    public final Factory<M> withoutParents(String... attributeNames) {
+        Objects.requireNonNull(attributeNames, "attributeNames");
+        List<String> copy = new ArrayList<>(Arrays.asList(attributeNames));
+        return relate(r -> r.withExcludedNames(copy));
+    }
+
+    /**
+     * Makes one unsaved model, ignoring the count. The parents of {@code forParent} and nested
+     * factory values are created and saved, but no child of {@code has} or {@code hasAttached} is.
      *
      * @return the model, never {@code null}
      */
@@ -335,32 +677,39 @@ public abstract class Factory<M extends Model> {
     }
 
     /**
-     * Builds the attributes of one model, ignoring the count; no model is made.
+     * Builds the attributes of one model, ignoring the count; no model is made and the database is
+     * never touched.
      *
      * @return a new mutable map the caller owns, never {@code null}
+     * @throws IllegalStateException if a nested factory value or a {@code forParent} factory would
+     *     have to create a model; a model value gives its key
      */
     public Map<String, Object> raw() {
-        return FactoryRows.row(bound(), 0);
+        return rawList(1).get(0);
     }
 
     /**
-     * Builds the attributes of as many models as the count says, or one.
+     * Builds the attributes of as many models as the count says, or one, without touching the
+     * database.
      *
      * @return a new mutable list of new mutable maps, empty when the count is below 1
+     * @throws IllegalStateException if a nested factory value or a {@code forParent} factory would
+     *     have to create a model
      */
     public List<Map<String, Object>> rawMany() {
-        FactorySpec<M> current = bound();
-        return FactoryRows.rows(current, current.effectiveCount());
+        return rawList(bound().effectiveCount());
     }
 
     /**
-     * Builds the attributes of a number of models.
+     * Builds the attributes of a number of models without touching the database.
      *
      * @param count the number of models, below 1 for none
      * @return a new mutable list of new mutable maps, empty when {@code count} is below 1
+     * @throws IllegalStateException if a nested factory value or a {@code forParent} factory would
+     *     have to create a model
      */
     public List<Map<String, Object>> rawMany(int count) {
-        return FactoryRows.rows(bound(), count);
+        return rawList(count);
     }
 
     /**
@@ -387,7 +736,12 @@ public abstract class Factory<M extends Model> {
         insertRows(count);
     }
 
-    private FactorySpec<M> bound() {
+    /**
+     * Returns the settings of this factory with its definition bound.
+     *
+     * @return the settings, never {@code null}
+     */
+    FactorySpec<M> bound() {
         return spec.hasDefinition() ? spec : spec.withDefinition(this::definition);
     }
 
@@ -395,24 +749,21 @@ public abstract class Factory<M extends Model> {
         return new Fixed<>(next);
     }
 
+    private Factory<M> relate(UnaryOperator<FactoryRelations> change) {
+        FactorySpec<M> current = bound();
+        return withSpec(current.withRelations(change.apply(current.relations())));
+    }
+
     private List<M> makeList(int count) {
         FactorySpec<M> current = bound();
-        ModelQuery<M> query = current.effectiveQuery();
-        List<M> out = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            out.add(makeOne(query, current, i));
-        }
-        return out;
+        FactoryChildren.validate(current, false);
+        return FactoryBuild.makeList(current, FactoryRun.start(current.relations(), false), count);
     }
 
     private List<M> createList(int count) {
         FactorySpec<M> current = bound();
-        ModelQuery<M> query = current.effectiveQuery();
-        List<M> out = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            out.add(createOne(query, current, i));
-        }
-        return out;
+        FactoryChildren.validate(current, true);
+        return FactoryBuild.createList(current, FactoryRun.start(current.relations(), false), count);
     }
 
     private List<M> createListQuietly(int count) {
@@ -420,34 +771,16 @@ public abstract class Factory<M extends Model> {
         return Model.withoutEvents(work);
     }
 
+    private List<Map<String, Object>> rawList(int count) {
+        FactorySpec<M> current = bound();
+        FactoryChildren.validate(current, false);
+        return FactoryRows.rows(current, FactoryRun.start(current.relations(), true), count);
+    }
+
     private void insertRows(int count) {
         FactorySpec<M> current = bound();
-        List<Map<String, Object>> rows = FactoryRows.rows(current, count);
-        if (rows.isEmpty()) {
-            return;
-        }
-        current.effectiveQuery().query().fillAndInsert(rows);
-    }
-
-    private static <M extends Model> M makeOne(ModelQuery<M> query, FactorySpec<M> spec, int index) {
-        M model = query.newModel();
-        model.forceFill(FactoryRows.row(spec, index));
-        for (Consumer<M> hook : spec.afterMaking()) {
-            hook.accept(model);
-        }
-        return model;
-    }
-
-    private static <M extends Model> M createOne(ModelQuery<M> query, FactorySpec<M> spec, int index) {
-        M model = makeOne(query, spec, index);
-        if (!model.save() || !model.exists()) {
-            throw new IllegalStateException("Saving [" + model.getClass().getName()
-                    + "] was stopped by a model event hook or stored no row");
-        }
-        for (Consumer<M> hook : spec.afterCreating()) {
-            hook.accept(model);
-        }
-        return model;
+        FactoryChildren.validate(current, false);
+        FactoryBuild.insert(current, FactoryRun.start(current.relations(), false), count);
     }
 
     /**
