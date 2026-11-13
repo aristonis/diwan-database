@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -163,6 +164,31 @@ class CastSpecParserTest {
     }
 
     @Test
+    void collectionAndObjectSpecsResolve() {
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse("collection"));
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse("OBJECT"));
+        assertInstanceOf(JsonShapeCast.class, CastSpecParser.parse(" Collection "));
+        assertInstanceOf(JsonShapeCast.class, Casts.resolve(Casts.of("collection")));
+    }
+
+    @Test
+    void collectionAndObjectTakeNoArgument() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("collection:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [collection:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("object:x"));
+    }
+
+    @Test
+    void typeNameForCollectionAndObject() {
+        assertEquals("collection", Casts.typeName(Casts.of("collection")));
+        assertEquals("object", Casts.typeName(Casts.of("Object")));
+        assertEquals("collection", Casts.typeName(Casts.collection()));
+        assertEquals("object", Casts.typeName(Casts.object()));
+    }
+
+    @Test
     void typeNameForBuiltInsAndUserCasts() {
         assertEquals("int", Casts.typeName(Casts.integer()));
         assertEquals("int", Casts.typeName(Casts.of("Integer")));
@@ -206,6 +232,110 @@ class CastSpecParserTest {
         assertInstanceOf(DateCast.class, Casts.date());
         assertInstanceOf(JsonCasts.class, Casts.json());
         assertInstanceOf(PrimitiveCasts.BoolCast.class, Casts.bool());
+    }
+
+    @Test
+    void encryptedSpecsResolve() {
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("ENCRYPTED:JSON"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:array"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:collection"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse("encrypted:object"));
+        assertInstanceOf(EncryptedCast.class, CastSpecParser.parse(" Encrypted "));
+        assertInstanceOf(EncryptedCast.class, Casts.resolve(Casts.of("encrypted:json")));
+    }
+
+    @Test
+    void encryptedRefusesOtherArguments() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("encrypted:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [encrypted:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted: json"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:string"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("encrypted:encrypted"));
+    }
+
+    @Test
+    void typeNameForEncrypted() {
+        assertEquals("encrypted", Casts.typeName(Casts.encrypted()));
+        assertEquals("encrypted", Casts.typeName(Casts.encrypted(Casts.of("json"))));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:json")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:array")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:collection")));
+        assertEquals("encrypted", Casts.typeName(Casts.of("encrypted:object")));
+    }
+
+    @Test
+    void encryptedFactoryRulesMatchTheSpec() {
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.of("int")));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.string()));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(Casts.encrypted()));
+        assertThrows(IllegalArgumentException.class, () -> Casts.encrypted(new UpperCast()));
+        assertThrows(NullPointerException.class, () -> Casts.encrypted((Cast<?>) null));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.collection()));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.jsonUnicode()));
+        assertInstanceOf(EncryptedCast.class, Casts.encrypted(Casts.of("object")));
+    }
+
+    @Test
+    void hashedSpecsResolve() {
+        assertInstanceOf(HashedCast.class, CastSpecParser.parse("hashed"));
+        assertInstanceOf(HashedCast.class, CastSpecParser.parse(" HASHED "));
+        assertInstanceOf(HashedCast.class, Casts.resolve(Casts.of("hashed")));
+    }
+
+    @Test
+    void hashedRefusesAnArgument() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> CastSpecParser.parse("hashed:x"));
+
+        assertTrue(e.getMessage().contains("Unknown cast [hashed:x]"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("hashed:"));
+        assertThrows(IllegalArgumentException.class, () -> CastSpecParser.parse("hashed: x"));
+    }
+
+    @Test
+    void typeNameForHashed() {
+        assertEquals("hashed", Casts.typeName(Casts.hashed()));
+        assertEquals("hashed", Casts.typeName(Casts.of("hashed")));
+        assertEquals("hashed", Casts.typeName(Casts.of("HASHED")));
+    }
+
+    @Test
+    void binarySpecsResolve() {
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse("binary:uuid"));
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse("binary:ulid"));
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse(" BINARY:UUID"));
+        assertInstanceOf(BinaryCast.class, Casts.resolve(Casts.of("binary:ulid")));
+    }
+
+    @Test
+    void binaryFactoriesBuildTheSameCast() {
+        Cast<UUID> uuid = Casts.binaryUuid();
+        Cast<String> ulid = Casts.binaryUlid();
+
+        assertInstanceOf(BinaryCast.class, uuid);
+        assertInstanceOf(BinaryCast.class, ulid);
+    }
+
+    @Test
+    void binaryRefusesOtherForms() {
+        for (String spec : List.of("binary", "binary:", "binary:invalid", "binary:uuid:extra", "binary: uuid")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> CastSpecParser.parse(spec));
+
+            assertTrue(e.getMessage().contains("Unknown cast [" + spec + "]"));
+        }
+    }
+
+    @Test
+    void typeNameForBinary() {
+        assertEquals("binary", Casts.typeName(Casts.binaryUuid()));
+        assertEquals("binary", Casts.typeName(Casts.binaryUlid()));
+        assertEquals("binary", Casts.typeName(Casts.of("binary:ulid")));
     }
 
     @Test

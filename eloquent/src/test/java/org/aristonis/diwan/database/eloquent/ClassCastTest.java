@@ -10,13 +10,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.CastColumns;
 import org.aristonis.diwan.database.eloquent.casts.CastComparator;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
+import org.aristonis.diwan.database.eloquent.exception.JsonException;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
 import org.junit.jupiter.api.Test;
 
@@ -117,6 +120,8 @@ class ClassCastTest {
         protected Map<String, Cast<?>> casts() {
             Map<String, Cast<?>> casts = new LinkedHashMap<>();
             casts.put("meta", Casts.json());
+            casts.put("tags", Casts.collection());
+            casts.put("opts", Casts.object());
             casts.put("price", new PriceCast());
             casts.put("doc", new CompactJsonCast());
             casts.put("label", new AlwaysSameCast());
@@ -124,6 +129,9 @@ class ClassCastTest {
             casts.put("broken", new FailingCast());
             casts.put("total", Casts.of("decimal:2"));
             casts.put("happened_at", Casts.of("immutable_datetime"));
+            casts.put("secret", Casts.of("encrypted:json"));
+            casts.put("password", Casts.of("hashed"));
+            casts.put("ref", Casts.of("binary:ulid"));
             return casts;
         }
     }
@@ -147,6 +155,11 @@ class ClassCastTest {
         return (Map<String, Object>) model.getAttribute("meta");
     }
 
+    @SuppressWarnings("unchecked")
+    private static List<Object> listOf(Model model) {
+        return (List<Object>) model.getAttribute("tags");
+    }
+
     @Test
     void readingJsonDoesNotDirty() {
         Wallet wallet = stored("meta", SPACED);
@@ -166,6 +179,113 @@ class ClassCastTest {
         assertTrue(wallet.isDirty("meta"));
         assertEquals("{\"a\":1,\"b\":2}", wallet.getAttributes().get("meta"));
         assertSame(metaOf(wallet), metaOf(wallet));
+    }
+
+    @Test
+    void nullRawReadsNullWithoutCallingTheCast() {
+        Wallet wallet = stored("tags", null, "opts", null);
+
+        assertNull(wallet.getAttribute("tags"));
+        assertNull(wallet.getAttribute("opts"));
+
+        wallet.setAttribute("tags", List.of(1L));
+        wallet.setAttribute("tags", null);
+        assertNull(wallet.getAttributes().get("tags"));
+    }
+
+    @Test
+    void mutatingReadListMarksDirty() {
+        Wallet wallet = stored("tags", "[1, 2]");
+
+        listOf(wallet).add(3L);
+
+        assertTrue(wallet.isDirty("tags"));
+        assertEquals("[1,2,3]", wallet.getAttributes().get("tags"));
+        assertSame(listOf(wallet), listOf(wallet));
+    }
+
+    @Test
+    void mutatingReadObjectMarksDirty() {
+        Wallet wallet = stored("opts", SPACED);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> opts = (Map<String, Object>) wallet.getAttribute("opts");
+        opts.put("b", 2L);
+
+        assertTrue(wallet.isDirty("opts"));
+        assertEquals("{\"a\":1,\"b\":2}", wallet.getAttributes().get("opts"));
+    }
+
+    @Test
+    void equalRewriteOfCollectionAndObjectIsClean() {
+        Wallet wallet = stored("tags", "[1, 2]", "opts", SPACED);
+
+        wallet.setAttribute("tags", new ArrayList<>(List.of(1L, 2L)));
+        wallet.setAttribute("opts", new LinkedHashMap<>(Map.of("a", 1L)));
+
+        assertFalse(wallet.isDirty());
+    }
+
+    @Test
+    void reorderedObjectKeysAreClean() {
+        Wallet wallet = stored("opts", "{\"a\":1,\"b\":2}");
+        Map<String, Object> reordered = new LinkedHashMap<>();
+        reordered.put("b", 2L);
+        reordered.put("a", 1L);
+
+        wallet.setAttribute("opts", reordered);
+
+        assertFalse(wallet.isDirty("opts"));
+    }
+
+    @Test
+    void toMapHoldsListAndMapAndNull() {
+        Wallet wallet = stored("tags", "[1,2]", "opts", null);
+
+        Map<String, Object> map = wallet.toMap();
+
+        assertEquals(List.of(1L, 2L), map.get("tags"));
+        assertNull(map.get("opts"));
+    }
+
+    @Test
+    void wrongStoredShapeThrowsOnRead() {
+        Wallet wallet = stored("tags", "{\"a\":1}", "opts", "[1]");
+
+        InvalidCastException tags = assertThrows(InvalidCastException.class,
+                () -> wallet.getAttribute("tags"));
+        InvalidCastException opts = assertThrows(InvalidCastException.class,
+                () -> wallet.getAttribute("opts"));
+
+        assertEquals("tags", tags.getKey());
+        assertEquals("collection", tags.getCastName());
+        assertEquals("opts", opts.getKey());
+        assertEquals("object", opts.getCastName());
+    }
+
+    @Test
+    void wrongShapeOnWriteThrowsInvalidCast() {
+        Wallet wallet = stored("tags", "[1]");
+
+        InvalidCastException e = assertThrows(InvalidCastException.class,
+                () -> wallet.setAttribute("tags", Map.of("a", 1)));
+
+        assertEquals("tags", e.getKey());
+        assertEquals("collection", e.getCastName());
+        assertTrue(e.getMessage().contains("JSON array"));
+    }
+
+    @Test
+    void unencodableElementIsWrappedWithJsonExceptionCause() {
+        Wallet wallet = stored("tags", "[1]");
+        List<Object> bad = new ArrayList<>();
+        bad.add(new Object());
+
+        InvalidCastException e = assertThrows(InvalidCastException.class,
+                () -> wallet.setAttribute("tags", bad));
+
+        assertEquals("collection", e.getCastName());
+        assertTrue(e.getCause() instanceof JsonException);
     }
 
     @Test
@@ -305,10 +425,23 @@ class ClassCastTest {
         assertTrue(wallet.hasCast("meta"));
         assertTrue(wallet.hasCast("meta", "array"));
         assertTrue(wallet.hasCast("meta", "JSON"));
+        assertTrue(wallet.hasCast("tags", "Collection"));
+        assertTrue(wallet.hasCast("opts", "object"));
+        assertFalse(wallet.hasCast("tags", "object"));
         assertTrue(wallet.hasCast("total", "decimal:4"));
         assertTrue(wallet.hasCast("happened_at", "custom_datetime"));
         assertTrue(wallet.hasCast("price", PriceCast.class.getName()));
         assertFalse(wallet.hasCast("meta", "int"));
+        assertTrue(wallet.hasCast("secret", "encrypted"));
+        assertTrue(wallet.hasCast("secret", "ENCRYPTED:json"));
+        assertFalse(wallet.hasCast("secret", "json"));
+        assertTrue(wallet.hasCast("password", "hashed"));
+        assertTrue(wallet.hasCast("password", "HASHED"));
+        assertFalse(wallet.hasCast("password", "encrypted"));
+        assertTrue(wallet.hasCast("ref", "binary"));
+        assertTrue(wallet.hasCast("ref", "BINARY"));
+        assertTrue(wallet.hasCast("ref", "BINARY:ulid"));
+        assertFalse(wallet.hasCast("ref", "string"));
         assertFalse(wallet.hasCast("missing"));
     }
 

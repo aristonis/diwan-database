@@ -26,8 +26,8 @@ found.delete();
 
 | You want to | Use |
 |---|---|
-| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec` |
-| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
+| Configure a model | override `table`, `primaryKey`, `keyType`, `incrementing`, `connectionName`, `timestamps`, `createdAtColumn`, `updatedAtColumn`, `fillable`, `guarded`, `perPage`, `dateFormat`, `timestampFormat`, `uniqueIdKind`, `casts`, `accessors`, `hidden`, `visible`, `appends`, `jsonCodec`, `attributeEncrypter`, `attributeHasher` |
+| Cast attributes | `Casts.of("decimal:2")`, `Casts.decimal`, `Casts.date`, `Casts.datetime`, `Casts.timestamp`, `Casts.json`, `Casts.collection`, `Casts.object`, `Casts.encrypted`, `Casts.hashed`, `Casts.binaryUuid`, `Casts.binaryUlid`, `BinaryIds`, `Casts.enumOf`, `CastMap`, a user `Cast`; `getCasts`, `hasCast`, `getRawAttribute`, `getRawOriginal` |
 | Compute or normalise attributes | `Attribute.of`, `Attribute.get`, `Attribute.set`, `shouldCache`, `withoutObjectCaching` |
 | Serialize | `toMap`, `toJson`, `setHidden`, `makeHidden`, `setVisible`, `makeVisible`, `append`, `setAppends`, `withoutAppends` |
 | Pick a connection | `ModelQuery.on(QueryFactory)`, `on(Connection)` inside a transaction, `using(ConnectionResolver)`, `ConnectionResolver.setDefault` |
@@ -59,6 +59,7 @@ found.delete();
 | Find, iterate and page many-to-many rows | `find`, `findMany`, `findOrFail`, `first`, `firstWhere`, `sole`, `chunk`, `each`, `lazy`, `cursor`, `paginate`, `simplePaginate`, `cursorPaginate` on `BelongsToMany` |
 | Link the joining row to both sides | `chaperone`, `withoutChaperone` on `BelongsToMany`, after `using` |
 | Run code on save, delete and restore | `ModelQuery.events()`, `observe`, `Model.withoutEvents`, `saveQuietly`, `deleteQuietly`; see [model events](model-events.md) |
+| Build models for tests and seeding | `Factory.of`, `make`, `create`, `raw`, `insert`, `Sequence`, `has`, `hasAttached`, `forParent`, `recycle`; see [factories](factories.md) |
 | Declare relations to many parent types | `morphOne`, `morphMany`, `morphTo`, `getMorphClass`, `MorphMap`; see [morph relations](morph-relations.md) |
 | Filter by a morph parent | `hasMorph`, `whereHasMorph`, `doesntHaveMorph`, `whereMorphRelation`, `whereMorphedTo`, `whereNotMorphedTo` and their `or` forms |
 | Eager load per parent class | `withMorph` with `morphWith`, `morphWithCount`, `constrain`; `loadMorph`, `loadMorphCount` |
@@ -95,8 +96,61 @@ protected List<String> appends() { return List.of("display_name"); }
 Reading goes accessor, then cast, then the stored value; writing goes mutator, then cast, then
 store, and always stores the storage form. The dirty check compares by meaning: JSON by structure,
 floats within 4 ULP, moments as instants, dates as dates, decimals after rounding. Reading never
-makes a model dirty; changing a map a JSON cast returned does. `toMap` applies `visible`, then
+makes a model dirty; changing a map or list that a JSON, collection or object cast returned does. `toMap` applies `visible`, then
 `hidden`, then `appends`; moments come out as ISO-8601 UTC with microseconds.
+
+An encrypted cast keeps its value in a text column as the text your encrypter returns. The cast
+strings are `encrypted` (a string), `encrypted:array` and `encrypted:json` (a JSON value),
+`encrypted:collection` (a `List`) and `encrypted:object` (a `Map`); `Casts.encrypted()` and
+`Casts.encrypted(Cast)` are the typed forms. Diwan does no cryptography: the model supplies an
+`AttributeEncrypter` by overriding `attributeEncrypter()`.
+
+```java
+@Override
+protected AttributeEncrypter attributeEncrypter() { return myEncrypter; }
+```
+
+The column must be a text type, and an encrypted column cannot be searched with `where`.
+`toMap()` and `toJson()` return the decrypted value, so list encrypted attributes in `hidden()`
+unless you mean to expose them. Only `setAttribute` and `fill` encrypt; raw attribute writes and
+query builder inserts or updates store what they are given.
+
+A hashed cast keeps a one-way hash of a `String` in a text column. The cast string is `hashed`;
+`Casts.hashed()` is the typed form. Diwan does no hashing: the model supplies an `AttributeHasher`
+(`hash`, `isHashed` and `isCurrent`, which returns `true` by default) by overriding
+`attributeHasher()` and returning one shared, thread-safe instance. Use a proper password hash,
+bcrypt or argon2, from your own library.
+
+```java
+@Override
+protected AttributeHasher attributeHasher() { return myHasher; }
+```
+
+The cast is write-only: a read returns the stored hash, and verifying a password is your hasher's
+job. The column must be a text type wide enough for the hash. `toMap()` and `toJson()` return the
+hash, so list hashed attributes in `hidden()`. Only `setAttribute` and `fill` hash; raw attribute
+writes and query builder inserts or updates store what they are given.
+
+A binary cast keeps a UUID or a ULID as 16 bytes. The cast strings are `binary:uuid` and
+`binary:ulid`; `Casts.binaryUuid()` and `Casts.binaryUlid()` are the typed forms. Use a `binary()`
+column, not `uuid()`.
+
+```java
+@Override
+protected Map<String, Cast<?>> casts() {
+    return CastMap.create()
+            .put("token", "binary:uuid")    // java.util.UUID
+            .put("ref", "binary:ulid")      // String, 26 lower-case characters
+            .build();
+}
+```
+
+`binary:uuid` reads and writes a `java.util.UUID`, and a write takes a `UUID` only. `binary:ulid`
+reads a lower-case 26-character `String` and writes a strict 26-character ULID in any case: digits
+0-9 and letters A-Z without I, L, O and U, the first character 0 to 7. A `where` clause on such a
+column compares bytes, so pass `BinaryIds.uuidBytes(uuid)` or `BinaryIds.ulidBytes(text)`. `toMap()`
+and `toJson()` give the text form. Null stays SQL NULL. The key of a model with a binary key is not
+generated as bytes; set it yourself or use a text key.
 
 ## Relations
 
@@ -317,6 +371,30 @@ SQLite 3.24 or later (Android API 30+). See the
   with another meaning (`Y` is the week-based year, `m` the minute).
 - Bad stored data under a cast throws `InvalidCastException`, where Laravel reads `null`, `0` or
   `true`.
+- A `collection` cast reads only a JSON array and an `object` cast only a JSON object; a row of
+  the other shape throws `InvalidCastException`, so `getAttribute`, `toMap` and `toJson` of that
+  model throw too. Null, an empty string and the JSON text `null` read as `null`, and writing
+  `null` stores SQL NULL. For typed elements, a typed map or
+  a DTO, implement `Cast<T>` yourself.
+- Diwan does no cryptography; your `AttributeEncrypter` does it. An encrypted column must be text
+  and cannot be used in a `where` clause. A failure of `encrypt` or `decrypt`, or a missing
+  encrypter on a non-null value, surfaces as `InvalidCastException` with the original exception as
+  its cause. A decrypted value of the wrong shape fails as a `collection` or `object` cast does. A
+  dirty check that cannot decrypt counts the attribute as changed. While `hasPreviousKeys()` is
+  `true`, an encrypted attribute whose stored text changed is dirty even when the decrypted value
+  is the same, and an encrypted JSON value that was only read also turns dirty.
+- Diwan does no hashing; your `AttributeHasher` does it. A `hashed` cast accepts a `String` only,
+  and any other value fails as `InvalidCastException`. A value that `isHashed` accepts is kept
+  when `isCurrent` returns `true` and refused otherwise; null stays SQL NULL. A failure of the
+  hasher, or a missing hasher on a non-null value, surfaces as `InvalidCastException` with the
+  original exception as its cause. Setting the same plain value again is dirty when the hasher's output
+  differs, as a salted hash does. A hash-shaped value from a request skips the hasher, so validate untrusted
+  input as plain text first or keep the attribute out of `fillable()`, and make `isHashed` strict.
+- A `binary:uuid` cast accepts a `UUID` only and a `binary:ulid` cast a `String` only; any other value
+  fails as `InvalidCastException`, as does a ULID text that is not 26 valid characters. A stored
+  value that is not exactly 16 bytes fails as `InvalidCastException`. A `where` clause on the column
+  needs the bytes from `BinaryIds.uuidBytes` or `BinaryIds.ulidBytes`; the text or `UUID` does not
+  match. Binary keys are not generated.
 - A value object returned by a user cast needs `equals`, or the cast a `CastComparator`, to stay
   clean after a read.
 - `casts()` and `accessors()` are read once per class; they must not depend on instance state.

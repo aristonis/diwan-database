@@ -17,6 +17,7 @@ import org.aristonis.diwan.database.query.Builder;
 import org.aristonis.diwan.database.query.LockWait;
 import org.aristonis.diwan.database.query.QueryGrammar;
 import org.aristonis.diwan.database.query.RowLock;
+import org.aristonis.diwan.database.query.SearchOptions;
 import org.aristonis.diwan.database.query.SearchWhere;
 import org.aristonis.diwan.database.query.Where;
 import org.aristonis.diwan.database.values.Instants;
@@ -146,7 +147,11 @@ public class SQLiteQueryGrammar extends QueryGrammar {
      *
      * @implNote Case-sensitive matches build a {@code glob} pattern with {@code [}, {@code *} and
      *     {@code ?} in brackets, {@code [} first so later brackets are not escaped again.
+     * @deprecated since 0.5.0, for removal in 0.6.0; use
+     *     {@link #searchPattern(String, SearchWhere.Anchor, SearchOptions)}
      */
+    @Deprecated(since = "0.5.0", forRemoval = true)
+    @SuppressWarnings("removal")
     @Override
     public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
         if (!caseSensitive) {

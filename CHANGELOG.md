@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+### Added
+- `SearchOptions`, the settings of an escaped text search, and a `SearchOptions` overload of the 12 escaped search methods on the query builder and the model builder.
+- `QueryGrammar.searchPattern(String, SearchWhere.Anchor, SearchOptions)` and a `validateSearchOptions` hook a grammar overrides to refuse a setting.
+- `Casts.collection()` and `Casts.object()`, and the `collection` and `object` cast strings: a stored JSON array reads as a `List`, a stored JSON object as a `Map`, a value of the other shape throws `InvalidCastException`, and null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
+- `AttributeEncrypter`, `Model.attributeEncrypter()`, `Casts.encrypted()` and `Casts.encrypted(Cast)`, and the `encrypted`, `encrypted:array`, `encrypted:json`, `encrypted:collection` and `encrypted:object` cast strings. Diwan does no cryptography: the model supplies the encrypter, the column must be text, encrypted columns cannot be searched with `where`, and an encrypter failure surfaces as `InvalidCastException` with the original as cause.
+- `AttributeHasher`, `Model.attributeHasher()`, `Casts.hashed()` and the `hashed` cast string. Diwan does no hashing: the model supplies the hasher, the column must be text, the cast takes a `String` only, and a hasher failure surfaces as `InvalidCastException` with the original as cause.
+- `Casts.binaryUuid()`, `Casts.binaryUlid()`, `BinaryIds.uuidBytes(UUID)`, `BinaryIds.ulidBytes(String)` and the `binary:uuid` and `binary:ulid` cast strings. The attribute is stored as 16 bytes in a `binary()` column: `binary:uuid` reads and writes a `UUID`, `binary:ulid` reads a lower-case 26-character `String` and writes a strict 26-character ULID in any case. A `where` clause on such a column takes the bytes from `BinaryIds`. A stored value that is not exactly 16 bytes throws `InvalidCastException`. Models whose key is binary do not get a generated key.
+- `Factory` and `Sequence` in the new exported package `org.aristonis.diwan.database.eloquent.factory`: build models for tests and seeding with `make`, `create`, `raw` and `insert`, with states, `Supplier` and `Function` values, `afterMaking` and `afterCreating` hooks, `connection`, `trashed` and sequences (`Sequence.of`, `byIndex`, `crossJoin`). Diwan holds no fake data: the definition is your own lambda.
+- `Factory.has`, `hasAttached` and `forParent` build related models (HasOne, HasMany, MorphOne, MorphMany, BelongsToMany, MorphToMany, BelongsTo, MorphTo) with parent-aware `state`, `afterMaking` and `afterCreating` overloads; `Factory` and `Model` values in a definition become the key of a created or recycled model; `recycle`, `RecycleMode` and `recycleRandom` share saved models across one call; `withoutParents` turns nested factory values into null. Nested factories use the outer factory's connection and stop at 32 levels.
+
+### Deprecated
+- The 24 `boolean caseSensitive` overloads of the escaped search methods (12 on the query builder, 12 on the model builder) and `QueryGrammar.searchPattern(String, SearchWhere.Anchor, boolean)`, for removal in 0.6.0. Use `SearchOptions.caseSensitive()` in place of `true`.
+
 ## [0.4.0] - 2026-11-11
 
 ### Added
@@ -345,7 +360,8 @@ the entry says so; the full list is in the
 - On SQLite a `decimal()` column turns values into floating-point numbers; store exact amounts as
   integer minor units.
 
-[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aristonis/diwan-database/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/aristonis/diwan-database/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aristonis/diwan-database/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/aristonis/diwan-database/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aristonis/diwan-database/compare/v0.2.0...v0.3.0

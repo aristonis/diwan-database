@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.util.Objects;
 import java.util.Random;
 import java.util.function.LongSupplier;
+import org.aristonis.diwan.database.eloquent.internal.Crockford;
 
 /**
  * Generates the unique string keys of {@link UniqueIdKind#UUID} and {@link UniqueIdKind#ULID}
@@ -17,15 +18,10 @@ public final class UniqueIds {
 
     private static final UniqueIds STANDARD = new UniqueIds(System::currentTimeMillis, new SecureRandom());
     private static final char[] HEX = "0123456789abcdef".toCharArray();
-    private static final char[] CROCKFORD = "0123456789abcdefghjkmnpqrstvwxyz".toCharArray();
     private static final int UUID_BYTES = 16;
     private static final int ULID_RANDOM_BYTES = 10;
     private static final int TIME_BYTES = 6;
     private static final int BITS_PER_BYTE = 8;
-    private static final int BYTE_MASK = 0xFF;
-    private static final int BASE32_BITS = 5;
-    private static final int BASE32_MASK = 0x1F;
-    private static final int ULID_TIME_CHARS = 10;
     private static final int VERSION_BYTE = 6;
     private static final int VARIANT_BYTE = 8;
 
@@ -85,21 +81,10 @@ public final class UniqueIds {
         long time = epochMillis.getAsLong();
         byte[] randomPart = new byte[ULID_RANDOM_BYTES];
         random.nextBytes(randomPart);
-        StringBuilder out = new StringBuilder(26);
-        for (int i = ULID_TIME_CHARS - 1; i >= 0; i--) {
-            out.append(CROCKFORD[(int) ((time >>> (i * BASE32_BITS)) & BASE32_MASK)]);
-        }
-        // 80 random bits are sixteen 5-bit characters; read them as two 40-bit halves.
-        for (int half = 0; half < 2; half++) {
-            long bits = 0;
-            for (int i = 0; i < BASE32_BITS; i++) {
-                bits = (bits << BITS_PER_BYTE) | (randomPart[half * BASE32_BITS + i] & BYTE_MASK);
-            }
-            for (int i = BITS_PER_BYTE - 1; i >= 0; i--) {
-                out.append(CROCKFORD[(int) ((bits >>> (i * BASE32_BITS)) & BASE32_MASK)]);
-            }
-        }
-        return out.toString();
+        byte[] bytes = new byte[UUID_BYTES];
+        writeTime(bytes, time);
+        System.arraycopy(randomPart, 0, bytes, TIME_BYTES, ULID_RANDOM_BYTES);
+        return Crockford.encode128(bytes);
     }
 
     private static void writeTime(byte[] bytes, long millis) {

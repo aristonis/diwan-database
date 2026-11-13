@@ -55,8 +55,14 @@ builder, without reflection, annotations or build plugins.
     typed factories, or by a user cast object. Built-in casts: `int`/`integer`,
     `real`/`float`/`double`, `decimal:N`, `string`, `bool`/`boolean`, `date`, `datetime`,
     `immutable_date`, `immutable_datetime`, the same four with a `:format` argument, `timestamp`,
-    `json`, `array`, `json:unicode` and enums. An invalid cast fails when the model first resolves
-    its casts, naming the model and the key.
+    `json`, `array`, `json:unicode`, `collection`, `object`, `encrypted`, `encrypted:array`,
+    `encrypted:json`, `encrypted:collection`, `encrypted:object`, `hashed`, `binary:uuid`, `binary:ulid` and enums. The encrypted
+    casts use an `AttributeEncrypter` the model supplies by overriding `attributeEncrypter()`; Diwan
+    does no cryptography. The hashed cast uses an `AttributeHasher` the model supplies by
+    overriding `attributeHasher()`; Diwan does no hashing. The binary casts store a UUID or a ULID as 16 bytes in a `binary()`
+    column and read it back as a `UUID` or a lower-case 26-character `String`; a stored value of
+    any other length fails as `InvalidCastException`. An invalid cast fails when the model
+    first resolves its casts, naming the model and the key.
 14. Reading an attribute applies, in order, its accessor, its cast, or nothing. Writing applies its
     mutator, its cast, or nothing, and always stores the storage form. Typed getters and
     `getOriginal` see cast values; the raw attributes, raw originals, dirty map and changes stay in
@@ -262,7 +268,7 @@ cast value (so `"1.9"` and `1` are equal under `int`), and NaN or Infinity in a 
 
 ## 6. Scope and non-goals
 
-Not covered now, planned later: encrypted and hashed casts, collection and value-object cast
+Not covered now, planned later: value-object cast
 classes, JSON path writes, cast-aware `increment`, a closure form of `wherePivot`,
 through relations, polymorphic relations and their aggregates, touches and inverses, per-parent
 limits in eager loads,

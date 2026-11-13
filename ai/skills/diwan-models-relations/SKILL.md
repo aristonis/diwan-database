@@ -102,6 +102,10 @@ fun find(id: Long): Optional<UnitInfo> {
 - Date cast formats are Java patterns (`yyyy-MM-dd`), not PHP letters.
 - An `instant` column needs `Casts.instant()`. Instant `created_at`, `updated_at` or `deleted_at` need `timestampFormat()` = `TimestampFormat.INSTANT`, since the framework writes them directly.
 - `casts()` and `accessors()` are read once per class and must not use instance state.
+- `collection` and `object` casts read a JSON array as a `List` and a JSON object as a `Map`; the other stored shape throws `InvalidCastException`; null stores SQL NULL. For typed elements, a typed map or a DTO, implement `Cast<T>` yourself.
+- `encrypted` casts (`encrypted`, `encrypted:array|json|collection|object`) need a text column, a model `attributeEncrypter()` and no `where` on them; Diwan does no cryptography; an encrypter failure is an `InvalidCastException` with the original as cause.
+- `hashed` casts need a text column and a model `attributeHasher()`, accept a `String` only, and belong in `hidden()`; Diwan does no hashing, so bring your own bcrypt or argon2 and verify with your own hasher.
+- `binary:uuid` (a `UUID`) and `binary:ulid` (a `String`, read lower-case, written in any case) store 16 bytes in a `binary()` column, not `uuid()`; a `where` on them needs `BinaryIds.uuidBytes(uuid)` or `BinaryIds.ulidBytes(text)`; a stored value that is not 16 bytes is an `InvalidCastException`; binary keys are not generated.
 - Money: use `Casts.decimal(precision, scale)` (or `decimal:P,S`) with the same numbers as the
   migration's decimal column. It refuses extra decimals; `decimal:N` rounds half up instead.
 - On SQLite the strict decimal cast refuses a value with more than 15 significant digits

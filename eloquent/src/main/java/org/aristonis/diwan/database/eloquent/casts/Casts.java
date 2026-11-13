@@ -2,7 +2,11 @@ package org.aristonis.diwan.database.eloquent.casts;
 
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
 import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import org.aristonis.diwan.database.eloquent.Model;
 
 /**
  * Factory for the built-in casts.
@@ -25,7 +29,11 @@ public final class Casts {
      * {@code decimal:P,S,MODE} (a {@link java.math.RoundingMode} name, any case), {@code date},
      * {@code date:F}, {@code immutable_date[:F]}, {@code datetime}, {@code datetime:F},
      * {@code immutable_datetime[:F]}, {@code custom_datetime:F}, {@code timestamp}, {@code json},
-     * {@code array}, {@code json:unicode}, {@code instant}. The argument is kept as written. A format {@code F} is a
+     * {@code array}, {@code json:unicode}, {@code collection}, {@code object},
+     * {@code encrypted}, {@code encrypted:array}, {@code encrypted:json},
+     * {@code encrypted:collection}, {@code encrypted:object}, {@code hashed},
+     * {@code binary:uuid}, {@code binary:ulid}, {@code instant}. The argument is
+     * kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
      *
@@ -240,6 +248,136 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code collection} cast: a JSON array column read as a {@code List}.
+     *
+     * <p>A stored JSON array reads as a mutable {@code List}; changing it in place marks the
+     * attribute dirty, as with {@link #json()}. A null column, an empty string and the JSON
+     * literal {@code null} read as null. A stored value of another shape, such as an object or a
+     * scalar, throws {@link InvalidCastException} naming the key and {@code JSON array}, never
+     * the value. Writes encode the list like {@link #json()}, a null value stores SQL NULL, and a
+     * value that is not a {@code List} throws {@link InvalidCastException}. An element the codec
+     * cannot encode fails the write with a cause of
+     * {@link org.aristonis.diwan.database.eloquent.exception.JsonException}.
+     *
+     * @return a cast reading and writing {@code List} values
+     */
+    public static Cast<List<Object>> collection() {
+        return new JsonShapeCast<>(JsonShapeCast.Shape.COLLECTION);
+    }
+
+    /**
+     * Returns the {@code object} cast: a JSON object column read as a {@code Map}.
+     *
+     * <p>A stored JSON object reads as a mutable {@code Map} that keeps the stored key order;
+     * changing it in place marks the attribute dirty, as with {@link #json()}. A null column, an
+     * empty string and the JSON literal {@code null} read as null. A stored value of another
+     * shape, such as an array or a scalar, throws {@link InvalidCastException} naming the key and
+     * {@code JSON object}, never the value. Writes encode the map like {@link #json()}, a null
+     * value stores SQL NULL, and a value that is not a {@code Map} throws
+     * {@link InvalidCastException}.
+     *
+     * @return a cast reading and writing {@code Map} values keyed by {@code String}
+     */
+    public static Cast<Map<String, Object>> object() {
+        return new JsonShapeCast<>(JsonShapeCast.Shape.OBJECT);
+    }
+
+    /**
+     * Returns the {@code encrypted} cast: a text column holding encrypter output for a string.
+     *
+     * <p>A read decrypts the stored text with the model's {@link Model#getAttributeEncrypter()
+     * encrypter} and returns the {@code String}; a write encrypts the text form of the value. A
+     * null column reads null and a null value stores SQL NULL, without calling the encrypter.
+     * An exception thrown by the encrypter, and a model without an encrypter, reach the caller as
+     * an {@link InvalidCastException} whose cause is the original exception (same instance). The
+     * column must be a text type and cannot be searched with {@code where}.
+     *
+     * @return a cast reading and writing encrypted strings
+     */
+    public static Cast<Object> encrypted() {
+        return new EncryptedCast();
+    }
+
+    /**
+     * Returns an {@code encrypted} cast that applies {@code inner} to the decrypted text.
+     *
+     * <p>A read decrypts, then reads the text through {@code inner}; a write encodes through
+     * {@code inner}, then encrypts the result. The dirty check decrypts both stored values and
+     * compares them through {@code inner}. Rules for null, the missing encrypter and failures are
+     * those of {@link #encrypted()}: an exception thrown by the encrypter, and a model without an
+     * encrypter, reach the caller as an {@link InvalidCastException} whose cause is the original
+     * exception (same instance).
+     *
+     * @param inner the {@link #json()}, {@link #jsonUnicode()}, {@link #collection()} or
+     *     {@link #object()} cast, or a cast string for one of them
+     * @return a cast reading and writing encrypted values of the inner cast's type
+     * @throws NullPointerException if {@code inner} is null
+     * @throws IllegalArgumentException if {@code inner} is not one of the four casts, or is an
+     *     invalid cast string
+     */
+    public static Cast<Object> encrypted(Cast<?> inner) {
+        Objects.requireNonNull(inner, "inner");
+        Cast<?> resolved = resolve(inner);
+        String name = typeName(resolved);
+        if (!name.equals("json") && !name.equals("collection") && !name.equals("object")) {
+            throw new IllegalArgumentException(
+                    "Cast [" + name + "] cannot be encrypted; use json, array, collection or object");
+        }
+        return new EncryptedCast(resolved);
+    }
+
+    /**
+     * Returns the {@code hashed} cast: a text column holding the model's hash of a written string.
+     *
+     * <p>A write stores the string as given when the model's
+     * {@link Model#getAttributeHasher() hasher} says it is already hashed and current, refuses it
+     * when it is hashed but not current, and otherwise stores the hasher's hash of it. A value
+     * that is not a {@code String} is refused with an {@link InvalidCastException}. A read
+     * returns the stored text without calling the hasher. A null value stores SQL NULL and a null
+     * column reads null, without calling the hasher. A model without a hasher fails on a non-null
+     * write. An exception thrown by the hasher reaches the caller as an
+     * {@link InvalidCastException} whose cause is the original exception (same instance). The
+     * column must be a text type.
+     *
+     * @return a cast that hashes written strings
+     */
+    public static Cast<Object> hashed() {
+        return new HashedCast();
+    }
+
+    /**
+     * Returns the {@code binary:uuid} cast: a {@link UUID} stored as 16 bytes, most significant
+     * bits first.
+     *
+     * <p>The column must be {@code binary()}, not {@code uuid()}. A read needs a {@code byte[]} of
+     * exactly 16 bytes; a write accepts a {@code UUID} only. Any other value fails as an
+     * {@link InvalidCastException} whose message never holds the value. Search the column with
+     * {@link BinaryIds#uuidBytes(UUID)}. A null value stores SQL NULL.
+     *
+     * @return a cast reading and writing {@code UUID} values
+     */
+    public static Cast<UUID> binaryUuid() {
+        return new BinaryCast<>(BinaryCast.Format.UUID);
+    }
+
+    /**
+     * Returns the {@code binary:ulid} cast: a ULID text stored as 16 bytes, most significant byte
+     * first.
+     *
+     * <p>The column must be {@code binary()}, not {@code uuid()}. A read needs a {@code byte[]} of
+     * exactly 16 bytes and returns the 26-character lower-case text. A write accepts a
+     * {@code String} of 26 characters in any letter case under the rules of
+     * {@link BinaryIds#ulidBytes(String)}; any other value fails as an
+     * {@link InvalidCastException} whose message never holds the value. Search the column with
+     * {@link BinaryIds#ulidBytes(String)}. A null value stores SQL NULL.
+     *
+     * @return a cast reading and writing ULID {@code String} values
+     */
+    public static Cast<String> binaryUlid() {
+        return new BinaryCast<>(BinaryCast.Format.ULID);
+    }
+
+    /**
      * Returns an enum cast.
      *
      * @param <E> the enum type
@@ -257,8 +395,9 @@ public final class Casts {
      *
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
-     * {@code timestamp}, {@code instant}, {@code json}, {@code enum}. Any other cast returns its
-     * class name. A cast string is parsed first.
+     * {@code timestamp}, {@code instant}, {@code json}, {@code collection}, {@code object},
+     * {@code encrypted}, {@code hashed}, {@code binary},
+     * {@code enum}. Any other cast returns its class name. A cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -312,6 +451,18 @@ public final class Casts {
         if (cast instanceof MomentCast) {
             String momentName = ((MomentCast) cast).name();
             return momentName.equals("timestamp") || momentName.equals("instant") ? momentName : "datetime";
+        }
+        if (cast instanceof EncryptedCast) {
+            return "encrypted";
+        }
+        if (cast instanceof HashedCast) {
+            return "hashed";
+        }
+        if (cast instanceof BinaryCast) {
+            return "binary";
+        }
+        if (cast instanceof JsonShapeCast) {
+            return ((JsonShapeCast<?>) cast).name();
         }
         if (cast instanceof JsonCasts) {
             return "json";

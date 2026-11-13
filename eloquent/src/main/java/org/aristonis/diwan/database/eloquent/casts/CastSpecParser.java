@@ -146,6 +146,14 @@ final class CastSpecParser {
             case "json":
             case "array":
                 return new JsonCasts(type, false);
+            case "collection":
+                return Casts.collection();
+            case "object":
+                return Casts.object();
+            case "encrypted":
+                return Casts.encrypted();
+            case "hashed":
+                return Casts.hashed();
             case "decimal":
                 throw new IllegalArgumentException("Cast [" + spec + "] needs a scale, as in decimal:2");
             case "custom_datetime":
@@ -173,6 +181,36 @@ final class CastSpecParser {
                     return new JsonCasts("json:unicode", true);
                 }
                 throw new IllegalArgumentException("Cast [" + spec + "] has an unknown JSON option");
+            case "encrypted":
+                return encrypted(argument, spec);
+            case "binary":
+                return binary(argument, spec);
+            default:
+                throw unknown(spec);
+        }
+    }
+
+    private static Cast<?> encrypted(String argument, String spec) {
+        switch (argument.toLowerCase(Locale.ROOT)) {
+            case "array":
+                return Casts.encrypted(new JsonCasts("array", false));
+            case "json":
+                return Casts.encrypted(new JsonCasts("json", false));
+            case "collection":
+                return Casts.encrypted(Casts.collection());
+            case "object":
+                return Casts.encrypted(Casts.object());
+            default:
+                throw unknown(spec);
+        }
+    }
+
+    private static Cast<?> binary(String argument, String spec) {
+        switch (argument.toLowerCase(Locale.ROOT)) {
+            case "uuid":
+                return Casts.binaryUuid();
+            case "ulid":
+                return Casts.binaryUlid();
             default:
                 throw unknown(spec);
         }

@@ -224,6 +224,26 @@ abstract class WhereGrammar extends GrammarQuoting {
      * Builds the {@code like} pattern for an escaped text search: the escape character, {@code %}
      * and {@code _} in the text become literal, then the text is wrapped in {@code %} per anchor.
      *
+     * @implSpec The default calls {@link #searchPattern(String, SearchWhere.Anchor, boolean)} with
+     *     the case setting, so a grammar written against the earlier form keeps working until that
+     *     form is removed. A grammar overrides this form instead. The base supports only
+     *     case-insensitive matching.
+     *
+     * @param value the text to find, never {@code null}
+     * @param anchor where the text must appear, never {@code null}
+     * @param options the search settings, never {@code null}
+     * @return the pattern, never {@code null}
+     * @throws UnsupportedOperationException if the grammar cannot honour a setting in {@code options}
+     * @throws NullPointerException if {@code options} is {@code null}
+     */
+    public String searchPattern(String value, SearchWhere.Anchor anchor, SearchOptions options) {
+        return searchPattern(value, anchor, options.isCaseSensitive());
+    }
+
+    /**
+     * Builds the {@code like} pattern for an escaped text search: the escape character, {@code %}
+     * and {@code _} in the text become literal, then the text is wrapped in {@code %} per anchor.
+     *
      * @implSpec The base supports only case-insensitive matching, as {@link #whereLike}.
      *
      * @param value the text to find, never {@code null}
@@ -231,7 +251,10 @@ abstract class WhereGrammar extends GrammarQuoting {
      * @param caseSensitive whether the match respects case
      * @return the pattern, never {@code null}
      * @throws UnsupportedOperationException if the match is case-sensitive
+     * @deprecated since 0.5.0, for removal in 0.6.0; use
+     *     {@link QueryGrammar#searchPattern(String, SearchWhere.Anchor, SearchOptions)}
      */
+    @Deprecated(since = "0.5.0", forRemoval = true)
     public String searchPattern(String value, SearchWhere.Anchor anchor, boolean caseSensitive) {
         if (caseSensitive) {
             throw unsupported("Case-sensitive like");
@@ -239,6 +262,26 @@ abstract class WhereGrammar extends GrammarQuoting {
         String escaped = value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
         return (anchor == SearchWhere.Anchor.STARTS_WITH ? "" : "%") + escaped
                 + (anchor == SearchWhere.Anchor.ENDS_WITH ? "" : "%");
+    }
+
+    /**
+     * Refuses search settings this grammar cannot honour, before the pattern is built.
+     *
+     * @implSpec A grammar that supports fewer settings than {@link SearchOptions} offers overrides
+     *     this and throws {@code unsupported(...)} naming the setting. The builder calls it for
+     *     every search, so a refusal never depends on an override of the pattern method calling
+     *     {@code super}. The default accepts every setting; a case-sensitive match is refused by
+     *     the default pattern method.
+     *
+     * @param options the search settings, never {@code null}
+     * @throws UnsupportedOperationException if a setting cannot be honoured
+     */
+    protected void validateSearchOptions(SearchOptions options) {
+    }
+
+    final String compileSearchPattern(String value, SearchWhere.Anchor anchor, SearchOptions options) {
+        validateSearchOptions(options);
+        return searchPattern(value, anchor, options);
     }
 
     /**

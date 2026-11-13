@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.aristonis.diwan.database.eloquent.casts.Attribute;
+import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
+import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.json.JsonCodec;
 import org.aristonis.diwan.database.eloquent.relations.RelationMap;
@@ -225,6 +227,34 @@ abstract class ModelConfig {
      */
     protected JsonCodec jsonCodec() {
         return JsonCodec.standard();
+    }
+
+    /**
+     * Returns the encrypter the {@code encrypted} casts of this model use; none by default.
+     *
+     * <p>Read on every encrypted read and write, so a model can return a different encrypter per
+     * instance. Without one, an encrypted cast on a non-null value fails with an
+     * {@code InvalidCastException} whose cause is an {@code IllegalStateException}; null values
+     * need none.
+     *
+     * @return the encrypter, or {@code null} when the model has none
+     */
+    protected AttributeEncrypter attributeEncrypter() {
+        return null;
+    }
+
+    /**
+     * Returns the hasher the {@code hashed} casts of this model use; none by default.
+     *
+     * <p>Read on every hashed write, so a model can return a different hasher per instance.
+     * Reads never call it. Without one, a hashed cast on a non-null value fails with an
+     * {@code InvalidCastException} whose cause is an {@code IllegalStateException}; null values
+     * need none.
+     *
+     * @return the hasher, or {@code null} when the model has none
+     */
+    protected AttributeHasher attributeHasher() {
+        return null;
     }
 
     /**
@@ -467,6 +497,24 @@ abstract class ModelConfig {
      */
     public JsonCodec getJsonCodec() {
         return Objects.requireNonNull(jsonCodec(), "jsonCodec");
+    }
+
+    /**
+     * Returns the encrypter the {@code encrypted} casts of this model use.
+     *
+     * @return the encrypter, or {@code null} when the model has none
+     */
+    public AttributeEncrypter getAttributeEncrypter() {
+        return attributeEncrypter();
+    }
+
+    /**
+     * Returns the hasher the {@code hashed} casts of this model use.
+     *
+     * @return the hasher, or {@code null} when the model has none
+     */
+    public AttributeHasher getAttributeHasher() {
+        return attributeHasher();
     }
 
     /**

@@ -9,6 +9,7 @@ module org.aristonis.diwan.database.eloquent {
     exports org.aristonis.diwan.database.eloquent;
     exports org.aristonis.diwan.database.eloquent.casts;
     exports org.aristonis.diwan.database.eloquent.exception;
+    exports org.aristonis.diwan.database.eloquent.factory;
     exports org.aristonis.diwan.database.eloquent.json;
     exports org.aristonis.diwan.database.eloquent.page;
     exports org.aristonis.diwan.database.eloquent.relations;
