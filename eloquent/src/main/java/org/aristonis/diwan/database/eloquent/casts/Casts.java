@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import org.aristonis.diwan.database.eloquent.Model;
 
 /**
@@ -31,7 +32,7 @@ public final class Casts {
      * {@code array}, {@code json:unicode}, {@code collection}, {@code object},
      * {@code encrypted}, {@code encrypted:array}, {@code encrypted:json},
      * {@code encrypted:collection}, {@code encrypted:object}, {@code hashed},
-     * {@code instant}. The argument is
+     * {@code binary:uuid}, {@code binary:ulid}, {@code instant}. The argument is
      * kept as written. A format {@code F} is a
      * {@link java.time.format.DateTimeFormatter} pattern; a PHP format such as {@code Y-m-d}
      * compiles with a different meaning.
@@ -345,6 +346,38 @@ public final class Casts {
     }
 
     /**
+     * Returns the {@code binary:uuid} cast: a {@link UUID} stored as 16 bytes, most significant
+     * bits first.
+     *
+     * <p>The column must be {@code binary()}, not {@code uuid()}. A read needs a {@code byte[]} of
+     * exactly 16 bytes; a write accepts a {@code UUID} only. Any other value fails as an
+     * {@link InvalidCastException} whose message never holds the value. Search the column with
+     * {@link BinaryIds#uuidBytes(UUID)}. A null value stores SQL NULL.
+     *
+     * @return a cast reading and writing {@code UUID} values
+     */
+    public static Cast<UUID> binaryUuid() {
+        return new BinaryCast<>(BinaryCast.Format.UUID);
+    }
+
+    /**
+     * Returns the {@code binary:ulid} cast: a ULID text stored as 16 bytes, most significant byte
+     * first.
+     *
+     * <p>The column must be {@code binary()}, not {@code uuid()}. A read needs a {@code byte[]} of
+     * exactly 16 bytes and returns the 26-character lower-case text. A write accepts a
+     * {@code String} of 26 characters in any letter case under the rules of
+     * {@link BinaryIds#ulidBytes(String)}; any other value fails as an
+     * {@link InvalidCastException} whose message never holds the value. Search the column with
+     * {@link BinaryIds#ulidBytes(String)}. A null value stores SQL NULL.
+     *
+     * @return a cast reading and writing ULID {@code String} values
+     */
+    public static Cast<String> binaryUlid() {
+        return new BinaryCast<>(BinaryCast.Format.ULID);
+    }
+
+    /**
      * Returns an enum cast.
      *
      * @param <E> the enum type
@@ -363,8 +396,8 @@ public final class Casts {
      * <p>Built-ins return one name per family whatever alias or argument was used: {@code int},
      * {@code float}, {@code string}, {@code bool}, {@code decimal}, {@code date}, {@code datetime},
      * {@code timestamp}, {@code instant}, {@code json}, {@code collection}, {@code object},
-     * {@code encrypted}, {@code hashed}, {@code enum}. Any other cast returns its class name. A
-     * cast string is parsed first.
+     * {@code encrypted}, {@code hashed}, {@code binary},
+     * {@code enum}. Any other cast returns its class name. A cast string is parsed first.
      *
      * @param cast the cast
      * @return the type name
@@ -424,6 +457,9 @@ public final class Casts {
         }
         if (cast instanceof HashedCast) {
             return "hashed";
+        }
+        if (cast instanceof BinaryCast) {
+            return "binary";
         }
         if (cast instanceof JsonShapeCast) {
             return ((JsonShapeCast<?>) cast).name();

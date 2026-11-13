@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -19,10 +20,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.SQLiteModelTest.SingleConnection;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
+import org.aristonis.diwan.database.eloquent.casts.BinaryIds;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
@@ -64,7 +67,7 @@ class SQLiteCastsTest {
         @Override
         protected List<String> fillable() {
             return Arrays.asList("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload",
-                    "password");
+                    "password", "uid", "ref");
         }
 
         @Override
@@ -79,6 +82,8 @@ class SQLiteCastsTest {
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
             casts.put("password", Casts.of("hashed"));
+            casts.put("uid", Casts.of("binary:uuid"));
+            casts.put("ref", Casts.of("binary:ulid"));
             return casts;
         }
     }
@@ -106,6 +111,8 @@ class SQLiteCastsTest {
             t.text("secret").nullable();
             t.text("payload").nullable();
             t.text("password").nullable();
+            t.binary("uid").nullable();
+            t.binary("ref").nullable();
             t.timestamps();
         });
         orders = Order.QUERY.on(db).withClock(ModelClock.fixed(NOW));
@@ -449,5 +456,109 @@ class SQLiteCastsTest {
         assertEquals("password", e.getKey());
         assertTrue(e.getCause() instanceof IllegalArgumentException, String.valueOf(e.getCause()));
         assertEquals(0, Order.hasher.hashCalls);
+    }
+
+    private static final UUID UID = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private static final String REF_UPPER = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    private static final String REF_LOWER = "01arz3ndektsv4rrffq69g5fav";
+
+    @Test
+    void binaryUuidRoundTripsThroughABlobColumn() {
+        Order created = orders.create(row("uid", UID));
+
+        Map<String, Object> raw = db.table("orders").first().get();
+        Order found = orders.findOrFail(created.getKey());
+
+        assertTrue(raw.get("uid") instanceof byte[]);
+        assertArrayEquals(BinaryIds.uuidBytes(UID), (byte[]) raw.get("uid"));
+        assertEquals(UID, found.getAttribute("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void binaryUlidRoundTripsThroughABlobColumn() {
+        Order created = orders.create(row("ref", REF_UPPER));
+
+        Map<String, Object> raw = db.table("orders").first().get();
+        Order found = orders.findOrFail(created.getKey());
+
+        assertEquals(16, ((byte[]) raw.get("ref")).length);
+        assertEquals(REF_LOWER, found.getAttribute("ref"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void binaryNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = orders.create(row("uid", UID, "ref", REF_UPPER));
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("uid", null);
+        found.setAttribute("ref", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("uid"));
+        assertNull(reloaded.getAttribute("uid"));
+        assertNull(reloaded.getAttribute("ref"));
+        assertEquals(1, orders.query().whereNull("uid").count());
+        assertEquals(1, orders.query().whereNull("ref").count());
+    }
+
+    @Test
+    void whereWithBinaryIdsBytesFindsTheRow() {
+        orders.create(row("uid", UID, "ref", REF_UPPER));
+
+        assertEquals(1, orders.query().where("uid", BinaryIds.uuidBytes(UID)).count());
+        assertEquals(1, orders.query().where("ref", BinaryIds.ulidBytes(REF_UPPER)).count());
+        assertEquals(1, orders.query().where("ref", BinaryIds.ulidBytes(REF_LOWER)).count());
+        assertEquals(0, orders.query().where("uid", BinaryIds.uuidBytes(new UUID(1L, 2L))).count());
+    }
+
+    @Test
+    void aUuidWithValidUtf8BytesRoundTrips() {
+        UUID utf8 = new UUID(0x61626364656644c3L, 0xa96768696a6b6c6dL);
+
+        Order created = orders.create(row("uid", utf8));
+
+        Order found = orders.findOrFail(created.getKey());
+        assertEquals(utf8, found.getAttribute("uid"));
+        assertArrayEquals(BinaryIds.uuidBytes(utf8), (byte[]) found.getRawOriginal("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void changingABinaryValueIsDirtyAndUpdatesTheRow() {
+        Order created = orders.create(row("uid", UID));
+        Order found = orders.findOrFail(created.getKey());
+        UUID other = new UUID(1L, 2L);
+
+        found.setAttribute("uid", other);
+
+        assertEquals(Set.of("uid"), found.getDirty().keySet());
+        assertTrue(found.save());
+        assertEquals(other, orders.findOrFail(created.getKey()).getAttribute("uid"));
+    }
+
+    @Test
+    void settingAnEqualBinaryValueIsNotDirty() {
+        Order created = orders.create(row("uid", UID, "ref", REF_LOWER));
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("uid", UUID.fromString(UID.toString()));
+        found.setAttribute("ref", REF_UPPER);
+
+        assertTrue(found.isClean());
+        assertTrue(found.getDirty().isEmpty());
+    }
+
+    @Test
+    void aStoredValueOfTheWrongLengthFailsOnRead() {
+        db.table("orders").insert(row("uid", new byte[] {1, 2, 3}));
+
+        Order found = orders.findOrFail(1);
+
+        InvalidCastException e = assertThrows(InvalidCastException.class, () -> found.getAttribute("uid"));
+        assertEquals("binary", e.getCastName());
+        assertEquals("uid", e.getKey());
     }
 }

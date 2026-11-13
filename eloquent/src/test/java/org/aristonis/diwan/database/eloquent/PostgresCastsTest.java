@@ -1,6 +1,7 @@
 package org.aristonis.diwan.database.eloquent;
 
 import static org.aristonis.diwan.database.eloquent.FakeDb.row;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -20,9 +21,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
+import org.aristonis.diwan.database.eloquent.casts.BinaryIds;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.eloquent.exception.InvalidCastException;
@@ -83,6 +87,8 @@ class PostgresCastsTest {
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
             casts.put("password", Casts.of("hashed"));
+            casts.put("uid", Casts.of("binary:uuid"));
+            casts.put("ref", Casts.of("binary:ulid"));
             return casts;
         }
     }
@@ -99,7 +105,7 @@ class PostgresCastsTest {
         connection.statement("create table probes (id bigserial primary key, amount numeric(10,2), "
                 + "seen_at timestamp(6), seen_tz timestamptz(6), day date, ratio float8, doc json, docb jsonb, "
                 + "instant_at timestamptz(6), strict numeric(12,2), tags jsonb, opts json, "
-                + "secret text, payload text, password text)");
+                + "secret text, payload text, password text, uid bytea, ref bytea)");
     }
 
     private void insertSample() {
@@ -414,5 +420,84 @@ class PostgresCastsTest {
 
         assertTrue(json.contains("\"password\":\"" + stored + "\""));
         assertFalse(json.contains("hunter2"));
+    }
+
+    @Test
+    void binaryUuidRoundTripsThroughABytea() {
+        UUID id = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        Probe created = Probe.QUERY.on(db).create(row("uid", id));
+
+        byte[] raw = (byte[]) db.table("probes").first().get().get("uid");
+        assertArrayEquals(BinaryIds.uuidBytes(id), raw);
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals(id, found.getAttribute("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void binaryUlidRoundTripsThroughABytea() {
+        String upper = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        Probe created = Probe.QUERY.on(db).create(row("ref", upper));
+
+        byte[] raw = (byte[]) db.table("probes").first().get().get("ref");
+        assertArrayEquals(BinaryIds.ulidBytes(upper), raw);
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals("01arz3ndektsv4rrffq69g5fav", found.getAttribute("ref"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void binaryNullStoresSqlNullAndWhereNullFindsIt() {
+        Probe created = Probe.QUERY.on(db).create(row("uid", UUID.fromString("550e8400-e29b-41d4-a716-446655440000")));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        found.setAttribute("uid", null);
+        assertTrue(found.save());
+
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertNull(reloaded.getAttributes().get("uid"));
+        assertEquals(1, Probe.QUERY.on(db).query().whereNull("uid").count());
+    }
+
+    @Test
+    void whereWithBinaryIdsBytesFindsTheRow() {
+        UUID id = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        String ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        Probe.QUERY.on(db).create(row("uid", id, "ref", ulid));
+
+        assertEquals(1, Probe.QUERY.on(db).query().where("uid", BinaryIds.uuidBytes(id)).count());
+        assertEquals(1, Probe.QUERY.on(db).query().where("ref", BinaryIds.ulidBytes(ulid)).count());
+        assertEquals(0, Probe.QUERY.on(db).query()
+                .where("uid", BinaryIds.uuidBytes(UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))).count());
+    }
+
+    @Test
+    void aUuidWithValidUtf8BytesRoundTrips() {
+        UUID id = new UUID(0x61626364656644c3L, 0xa96768696a6b6c6dL);
+        Probe created = Probe.QUERY.on(db).create(row("uid", id));
+
+        byte[] raw = (byte[]) db.table("probes").first().get().get("uid");
+        assertArrayEquals(BinaryIds.uuidBytes(id), raw);
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        assertEquals(id, found.getAttribute("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    void changingABinaryValueIsDirtyAndUpdatesTheRow() {
+        UUID first = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        UUID second = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+        Probe created = Probe.QUERY.on(db).create(row("uid", first));
+        Probe found = Probe.QUERY.on(db).findOrFail(created.getKey());
+
+        found.setAttribute("uid", second);
+
+        assertEquals(Set.of("uid"), found.getDirty().keySet());
+        assertTrue(found.save());
+        Probe reloaded = Probe.QUERY.on(db).findOrFail(created.getKey());
+        assertEquals(second, reloaded.getAttribute("uid"));
     }
 }

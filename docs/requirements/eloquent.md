@@ -56,10 +56,12 @@ builder, without reflection, annotations or build plugins.
     `real`/`float`/`double`, `decimal:N`, `string`, `bool`/`boolean`, `date`, `datetime`,
     `immutable_date`, `immutable_datetime`, the same four with a `:format` argument, `timestamp`,
     `json`, `array`, `json:unicode`, `collection`, `object`, `encrypted`, `encrypted:array`,
-    `encrypted:json`, `encrypted:collection`, `encrypted:object`, `hashed` and enums. The encrypted
+    `encrypted:json`, `encrypted:collection`, `encrypted:object`, `hashed`, `binary:uuid`, `binary:ulid` and enums. The encrypted
     casts use an `AttributeEncrypter` the model supplies by overriding `attributeEncrypter()`; Diwan
     does no cryptography. The hashed cast uses an `AttributeHasher` the model supplies by
-    overriding `attributeHasher()`; Diwan does no hashing. An invalid cast fails when the model
+    overriding `attributeHasher()`; Diwan does no hashing. The binary casts store a UUID or a ULID as 16 bytes in a `binary()`
+    column and read it back as a `UUID` or a lower-case 26-character `String`; a stored value of
+    any other length fails as `InvalidCastException`. An invalid cast fails when the model
     first resolves its casts, naming the model and the key.
 14. Reading an attribute applies, in order, its accessor, its cast, or nothing. Writing applies its
     mutator, its cast, or nothing, and always stores the storage form. Typed getters and

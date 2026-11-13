@@ -131,6 +131,7 @@ class ClassCastTest {
             casts.put("happened_at", Casts.of("immutable_datetime"));
             casts.put("secret", Casts.of("encrypted:json"));
             casts.put("password", Casts.of("hashed"));
+            casts.put("ref", Casts.of("binary:ulid"));
             return casts;
         }
     }
@@ -437,6 +438,10 @@ class ClassCastTest {
         assertTrue(wallet.hasCast("password", "hashed"));
         assertTrue(wallet.hasCast("password", "HASHED"));
         assertFalse(wallet.hasCast("password", "encrypted"));
+        assertTrue(wallet.hasCast("ref", "binary"));
+        assertTrue(wallet.hasCast("ref", "BINARY"));
+        assertTrue(wallet.hasCast("ref", "BINARY:ulid"));
+        assertFalse(wallet.hasCast("ref", "string"));
         assertFalse(wallet.hasCast("missing"));
     }
 

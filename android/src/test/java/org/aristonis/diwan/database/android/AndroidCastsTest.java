@@ -1,5 +1,6 @@
 package org.aristonis.diwan.database.android;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -16,12 +17,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.aristonis.diwan.database.Connection;
 import org.aristonis.diwan.database.eloquent.Model;
 import org.aristonis.diwan.database.eloquent.ModelClock;
 import org.aristonis.diwan.database.eloquent.ModelQuery;
 import org.aristonis.diwan.database.eloquent.casts.AttributeEncrypter;
 import org.aristonis.diwan.database.eloquent.casts.AttributeHasher;
+import org.aristonis.diwan.database.eloquent.casts.BinaryIds;
 import org.aristonis.diwan.database.eloquent.casts.Cast;
 import org.aristonis.diwan.database.eloquent.casts.Casts;
 import org.aristonis.diwan.database.query.QueryFactory;
@@ -93,7 +96,8 @@ public class AndroidCastsTest {
 
         @Override
         protected List<String> fillable() {
-            return List.of("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload", "password");
+            return List.of("total", "meta", "paid_at", "status", "tags", "opts", "secret", "payload", "password",
+                    "uid", "ref");
         }
 
         @Override
@@ -108,6 +112,8 @@ public class AndroidCastsTest {
             casts.put("secret", Casts.of("encrypted"));
             casts.put("payload", Casts.of("encrypted:json"));
             casts.put("password", Casts.of("hashed"));
+            casts.put("uid", Casts.of("binary:uuid"));
+            casts.put("ref", Casts.of("binary:ulid"));
             return casts;
         }
 
@@ -142,6 +148,8 @@ public class AndroidCastsTest {
             t.text("secret").nullable();
             t.text("payload").nullable();
             t.text("password").nullable();
+            t.binary("uid").nullable();
+            t.binary("ref").nullable();
             t.timestamps();
         });
         Order.hasher = new Hasher();
@@ -387,5 +395,78 @@ public class AndroidCastsTest {
 
         assertTrue(json, json.contains("\"password\":\"" + stored + "\""));
         assertFalse(json, json.contains("hunter2"));
+    }
+
+    @Test
+    public void binaryUuidRoundTripsThroughABlob() {
+        UUID id = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        Order created = orders.create(row("uid", id));
+        Order found = orders.findOrFail(created.getKey());
+
+        assertArrayEquals(BinaryIds.uuidBytes(id), (byte[]) found.getRawOriginal("uid"));
+        assertEquals(id, found.getAttribute("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void binaryUlidRoundTripsThroughABlob() {
+        String upper = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        Order created = orders.create(row("ref", upper));
+        Order found = orders.findOrFail(created.getKey());
+
+        assertArrayEquals(BinaryIds.ulidBytes(upper), (byte[]) found.getRawOriginal("ref"));
+        assertEquals("01arz3ndektsv4rrffq69g5fav", found.getAttribute("ref"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void binaryNullStoresSqlNullAndWhereNullFindsIt() {
+        Order created = orders.create(row("uid", UUID.fromString("550e8400-e29b-41d4-a716-446655440000")));
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("uid", null);
+        assertTrue(found.save());
+
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertNull(reloaded.getRawOriginal("uid"));
+        assertEquals(1, orders.query().whereNull("uid").count());
+    }
+
+    @Test
+    public void whereWithBinaryIdsBytesFindsTheRow() {
+        UUID id = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        String ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        orders.create(row("uid", id, "ref", ulid));
+
+        assertEquals(1, orders.query().where("uid", BinaryIds.uuidBytes(id)).count());
+        assertEquals(1, orders.query().where("ref", BinaryIds.ulidBytes(ulid)).count());
+        assertEquals(0, orders.query()
+                .where("uid", BinaryIds.uuidBytes(UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))).count());
+    }
+
+    @Test
+    public void aUuidWithValidUtf8BytesRoundTrips() {
+        UUID id = new UUID(0x61626364656644c3L, 0xa96768696a6b6c6dL);
+        Order created = orders.create(row("uid", id));
+        Order found = orders.findOrFail(created.getKey());
+
+        assertArrayEquals(BinaryIds.uuidBytes(id), (byte[]) found.getRawOriginal("uid"));
+        assertEquals(id, found.getAttribute("uid"));
+        assertTrue(found.isClean());
+    }
+
+    @Test
+    public void changingABinaryValueIsDirtyAndUpdatesTheRow() {
+        UUID first = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        UUID second = UUID.fromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+        Order created = orders.create(row("uid", first));
+        Order found = orders.findOrFail(created.getKey());
+
+        found.setAttribute("uid", second);
+
+        assertEquals(Set.of("uid"), found.getDirty().keySet());
+        assertTrue(found.save());
+        Order reloaded = orders.findOrFail(created.getKey());
+        assertEquals(second, reloaded.getAttribute("uid"));
     }
 }

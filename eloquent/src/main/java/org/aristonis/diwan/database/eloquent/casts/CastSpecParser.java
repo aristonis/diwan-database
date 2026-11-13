@@ -183,6 +183,8 @@ final class CastSpecParser {
                 throw new IllegalArgumentException("Cast [" + spec + "] has an unknown JSON option");
             case "encrypted":
                 return encrypted(argument, spec);
+            case "binary":
+                return binary(argument, spec);
             default:
                 throw unknown(spec);
         }
@@ -198,6 +200,17 @@ final class CastSpecParser {
                 return Casts.encrypted(Casts.collection());
             case "object":
                 return Casts.encrypted(Casts.object());
+            default:
+                throw unknown(spec);
+        }
+    }
+
+    private static Cast<?> binary(String argument, String spec) {
+        switch (argument.toLowerCase(Locale.ROOT)) {
+            case "uuid":
+                return Casts.binaryUuid();
+            case "ulid":
+                return Casts.binaryUlid();
             default:
                 throw unknown(spec);
         }

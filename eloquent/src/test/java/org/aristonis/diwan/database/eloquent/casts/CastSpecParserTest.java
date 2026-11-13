@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -301,6 +302,40 @@ class CastSpecParserTest {
         assertEquals("hashed", Casts.typeName(Casts.hashed()));
         assertEquals("hashed", Casts.typeName(Casts.of("hashed")));
         assertEquals("hashed", Casts.typeName(Casts.of("HASHED")));
+    }
+
+    @Test
+    void binarySpecsResolve() {
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse("binary:uuid"));
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse("binary:ulid"));
+        assertInstanceOf(BinaryCast.class, CastSpecParser.parse(" BINARY:UUID"));
+        assertInstanceOf(BinaryCast.class, Casts.resolve(Casts.of("binary:ulid")));
+    }
+
+    @Test
+    void binaryFactoriesBuildTheSameCast() {
+        Cast<UUID> uuid = Casts.binaryUuid();
+        Cast<String> ulid = Casts.binaryUlid();
+
+        assertInstanceOf(BinaryCast.class, uuid);
+        assertInstanceOf(BinaryCast.class, ulid);
+    }
+
+    @Test
+    void binaryRefusesOtherForms() {
+        for (String spec : List.of("binary", "binary:", "binary:invalid", "binary:uuid:extra", "binary: uuid")) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> CastSpecParser.parse(spec));
+
+            assertTrue(e.getMessage().contains("Unknown cast [" + spec + "]"));
+        }
+    }
+
+    @Test
+    void typeNameForBinary() {
+        assertEquals("binary", Casts.typeName(Casts.binaryUuid()));
+        assertEquals("binary", Casts.typeName(Casts.binaryUlid()));
+        assertEquals("binary", Casts.typeName(Casts.of("binary:ulid")));
     }
 
     @Test
